@@ -9,6 +9,34 @@
 /* TODO: consider using the version without _t */
 #include <stdint.h>
 
+/* Compiler-specific structure packing */
+#if (defined(__IAR_SYSTEMS_ICC__) && (__IAR_SYSTEMS_ICC__ > 8)) || \
+    defined(__GNUC__)
+#define WOLFHSM_PACK __attribute__((packed))
+#else
+    #define WOLFHSM_PACK
+#endif
+
+/* Compiler-specific alignment */
+#if defined(__IAR_SYSTEMS_ICC__) || defined(__GNUC__)
+#define WOLFHSM_ALIGN(_x) __attribute__((aligned((_x))))
+#else
+    #define WOLFHSM_ALIGN(_x)
+#endif
+
+/* Default alignment for any structs shared between server and client */
+#define WOLFHSM_DEFAULT_ALIGNMENT sizeof(uint64_t)
+
+/* C11-dependent use of static assert */
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+    /* Use the built-in _Static_assert if available */
+    #define WH_STATIC_ASSERT(_expr, _msg) _Static_assert(_expr, _msg)
+#else
+    /* Define a do-nothing macro for compilers that don't support _Static_assert */
+    #define WH_STATIC_ASSERT(_expr, _msg) /* Nothing */
+#endif
+
+
 /* Device Id to be registered and passed to wolfCrypt functions */
 #define WOLFHSM_DEV_ID 0x5748534D  /* "WHSM" */
 
@@ -76,7 +104,9 @@ typedef struct {
     whNvmSize len;          /* Length of data in bytes */
     uint8_t label[WOLFHSM_NVM_LABEL_LEN];
 } whNvmMetadata;
-/* static_assert(sizeof(whNvmMetadata) == WOLFHSM_NVM_METADATA_LEN) */
+WH_STATIC_ASSERT(
+    sizeof(whNvmMetadata) == WOLFHSM_NVM_METADATA_LEN,
+    "Size of whNvmMetadata doesn't match WOLFHSM_NVM_METADATA_LEN");
 
 
 /** Manifest storage  */
@@ -101,23 +131,5 @@ extern const whManifest_ex manifests[WOLFHSM_NUM_MANIFESTS];
 /* Custom request shared defs */
 #define WH_CUSTOM_CB_NUM_CALLBACKS 8
 #define WOLFHSM_ID_ERASED 0
-
-/* Compiler-specific structure packing */
-#if (defined(__IAR_SYSTEMS_ICC__) && (__IAR_SYSTEMS_ICC__ > 8)) || \
-    defined(__GNUC__)
-#define WOLFHSM_PACK __attribute__((packed))
-#else
-    #define WOLFHSM_PACK
-#endif
-
-/* Compiler-specific alignment */
-#if defined(__IAR_SYSTEMS_ICC__) || defined(__GNUC__)
-#define WOLFHSM_ALIGN(_x) __attribute__((aligned((_x))))
-#else
-    #define WOLFHSM_ALIGN(_x)
-#endif
-
-#define WOLFHSM_DEFAULT_ALIGNMENT sizeof(uint64_t)
-
 
 #endif /* WOLFHSM_WH_COMMON_H_ */

@@ -23,6 +23,7 @@
 
 #include <stdint.h>  /* For sized ints */
 
+#include "wolfhsm/wh_common.h"
 #include "wolfhsm/wh_transport.h"
 
 /* Request/response packets are composed of a single fixed-length header
@@ -59,8 +60,8 @@ typedef struct {
     uint16_t aux;       /* Session identifier for request or error indicator
                          * for response. */
 } whCommHeader;
-/* static_assert(sizeof_whHeader == WH_COMM_HEADER_LEN,
-                 "Size of whCommHeader doesn't match WH_COMM_HEADER_LEN") */
+WH_STATIC_ASSERT(sizeof(whCommHeader) == WH_COMM_HEADER_LEN,
+                 "Size of whCommHeader doesn't match WH_COMM_HEADER_LEN");
 
 enum {
     WH_COMM_AUX_REQ_NORMAL      = 0x0000, /* Normal request. No session */

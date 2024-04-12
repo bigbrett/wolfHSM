@@ -28,7 +28,6 @@ enum {
 };
 
 enum {
-    /* must be odd for struct whMessageNvm_DestroyObjectsRequest  alignment */
     WH_MESSAGE_NVM_MAX_DESTROY_OBJECTS_COUNT = 10,
     WH_MESSAGE_NVM_MAX_ADD_OBJECT_LEN =
             WH_COMM_DATA_LEN - WOLFHSM_NVM_METADATA_LEN,
