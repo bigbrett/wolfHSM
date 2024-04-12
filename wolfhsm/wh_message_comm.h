@@ -24,7 +24,7 @@ enum {
 /* Generic error response message. */
 typedef struct {
     int return_code;
-} whMessageComm_ErrorResponse;
+} WH_MESSAGE_STRUCT_ALIGN whMessageComm_ErrorResponse;
 
 int wh_MessageComm_GetErrorResponse(uint16_t magic,
         const void* data,
@@ -35,7 +35,7 @@ int wh_MessageComm_GetErrorResponse(uint16_t magic,
 typedef struct {
     uint16_t len;
     uint8_t data[WH_COMM_DATA_LEN - sizeof(uint16_t)];
-} whMessageCommLenData;
+} WH_MESSAGE_STRUCT_ALIGN whMessageCommLenData;
 
 int wh_MessageComm_TranslateLenData(uint16_t magic,
         const whMessageCommLenData* src,
@@ -43,7 +43,7 @@ int wh_MessageComm_TranslateLenData(uint16_t magic,
 
 typedef struct {
     uint32_t client_id;
-} whMessageCommInitRequest;
+} WH_MESSAGE_STRUCT_ALIGN whMessageCommInitRequest;
 
 int wh_MessageComm_TranslateInitRequest(uint16_t magic,
         const whMessageCommInitRequest* src,
@@ -53,7 +53,7 @@ int wh_MessageComm_TranslateInitRequest(uint16_t magic,
 typedef struct {
     uint32_t client_id;
     uint32_t server_id;
-} whMessageCommInitResponse;
+} WH_MESSAGE_STRUCT_ALIGN whMessageCommInitResponse;
 
 int wh_MessageComm_TranslateInitResponse(uint16_t magic,
         const whMessageCommInitResponse* src,
@@ -74,6 +74,6 @@ typedef struct {
     uint8_t boot_state;
     uint8_t lifecycle_state;
     uint8_t nvm_state;
-} whMessageCommInfo;
+} WH_MESSAGE_STRUCT_ALIGN whMessageCommInfo;
 
 #endif /* WOLFHSM_WH_MESSAGE_COMM_H_ */

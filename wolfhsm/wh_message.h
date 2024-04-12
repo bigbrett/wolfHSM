@@ -7,6 +7,8 @@
 #ifndef WOLFHSM_WH_MESSAGE_H_
 #define WOLFHSM_WH_MESSAGE_H_
 
+#include "wolfhsm/wh_common.h"
+
 /* Message groups and kind */
 enum {
     WH_MESSAGE_KIND_NONE            = 0x0000, /* No message kind. Invalid */
@@ -35,6 +37,9 @@ enum {
     WH_KEY_COMMIT,
     WH_KEY_ERASE,
 };
+
+/* All message structures should be aligned with this attribute */
+#define WH_MESSAGE_STRUCT_ALIGN WOLFHSM_ALIGN(WOLFHSM_DEFAULT_ALIGNMENT)
 
 /* Construct the message kind based on group and action */
 #define WH_MESSAGE_KIND(_G, _S) (   ((_G) & WH_MESSAGE_GROUP_MASK) |      \

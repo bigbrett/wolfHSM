@@ -102,4 +102,22 @@ extern const whManifest_ex manifests[WOLFHSM_NUM_MANIFESTS];
 #define WH_CUSTOM_CB_NUM_CALLBACKS 8
 #define WOLFHSM_ID_ERASED 0
 
+/* Compiler-specific structure packing */
+#if (defined(__IAR_SYSTEMS_ICC__) && (__IAR_SYSTEMS_ICC__ > 8)) || \
+    defined(__GNUC__)
+#define WOLFHSM_PACK __attribute__((packed))
+#else
+    #define WOLFHSM_PACK
+#endif
+
+/* Compiler-specific alignment */
+#if defined(__IAR_SYSTEMS_ICC__) || defined(__GNUC__)
+#define WOLFHSM_ALIGN(_x) __attribute__((aligned((_x))))
+#else
+    #define WOLFHSM_ALIGN(_x)
+#endif
+
+#define WOLFHSM_DEFAULT_ALIGNMENT sizeof(uint64_t)
+
+
 #endif /* WOLFHSM_WH_COMMON_H_ */

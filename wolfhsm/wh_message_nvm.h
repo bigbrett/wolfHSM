@@ -29,7 +29,7 @@ enum {
 
 enum {
     /* must be odd for struct whMessageNvm_DestroyObjectsRequest  alignment */
-    WH_MESSAGE_NVM_MAX_DESTROY_OBJECTS_COUNT = 9,
+    WH_MESSAGE_NVM_MAX_DESTROY_OBJECTS_COUNT = 10,
     WH_MESSAGE_NVM_MAX_ADD_OBJECT_LEN =
             WH_COMM_DATA_LEN - WOLFHSM_NVM_METADATA_LEN,
     WH_MESSAGE_NVM_MAX_READ_LEN = WH_COMM_DATA_LEN - sizeof(int32_t),
@@ -38,7 +38,7 @@ enum {
 /* Simple reusable response message */
 typedef struct {
     int32_t rc;
-} whMessageNvm_SimpleResponse;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_SimpleResponse;
 
 int wh_MessageNvm_TranslateSimpleResponse(uint16_t magic,
         const whMessageNvm_SimpleResponse* src,
@@ -47,7 +47,7 @@ int wh_MessageNvm_TranslateSimpleResponse(uint16_t magic,
 /** NVM Init Request */
 typedef struct {
     uint32_t clientnvm_id;
-} whMessageNvm_InitRequest;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_InitRequest;
 
 int wh_MessageNvm_TranslateInitRequest(uint16_t magic,
         const whMessageNvm_InitRequest* src,
@@ -58,7 +58,7 @@ typedef struct {
     int32_t rc;
     uint32_t servernvm_id;
     uint32_t clientnvm_id;
-} whMessageNvm_InitResponse;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_InitResponse;
 
 int wh_MessageNvm_TranslateInitResponse(uint16_t magic,
         const whMessageNvm_InitResponse* src,
@@ -80,7 +80,7 @@ typedef struct {
     uint32_t reclaim_size;
     uint16_t avail_objects;
     uint16_t reclaim_objects;
-} whMessageNvm_GetAvailableResponse;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_GetAvailableResponse;
 
 int wh_MessageNvm_TranslateGetAvailableResponse(uint16_t magic,
         const whMessageNvm_GetAvailableResponse* src,
@@ -94,7 +94,7 @@ typedef struct {
     uint16_t len;
     uint8_t label[WOLFHSM_NVM_LABEL_LEN];
     /* Data up to WH_MESSAGE_NVM_MAX_ADD_OBJECT_LEN follows */
-} whMessageNvm_AddObjectRequest;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_AddObjectRequest;
 
 int wh_MessageNvm_TranslateAddObjectRequest(uint16_t magic,
         const whMessageNvm_AddObjectRequest* src,
@@ -108,7 +108,7 @@ typedef struct {
     uint16_t access;
     uint16_t flags;
     uint16_t startId;
-} whMessageNvm_ListRequest;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_ListRequest;
 
 int wh_MessageNvm_TranslateListRequest(uint16_t magic,
         const whMessageNvm_ListRequest* src,
@@ -119,7 +119,7 @@ typedef struct {
     int32_t rc;
     uint16_t count;
     uint16_t id;
-} whMessageNvm_ListResponse;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_ListResponse;
 
 int wh_MessageNvm_TranslateListResponse(uint16_t magic,
         const whMessageNvm_ListResponse* src,
@@ -128,7 +128,7 @@ int wh_MessageNvm_TranslateListResponse(uint16_t magic,
 /** NVM GetMetadata Request */
 typedef struct {
     uint16_t id;
-} whMessageNvm_GetMetadataRequest;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_GetMetadataRequest;
 
 int wh_MessageNvm_TranslateGetMetadataRequest(uint16_t magic,
         const whMessageNvm_GetMetadataRequest* src,
@@ -142,7 +142,7 @@ typedef struct {
     uint16_t flags;
     uint16_t len;
     uint8_t label[WOLFHSM_NVM_LABEL_LEN];
-} whMessageNvm_GetMetadataResponse;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_GetMetadataResponse;
 
 int wh_MessageNvm_TranslateGetMetadataResponse(uint16_t magic,
         const whMessageNvm_GetMetadataResponse* src,
@@ -152,7 +152,7 @@ int wh_MessageNvm_TranslateGetMetadataResponse(uint16_t magic,
 typedef struct {
     uint16_t list[WH_MESSAGE_NVM_MAX_DESTROY_OBJECTS_COUNT];
     uint16_t list_count;
-} whMessageNvm_DestroyObjectsRequest;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_DestroyObjectsRequest;
 
 int wh_MessageNvm_TranslateDestroyObjectsRequest(uint16_t magic,
         const whMessageNvm_DestroyObjectsRequest* src,
@@ -166,7 +166,7 @@ typedef struct {
     uint16_t id;
     uint16_t offset;
     uint16_t data_len;
-} whMessageNvm_ReadRequest;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_ReadRequest;
 
 int wh_MessageNvm_TranslateReadRequest(uint16_t magic,
         const whMessageNvm_ReadRequest* src,
@@ -176,7 +176,7 @@ int wh_MessageNvm_TranslateReadRequest(uint16_t magic,
 typedef struct {
     int32_t rc;
     /* Data up to WH_MESSAGE_NVM_MAX_READ_LEN follows */
-} whMessageNvm_ReadResponse;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_ReadResponse;
 
 int wh_MessageNvm_TranslateReadResponse(uint16_t magic,
         const whMessageNvm_ReadResponse* src,
@@ -187,7 +187,7 @@ typedef struct {
     uint32_t metadata_hostaddr;
     uint32_t data_hostaddr;
     uint16_t data_len;
-} whMessageNvm_AddObjectDma32Request;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_AddObjectDma32Request;
 
 int wh_MessageNvm_TranslateAddObjectDma32Request(uint16_t magic,
         const whMessageNvm_AddObjectDma32Request* src,
@@ -202,7 +202,7 @@ typedef struct {
     uint16_t id;
     uint16_t offset;
     uint16_t data_len;
-} whMessageNvm_ReadDma32Request;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_ReadDma32Request;
 
 int wh_MessageNvm_TranslateReadDma32Request(uint16_t magic,
         const whMessageNvm_ReadDma32Request* src,
@@ -216,7 +216,7 @@ typedef struct {
     uint64_t metadata_hostaddr;
     uint64_t data_hostaddr;
     uint16_t data_len;
-} whMessageNvm_AddObjectDma64Request;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_AddObjectDma64Request;
 
 int wh_MessageNvm_TranslateAddObjectDma64Request(uint16_t magic,
         const whMessageNvm_AddObjectDma64Request* src,
@@ -231,7 +231,7 @@ typedef struct {
     uint16_t id;
     uint16_t offset;
     uint16_t data_len;
-} whMessageNvm_ReadDma64Request;
+} WH_MESSAGE_STRUCT_ALIGN whMessageNvm_ReadDma64Request;
 
 int wh_MessageNvm_TranslateReadDma64Request(uint16_t magic,
         const whMessageNvm_ReadDma64Request* src,

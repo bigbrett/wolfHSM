@@ -22,13 +22,6 @@
 #define WOLFHSM_PACKET_H
 #include "wolfhsm/wh_common.h"
 
-#if (defined(__IAR_SYSTEMS_ICC__) && (__IAR_SYSTEMS_ICC__ > 8)) || \
-                                                    defined(__GNUC__)
-    #define WOLFHSM_PACK __attribute__ ((packed))
-#else
-    #define WOLFHSM_PACK
-#endif
-
 #ifdef __cplusplus
     extern "C" {
 #endif

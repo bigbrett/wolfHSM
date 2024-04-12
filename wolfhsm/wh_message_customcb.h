@@ -2,6 +2,7 @@
 #define WH_MESSAGE_CUSTOM_CB_H_
 
 #include <stdint.h>
+#include "wolfhsm/wh_message.h"
 
 #define WH_MESSAGE_CUSTOM_CB_BUF_SIZE (256)
 
@@ -50,7 +51,7 @@ typedef struct {
     uint32_t               id;   /* indentifier of registered callback  */
     uint32_t               type; /* whMessageCustomCb_Type */
     whMessageCustomCb_Data data;
-} whMessageCustomCb_Request;
+} WH_MESSAGE_STRUCT_ALIGN whMessageCustomCb_Request;
 
 /* response message from the custom server callback */
 typedef struct {
@@ -59,7 +60,7 @@ typedef struct {
     int32_t  rc;   /* Return code from custom callback. Invalid if err != 0 */
     int32_t  err;  /* wolfHSM-specific error. If err != 0, rc is invalid */
     whMessageCustomCb_Data data;
-} whMessageCustomCb_Response;
+} WH_MESSAGE_STRUCT_ALIGN whMessageCustomCb_Response;
 
 
 /* Translates a custom request message. The whMessageCustomCb_Request.data field
