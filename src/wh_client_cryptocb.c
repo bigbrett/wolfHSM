@@ -54,6 +54,15 @@
 #include "wolfhsm/wh_message.h"
 #include "wolfhsm/wh_client_cryptocb.h"
 
+/* wolfHSM crypto callback assumes wc_CryptoInfo struct is unionized */
+#if !defined(HAVE_ANONYMOUS_INLINE_AGGREGATES) \
+    || ( defined(HAVE_ANONYMOUS_INLINE_AGGREGATES) \
+         && HAVE_ANONYMOUS_INLINE_AGGREGATES==0  )
+#error "wolfHSM requires HAVE_ANONYMOUS_INLINE_AGGREGATES"
+#endif
+
+
+
 int wolfHSM_CryptoCb(int devId, wc_CryptoInfo* info, void* inCtx)
 {
 #if 0
