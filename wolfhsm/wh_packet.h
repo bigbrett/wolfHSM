@@ -276,6 +276,7 @@ typedef struct wh_Packet_hash_any_req {
     uint32_t type; /* enum wc_HashType */
 } wh_Packet_hash_any_req;
 
+#if !defined (WOLFHSM_CFG_NO_CRYPTO) && !defined(NO_SHA256)
 typedef struct wh_Packet_hash_sha256_req {
     /* TODO change to "wh_Packet_hash_any_req header" */
     uint32_t type; /* enum wc_HashType */
@@ -300,6 +301,7 @@ typedef struct wh_Packet_hash_sha256_res {
     uint32_t loLen;
     uint8_t  hash[WC_SHA256_DIGEST_SIZE];
 } wh_Packet_hash_sha256_res;
+#endif
 
 /** Key Management Packets */
 typedef struct  wh_Packet_key_cache_req
@@ -591,93 +593,63 @@ typedef struct whPacket
    /* body, will be either a request or a response */
     union {
         wh_Packet_version_exchange versionExchange;
-        /* FIXED SIZE REQUESTS */
-        /* cipher */
-        wh_Packet_cipher_any_req cipherAnyReq;
-        /* AES CBC */
-        wh_Packet_cipher_aescbc_req cipherAesCbcReq;
-        /* AES GCM */
-        wh_Packet_cipher_aesgcm_req cipherAesGcmReq;
-        /* pk */
-        wh_Packet_pk_any_req pkAnyReq;
-        /* RSA */
-        wh_Packet_pk_rsakg_req pkRsakgReq;
-        wh_Packet_pk_rsa_req pkRsaReq;
-        wh_Packet_pk_rsa_get_size_req pkRsaGetSizeReq;
-        /* ECC */
-        wh_Packet_pk_eckg_req pkEckgReq;
-        wh_Packet_pk_ecdh_req pkEcdhReq;
-        wh_Packet_pk_ecc_sign_req pkEccSignReq;
-        wh_Packet_pk_ecc_verify_req pkEccVerifyReq;
-        wh_Packet_pk_ecc_check_req pkEccCheckReq;
-        /* curve25519 */
-        wh_Packet_pk_curve25519kg_req pkCurve25519kgReq;
-        wh_Packet_pk_curve25519kg_res pkCurve25519kgRes;
-        wh_Packet_pk_curve25519_req pkCurve25519Req;
-        wh_Packet_pk_curve25519_res pkCurve25519Res;
-        /* rng */
-        wh_Packet_rng_req rngReq;
-        /* cmac */
-        wh_Packet_cmac_req cmacReq;
-        /* Hash */
-        wh_Packet_hash_any_req hashAnyReq;
-        /* Hash: SHA256*/
-        wh_Packet_hash_sha256_req hashSha256Req;
-        /* key cache */
-        wh_Packet_key_cache_req keyCacheReq;
-        /* key evict */
-        wh_Packet_key_evict_req keyEvictReq;
-        /* key commit */
-        wh_Packet_key_commit_req keyCommitReq;
-        /* key export */
-        wh_Packet_key_export_req keyExportReq;
-        /* key erase */
-        wh_Packet_key_erase_req keyEraseReq;
-        /* counters */
-        wh_Packet_counter_init_req counterInitReq;
+        /* Counter messages */
+        wh_Packet_counter_destroy_req   counterDestroyReq;
         wh_Packet_counter_increment_req counterIncrementReq;
-        wh_Packet_counter_read_req counterReadReq;
-        wh_Packet_counter_destroy_req counterDestroyReq;
-
-        /* FIXED SIZE RESPONSES */
-        /* cipher */
-        /* AES CBC */
-        wh_Packet_cipher_aescbc_res cipherAesCbcRes;
-        /* AES GCM */
-        wh_Packet_cipher_aesgcm_res cipherAesGcmRes;
-        /* pk */
-        /* RSA */
-        wh_Packet_pk_rsakg_res pkRsakgRes;
-        wh_Packet_pk_rsa_res pkRsaRes;
-        wh_Packet_pk_rsa_get_size_res pkRsaGetSizeRes;
-        /* ECC */
-        wh_Packet_pk_eckg_res pkEckgRes;
-        wh_Packet_pk_ecdh_res pkEcdhRes;
-        wh_Packet_pk_ecc_sign_res pkEccSignRes;
-        wh_Packet_pk_ecc_verify_res pkEccVerifyRes;
-        wh_Packet_pk_ecc_check_res pkEccCheckRes;
-        /* rng */
-        wh_Packet_rng_res rngRes;
-        /* cmac */
-        wh_Packet_cmac_res cmacRes;
-        /* hash: SHA256 */
-        wh_Packet_hash_sha256_res hashSha256Res;
-        /* key cache */
-        wh_Packet_key_cache_res keyCacheRes;
-        /* key evict */
-        wh_Packet_key_evict_res keyEvictRes;
-        /* key commit */
-        wh_Packet_key_commit_res keyCommitRes;
-        /* key export */
-        wh_Packet_key_export_res keyExportRes;
-        /* key erase */
-        wh_Packet_key_erase_res keyEraseRes;
-        /* counters */
-        wh_Packet_counter_init_res counterInitRes;
         wh_Packet_counter_increment_res counterIncrementRes;
-        wh_Packet_counter_read_res counterReadRes;
-
+        wh_Packet_counter_init_req      counterInitReq;
+        wh_Packet_counter_init_res      counterInitRes;
+        wh_Packet_counter_read_req      counterReadReq;
+        wh_Packet_counter_read_res      counterReadRes;
+        /* key store messages */
+        wh_Packet_key_cache_req         keyCacheReq;
+        wh_Packet_key_cache_res         keyCacheRes;
+        wh_Packet_key_commit_req        keyCommitReq;
+        wh_Packet_key_commit_res        keyCommitRes;
+        wh_Packet_key_erase_req         keyEraseReq;
+        wh_Packet_key_erase_res         keyEraseRes;
+        wh_Packet_key_evict_req         keyEvictReq;
+        wh_Packet_key_evict_res         keyEvictRes;
+        wh_Packet_key_export_req        keyExportReq;
+        wh_Packet_key_export_res        keyExportRes;
+        /* crypto messages */
+        wh_Packet_cipher_aescbc_req     cipherAesCbcReq;
+        wh_Packet_cipher_aescbc_res     cipherAesCbcRes;
+        wh_Packet_cipher_aesgcm_req     cipherAesGcmReq;
+        wh_Packet_cipher_aesgcm_res     cipherAesGcmRes;
+        wh_Packet_cipher_any_req        cipherAnyReq;
+        wh_Packet_cmac_req              cmacReq;
+        wh_Packet_cmac_res              cmacRes;
+        wh_Packet_hash_any_req          hashAnyReq;
+#if !defined(WOLFHSM_CFG_NO_CRYPTO) && !defined(NO_SHA256)
+        wh_Packet_hash_sha256_req hashSha256Req;
+        wh_Packet_hash_sha256_res hashSha256Res;
+#endif
+        wh_Packet_pk_any_req            pkAnyReq;
+        wh_Packet_pk_curve25519kg_req   pkCurve25519kgReq;
+        wh_Packet_pk_curve25519kg_res   pkCurve25519kgRes;
+        wh_Packet_pk_curve25519_req     pkCurve25519Req;
+        wh_Packet_pk_curve25519_res     pkCurve25519Res;
+        wh_Packet_pk_ecc_check_req      pkEccCheckReq;
+        wh_Packet_pk_ecc_check_res      pkEccCheckRes;
+        wh_Packet_pk_ecc_sign_req       pkEccSignReq;
+        wh_Packet_pk_ecc_sign_res       pkEccSignRes;
+        wh_Packet_pk_ecc_verify_req     pkEccVerifyReq;
+        wh_Packet_pk_ecc_verify_res     pkEccVerifyRes;
+        wh_Packet_pk_ecdh_req           pkEcdhReq;
+        wh_Packet_pk_ecdh_res           pkEcdhRes;
+        wh_Packet_pk_eckg_req           pkEckgReq;
+        wh_Packet_pk_eckg_res           pkEckgRes;
+        wh_Packet_pk_rsa_get_size_req   pkRsaGetSizeReq;
+        wh_Packet_pk_rsa_get_size_res   pkRsaGetSizeRes;
+        wh_Packet_pk_rsakg_req          pkRsakgReq;
+        wh_Packet_pk_rsakg_res          pkRsakgRes;
+        wh_Packet_pk_rsa_req            pkRsaReq;
+        wh_Packet_pk_rsa_res            pkRsaRes;
+        wh_Packet_rng_req               rngReq;
+        wh_Packet_rng_res               rngRes;
 #ifdef WOLFHSM_CFG_SHE_EXTENSION
+        /* SHE messages */
         wh_Packet_she_set_uid_req sheSetUidReq;
         wh_Packet_she_secure_boot_init_req sheSecureBootInitReq;
         wh_Packet_she_secure_boot_init_res sheSecureBootInitRes;
