@@ -31,9 +31,18 @@
 
 #include "wolfhsm/wh_common.h"
 
+/* Pick up necessary wolfCrypt defines */
+#ifndef WOLFHSM_CFG_NO_CRYPTO
+#include "wolfssl/wolfcrypt/settings.h"
+#ifndef NO_SHA256
+#include "wolfssl/wolfcrypt/sha256.h"
+#endif
+#endif
+
 #ifdef WOLFHSM_CFG_SHE_EXTENSION
 #include "wolfhsm/wh_she_common.h"
 #endif
+
 
 /** Management Packets */
 typedef struct  wh_Packet_version_exchange
@@ -274,7 +283,7 @@ typedef struct wh_Packet_hash_sha256_req {
         uint32_t hiLen;
         uint32_t loLen;
         /* intermediate hash value */
-        uint8_t hash[32]; /* TODO (BRN) WC_SHA256_DIGEST_SIZE */
+        uint8_t hash[WC_SHA256_DIGEST_SIZE];
     } resumeState;
     /* Flag indicating to the server that this is the last block and it should
      * finalize the hash. If set, inBlock may be only partially full*/
@@ -282,16 +291,15 @@ typedef struct wh_Packet_hash_sha256_req {
     /* Length of the last input block of data. Only valid if isLastBlock=1 */
     uint32_t lastBlockLen;
     /* Full sha256 input block to hash */
-    uint8_t inBlock[64]; /* TODO (BRN) WC_SHA256_BLOCK_SIZE */
+    uint8_t inBlock[WC_SHA256_BLOCK_SIZE];
 } wh_Packet_hash_sha256_req;
 
 typedef struct wh_Packet_hash_sha256_res {
     /* Resulting hash value */
     uint32_t hiLen;
     uint32_t loLen;
-    uint8_t  hash[32]; /* TODO WC_SHA256_DIGEST_SIZE */
+    uint8_t  hash[WC_SHA256_DIGEST_SIZE];
 } wh_Packet_hash_sha256_res;
-
 
 /** Key Management Packets */
 typedef struct  wh_Packet_key_cache_req
