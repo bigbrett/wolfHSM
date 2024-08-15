@@ -42,7 +42,7 @@
 #include "wolfssl/wolfcrypt/cmac.h"
 #include "wolfssl/wolfcrypt/rsa.h"
 #include "wolfssl/wolfcrypt/sha256.h"
-
+#include "wolfssl/wolfcrypt/asn_public.h"
 #include "wolfhsm/wh_client_cryptocb.h"
 
 #if defined(DEBUG_CRYPTOCB) || defined(DEBUG_CRYPTOCB_VERBOSE)
@@ -386,13 +386,25 @@ int wh_Client_CryptoCb(int devId, wc_CryptoInfo* info, void* inCtx)
             if (packet->pkRsaReq.keyId == WH_KEYID_ERASED) {
                 /* Must import the key to the server */
                 /* Convert RSA key to DER format */
-                ret = derSize = wc_RsaKeyToDer(info->pk.rsa.key, keyDer, sizeof(keyDer));
+                if (info->pk.rsa.key->type == RSA_PUBLIC) {
+                    ret = derSize = wc_RsaKeyToPublicDer(
+                        info->pk.rsa.key, keyDer, sizeof(keyDer));
+                }
+                else {
+                    ret = derSize = wc_RsaKeyToDer(info->pk.rsa.key, keyDer,
+                                                   sizeof(keyDer));
+                }
                 if(derSize >= 0) {
+                    /* copy packet, as keyCache request will overwrite it */
+                    wh_Packet_pk_rsa_req tmp = packet->pkRsaReq;
                     /* Cache the key and get the keyID */
                     /* WWW This is likely recursive so assume the packet will be
                      *     trashed by the time this returns */
                     ret = wh_Client_KeyCache(ctx, 0, (uint8_t*)keyLabel,
                         sizeof(keyLabel), keyDer, derSize, &cacheKeyId);
+                    /* restore packet */
+                    packet->pkRsaReq = tmp;
+                    /* update the restored packet with the new keyId */
                     packet->pkRsaReq.keyId = cacheKeyId;
                 }
             }
