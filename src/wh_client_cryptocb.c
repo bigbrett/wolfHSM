@@ -95,6 +95,10 @@ int wh_Client_CryptoCb(int devId, wc_CryptoInfo* info, void* inCtx)
     }
     XMEMSET((uint8_t*)packet, 0, WOLFHSM_CFG_COMM_DATA_LEN);
 
+#if defined(DEBUG_CRYPTOCB) && defined(DEBUG_CRYPTOCB_VERBOSE)
+    wc_CryptoCb_InfoString(info);
+#endif
+
     /* Based on the info type, process the request */
     switch (info->algo_type)
     {

@@ -34,6 +34,7 @@
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/wolfcrypt/types.h"
 #include "wolfssl/wolfcrypt/error-crypt.h"
+#include "wolfssl/wolfcrypt/asn_public.h"
 
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_packet.h"
@@ -63,7 +64,12 @@ static int hsmCacheKeyRsa(whServerContext* server, RsaKey* key, whKeyId* outId)
     if (ret == 0) {
         /* export key */
         /* TODO: Fix wolfCrypto to allow KeyToDer when KEY_GEN is NOT set */
-        ret = wc_RsaKeyToDer(key, cacheBuf, keySz);
+        if (key->type == RSA_PUBLIC) {
+            ret = wc_RsaKeyToPublicDer(key, cacheBuf, keySz);
+        }
+        else {
+            ret = wc_RsaKeyToDer(key, cacheBuf, keySz);
+        }
     }
     if (ret > 0) {
         /* set meta */
@@ -87,8 +93,14 @@ static int hsmLoadKeyRsa(whServerContext* server, RsaKey* key, whKeyId keyId)
     ret = hsmFreshenKey(server, keyId, &cacheBuf, &cacheMeta);
     /* decode the key */
     if (ret == 0) {
-        ret = wc_RsaPrivateKeyDecode(cacheBuf, (word32*)&idx, key,
-            cacheMeta->len);
+        if (key->type == RSA_PUBLIC) {
+            ret = wc_RsaPublicKeyDecode(cacheBuf, (word32*)&idx, key,
+                                        cacheMeta->len);
+        }
+        else {
+            ret = wc_RsaPrivateKeyDecode(cacheBuf, (word32*)&idx, key,
+                                         cacheMeta->len);
+        }
     }
     return ret;
 }
@@ -143,6 +155,15 @@ static int hsmCryptoRsaFunction(whServerContext* server, whPacket* packet,
     /* init rsa key */
     ret = wc_InitRsaKey_ex(server->crypto->algoCtx.rsa, NULL,
         server->crypto->devId);
+    /* HACK: Set the RSA key type depending on the requested operation
+     * TODO: keytype should be be stored along side of the key */
+    if (packet->pkRsaReq.opType == RSA_PUBLIC_ENCRYPT ||
+        packet->pkRsaReq.opType == RSA_PUBLIC_DECRYPT) {
+        server->crypto->algoCtx.rsa->type = RSA_PUBLIC;
+    }
+    else {
+        server->crypto->algoCtx.rsa->type = RSA_PRIVATE;
+    }
     /* load the key from the keystore */
     if (ret == 0) {
         ret = hsmLoadKeyRsa(server, server->crypto->algoCtx.rsa,
@@ -181,6 +202,16 @@ static int hsmCryptoRsaGetSize(whServerContext* server, whPacket* packet,
     /* init rsa key */
     ret = wc_InitRsaKey_ex(server->crypto->algoCtx.rsa, NULL,
         server->crypto->devId);
+    /* HACK: Set the RSA key type depending on the requested operation
+     * TODO: keytype should be be stored along side of the key */
+    if (packet->pkRsaReq.opType == RSA_PUBLIC_ENCRYPT ||
+        packet->pkRsaReq.opType == RSA_PUBLIC_DECRYPT) {
+        server->crypto->algoCtx.rsa->type = RSA_PUBLIC;
+    }
+    else {
+        server->crypto->algoCtx.rsa->type = RSA_PRIVATE;
+    }
+
     /* load the key from the keystore */
     if (ret == 0) {
         ret = hsmLoadKeyRsa(server, server->crypto->algoCtx.rsa,
