@@ -1892,6 +1892,9 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
             }
             /* Handle CMAC update, checking for cancellation */
             if (ret == 0 && req.inSz != 0) {
+#ifndef WOLFHSM_CFG_CANCEL_API
+                (void)seq;
+#endif
                 for (i = 0; ret == 0 && i < req.inSz; i += AES_BLOCK_SIZE) {
                     if (i + AES_BLOCK_SIZE > req.inSz) {
                         blockSz = req.inSz - i;
@@ -1905,8 +1908,6 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
                             ret = WH_ERROR_CANCEL;
                         }
                     }
-#else
-                    (void)seq;
 #endif
                 }
 #ifdef DEBUG_CRYPTOCB_VERBOSE
