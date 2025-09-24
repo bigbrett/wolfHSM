@@ -87,14 +87,14 @@ int serverDelay = 0;
 #endif
 
 #if defined(WOLFHSM_CFG_IS_TEST_SERVER) && defined(WOLFHSM_CFG_TEST_POSIX) && \
-    defined(WOLFHSM_CFG_ENABLE_CLIENT) &&                                     \
-    defined(WOLFHSM_CFG_ENABLE_SERVER) && defined(WOLFHSM_CFG_CANCEL_API)
+    defined(WOLFHSM_CFG_ENABLE_CLIENT) && defined(WOLFHSM_CFG_ENABLE_SERVER) && \
+    defined(WOLFHSM_CFG_CANCEL_API)
 /* pointer to expose server context cancel sequence to the client cancel
  * callback */
 static uint16_t* cancelSeqP;
 
-#endif /* WOLFHSM_CFG_IS_TEST_SERVER && WOLFHSM_CFG_TEST_POSIX && \
-          WOLFHSM_CFG_ENABLE_CLIENT && WOLFHSM_CFG_ENABLE_SERVER &&                                     \
+#endif /* WOLFHSM_CFG_IS_TEST_SERVER && WOLFHSM_CFG_TEST_POSIX &&   \
+          WOLFHSM_CFG_ENABLE_CLIENT && WOLFHSM_CFG_ENABLE_SERVER && \
           WOLFHSM_CFG_CANCEL_API */
 
 #if defined(WOLFHSM_CFG_TEST_VERBOSE) && defined(WOLFHSM_CFG_ENABLE_CLIENT)
