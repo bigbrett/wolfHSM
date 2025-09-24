@@ -80,7 +80,7 @@ struct whClientContext_t {
     uint16_t     last_req_id;
     uint16_t     last_req_kind;
 #ifdef WOLFHSM_CFG_CANCEL_API
-    uint8_t      cancelable;
+    uint8_t          cancelable;
     whClientCancelCb cancelCb;
 #endif
     whCommClient comm[1];
