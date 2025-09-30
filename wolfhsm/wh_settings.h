@@ -221,6 +221,13 @@
 #define WOLFHSM_CFG_CUSTOMCB_LEN 256
 #endif
 
+/*  WOLFHSM_CFG_LOG_MSG_MAX - Maximum size of a log message including null
+ *  terminator.
+ *      Default: 256 */
+#ifndef WOLFHSM_CFG_LOG_MSG_MAX
+#define WOLFHSM_CFG_LOG_MSG_MAX 256
+#endif
+
 /* Maximum size of a certificate */
 #ifndef WOLFHSM_CFG_MAX_CERT_SIZE
 #ifndef WOLFHSM_CFG_DMA
