@@ -46,4 +46,10 @@
 /* Enable Image Manager feature */
 #define WOLFHSM_CFG_SERVER_IMG_MGR
 
+/* Only enable cancellation tests in POSIX test harness if using the
+ * instrumented tests server. Otherwise CMAC is too fast to test cancellation */
+#ifdef WOLFHSM_CFG_IS_TEST_SERVER
+#define WOLFHSM_CFG_CANCEL_API
+#endif
+
 #endif /* WOLFHSM_CFG_H_ */

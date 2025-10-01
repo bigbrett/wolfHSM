@@ -378,16 +378,16 @@ int wh_Server_HandleRequestMessage(whServerContext* server)
         /* Send a response */
         /* TODO: Respond with ErrorResponse if handler returns an error */
 #ifdef WOLFHSM_CFG_CANCEL_API
-        if (rc == 0 || rc == WH_ERROR_CANCEL) {
+        if (rc == WH_ERROR_CANCEL) {
             /* notify the client that their request was canceled */
-            if (rc == WH_ERROR_CANCEL) {
-                kind = WH_MESSAGE_KIND(WH_MESSAGE_GROUP_CANCEL, 0);
-                size = 0;
-                data = NULL;
-            }
-#else
-        if (rc == 0) {
+            kind = WH_MESSAGE_KIND(WH_MESSAGE_GROUP_CANCEL, 0);
+            size = 0;
+            data = NULL;
+            /* reset RC so the cancellation response is sent */
+            rc = 0;
+        }
 #endif
+        if (rc == 0) {
             do {
                 rc = wh_CommServer_SendResponse(server->comm, magic, kind, seq,
                     size, data);

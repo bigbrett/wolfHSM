@@ -84,18 +84,16 @@ enum {
 #ifdef WOLFHSM_CFG_IS_TEST_SERVER
 /* Flag causing the server loop to sleep(1) */
 int serverDelay = 0;
-#endif
 
-#if defined(WOLFHSM_CFG_IS_TEST_SERVER) && defined(WOLFHSM_CFG_TEST_POSIX) && \
-    defined(WOLFHSM_CFG_ENABLE_CLIENT) &&                                     \
+#if defined(WOLFHSM_CFG_TEST_POSIX) && defined(WOLFHSM_CFG_ENABLE_CLIENT) && \
     defined(WOLFHSM_CFG_ENABLE_SERVER) && defined(WOLFHSM_CFG_CANCEL_API)
 /* pointer to expose server context cancel sequence to the client cancel
  * callback */
 static uint16_t* cancelSeqP;
 
-#endif /* WOLFHSM_CFG_IS_TEST_SERVER && WOLFHSM_CFG_TEST_POSIX &&   \
-          WOLFHSM_CFG_ENABLE_CLIENT && WOLFHSM_CFG_ENABLE_SERVER && \
-          WOLFHSM_CFG_CANCEL_API */
+#endif /* WOLFHSM_CFG_TEST_POSIX && WOLFHSM_CFG_ENABLE_CLIENT && \
+          WOLFHSM_CFG_ENABLE_SERVER && WOLFHSM_CFG_CANCEL_API */
+#endif /* WOLFHSM_CFG_IS_TEST_SERVER */
 
 #if defined(WOLFHSM_CFG_TEST_VERBOSE) && defined(WOLFHSM_CFG_ENABLE_CLIENT)
 static int whTest_ShowNvmAvailable(whClientContext* ctx)
@@ -2462,7 +2460,8 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
         }
     }
 
-#ifdef WOLFHSM_CFG_CANCEL_API
+#if defined(WOLFHSM_CFG_CANCEL_API) && \
+    !defined(WOLFHSM_CFG_TEST_CLIENT_ONLY_TCP)
     /* test CMAC cancellation for supported devIds */
     if (ret == 0
 #ifdef WOLFHSM_CFG_DMA
@@ -2476,7 +2475,6 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_EnableCancel %d\n", ret);
         }
-#ifdef WOLFHSM_CFG_IS_TEST_SERVER
         if (ret == 0) {
             ret = wc_InitCmac_ex(cmac, knownCmacKey, sizeof(knownCmacKey),
                                  WC_CMAC_AES, NULL, NULL, devId);
@@ -2491,12 +2489,11 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
                 }
                 else {
 
+#if WOLFHSM_CFG_IS_TEST_SERVER
                     /* TODO: use hsm pause/resume functionality on real hardware
                      */
                     /* delay the server so scheduling doesn't interfere with the
                      * timing */
-#if 0 /* Temporarily disable server delay for this deliverable - see PR #168 \
-       */
                     serverDelay = 1;
 #endif
 
@@ -2512,8 +2509,7 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
                                 "Failed to wh_Client_CancelRequest %d\n", ret);
                         }
                         else {
-#if 0 /* Temporarily disable server delay for this deliverable - see PR #168 \
-       */
+#if WOLFHSM_CFG_IS_TEST_SERVER
                             serverDelay = 0;
 #endif
                             do {
@@ -2530,7 +2526,6 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
                 }
             }
         }
-#endif /* WOLFHSM_CFG_IS_TEST_SERVER */
         if (ret == 0) {
             /* test cancelable request and response work for standard CMAC
                 * request with no cancellation */
@@ -3632,6 +3627,7 @@ static int wh_ClientServer_MemThreadTest(void)
         .resp       = (whTransportMemCsr*)resp,
         .resp_size  = sizeof(resp),
     }};
+
     /* Client configuration/contexts */
     whTransportClientCb         tccb[1]   = {WH_TRANSPORT_MEM_CLIENT_CB};
     whTransportMemClientContext tmcc[1]   = {0};
@@ -3641,16 +3637,14 @@ static int wh_ClientServer_MemThreadTest(void)
                  .transport_config  = (void*)tmcf,
                  .client_id         = 1,
     }};
-    whClientConfig              c_conf[1]  = {{
-                      .comm = cc_conf,
+
+    whClientConfig c_conf[1] = {{
+        .comm = cc_conf,
 #ifdef WOLFHSM_CFG_CANCEL_API
-#ifdef WOLFHSM_CFG_IS_TEST_SERVER
         .cancelCb = _cancelCb,
-#else
-        .cancelCb = NULL,
-#endif
 #endif
     }};
+
     /* Server configuration/contexts */
     whTransportServerCb         tscb[1]   = {WH_TRANSPORT_MEM_SERVER_CB};
     whTransportMemServerContext tmsc[1]   = {0};
