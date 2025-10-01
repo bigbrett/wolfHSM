@@ -186,7 +186,10 @@ int posixLogFile_Export(void* c, whLogExportCb export_cb, void* export_arg)
     pthread_mutex_lock(&context->mutex);
 
     /* Flush any pending writes */
-    fsync(context->fd);
+    if (fsync(context->fd) != 0) {
+        pthread_mutex_unlock(&context->mutex);
+        return WH_ERROR_ABORTED;
+    }
 
     /* Open file for reading (using fdopen with dup'd fd) */
     int fd_dup = dup(context->fd);
@@ -218,9 +221,12 @@ int posixLogFile_Export(void* c, whLogExportCb export_cb, void* export_arg)
         memset(&entry, 0, sizeof(entry));
 
         /* Parse: TIMESTAMP|LEVEL|FILE:LINE|FUNCTION|MESSAGE\n */
-        int parsed =
-            sscanf(line, "%llu|%31[^|]|%255[^:]:%u|%255[^|]|%[^\n]", &timestamp,
-                   level_str, file_buf, &line_num, func_buf, msg_buf);
+        char fmt[128];
+        snprintf(fmt, sizeof(fmt),
+                 "%%llu|%%31[^|]|%%255[^:]:%%u|%%255[^|]|%%%u[^\n]",
+                 WOLFHSM_CFG_LOG_MSG_MAX - 1);
+        int parsed = sscanf(line, fmt, &timestamp, level_str, file_buf,
+                            &line_num, func_buf, msg_buf);
 
         if (parsed == 6) {
             entry.timestamp = timestamp;

@@ -57,7 +57,12 @@ typedef struct {
                                         * terminator */
 } whLogEntry;
 
-/** Export callback - invoked for each log entry during export */
+/**
+ * Export callback - invoked for each log entry during export
+ * @param arg User-supplied argument (passed through from wh_Log_Export)
+ * @param entry Pointer to log entry being exported
+ * @return 0 to continue iteration, non-zero to abort export
+ */
 typedef int (*whLogExportCb)(void* arg, const whLogEntry* entry);
 
 /** Backend callback interface */
