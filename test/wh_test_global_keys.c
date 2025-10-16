@@ -26,7 +26,7 @@
 #include "wolfhsm/wh_settings.h"
 
 #if defined(WOLFHSM_CFG_GLOBAL_KEYS) && defined(WOLFHSM_CFG_ENABLE_CLIENT) && \
-    defined(WOLFHSM_CFG_ENABLE_SERVER) && !defined(WOLFHSM_CFG_NO_CRYPTO)
+    defined(WOLFHSM_CFG_ENABLE_SERVER)
 
 #include <stdint.h>
 #include <stdio.h>
@@ -824,6 +824,7 @@ int whTest_GlobalKeys(void)
     testServer1 = server1;
     testServer2 = server2;
 
+#if !defined(WOLFHSM_CFG_NO_CRYPTO)
     /* Initialize wolfCrypt */
     printf("Initializing wolfCrypt...\n");
     fflush(stdout);
@@ -832,6 +833,7 @@ int whTest_GlobalKeys(void)
     fflush(stdout);
     if (ret != 0)
         return ret;
+#endif
 
     /* Initialize NVM (shared) */
     printf("Initializing NVM...\n");
@@ -842,6 +844,7 @@ int whTest_GlobalKeys(void)
     if (ret != 0)
         return ret;
 
+#if !defined(WOLFHSM_CFG_NO_CRYPTO)
     /* Initialize RNGs */
     printf("Initializing RNG1...\n");
     fflush(stdout);
@@ -858,6 +861,7 @@ int whTest_GlobalKeys(void)
     fflush(stdout);
     if (ret != 0)
         return ret;
+#endif
 
     /* Initialize servers */
     printf("Initializing server1...\n");
@@ -1001,24 +1005,18 @@ int whTest_GlobalKeys(void)
     wh_Client_Cleanup(client2);
     wh_Server_Cleanup(server1);
     wh_Server_Cleanup(server2);
+#if !defined(WOLFHSM_CFG_NO_CRYPTO)
     wc_FreeRng(crypto1->rng);
     wc_FreeRng(crypto2->rng);
-    wh_Nvm_Cleanup(nvm);
     wolfCrypt_Cleanup();
+#endif
+    wh_Nvm_Cleanup(nvm);
 
     printf("=== All Global Keys Tests PASSED ===\n\n");
 
     return 0;
 }
 
-#else /* !WOLFHSM_CFG_GLOBAL_KEYS || !WOLFHSM_CFG_ENABLE_CLIENT || \
-         !WOLFHSM_CFG_ENABLE_SERVER || WOLFHSM_CFG_NO_CRYPTO */
-
-int whTest_GlobalKeys(void)
-{
-    printf("Global keys tests skipped (feature not enabled)\n");
-    return 0;
-}
 
 #endif /* WOLFHSM_CFG_GLOBAL_KEYS && WOLFHSM_CFG_ENABLE_CLIENT && \
-          WOLFHSM_CFG_ENABLE_SERVER && !WOLFHSM_CFG_NO_CRYPTO */
+          WOLFHSM_CFG_ENABLE_SERVER */
