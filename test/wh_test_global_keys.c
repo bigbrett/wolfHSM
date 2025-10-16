@@ -784,9 +784,11 @@ int whTest_GlobalKeys(void)
     }};
     whNvmContext nvm[1]    = {0}; /* Shared NVM */
 
+#if !defined(WOLFHSM_CFG_NO_CRYPTO)
     /* Crypto contexts for both servers */
     whServerCryptoContext crypto1[1] = {{.devId = INVALID_DEVID}};
     whServerCryptoContext crypto2[1] = {{.devId = INVALID_DEVID}};
+#endif
 
     /* Server 1 configuration */
     whTransportServerCb         tscb1[1]    = {WH_TRANSPORT_MEM_SERVER_CB};
@@ -816,7 +818,10 @@ int whTest_GlobalKeys(void)
     whServerConfig              s_conf2[1]  = {{
                       .comm_config = cs_conf2,
                       .nvm         = nvm, /* Shared NVM */
+
+#if !defined(WOLFHSM_CFG_NO_CRYPTO)
                       .crypto      = crypto2,
+#endif
     }};
     whServerContext             server2[1]  = {0};
 
