@@ -802,7 +802,9 @@ int whTest_GlobalKeys(void)
     whServerConfig              s_conf1[1]  = {{
                       .comm_config = cs_conf1,
                       .nvm         = nvm, /* Shared NVM */
+#if !defined(WOLFHSM_CFG_NO_CRYPTO)
                       .crypto      = crypto1,
+#endif
     }};
     whServerContext             server1[1]  = {0};
 
