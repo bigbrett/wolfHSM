@@ -73,13 +73,6 @@
 
 #define ALT_CLIENT_ID (2)
 
-/* Macro for keys that need all usage permissions (used in positive crypto
- * tests) */
-#define WH_TEST_ALL_USAGE_FLAGS                                \
-    (WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT | \
-     WH_NVM_FLAGS_USAGE_SIGN | WH_NVM_FLAGS_USAGE_VERIFY |     \
-     WH_NVM_FLAGS_USAGE_WRAP | WH_NVM_FLAGS_USAGE_DERIVE)
-
 enum {
     /* Total size needs to fit:
      * - Transport CSR (whTransportMemCsr)
@@ -1197,7 +1190,7 @@ static int whTest_CryptoHkdf(whClientContext* ctx, int devId, WC_RNG* rng)
 
         /* First, cache the input key */
         ret =
-            wh_Client_KeyCache(ctx, WH_TEST_ALL_USAGE_FLAGS, label_in,
+            wh_Client_KeyCache(ctx, WH_NVM_FLAGS_USAGE_DERIVE, label_in,
                                sizeof(label_in), ikm2, sizeof(ikm2), &keyIdIn);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to cache input key: %d\n", ret);
@@ -2290,8 +2283,9 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
         }
         else {
             keyId = WH_KEYID_ERASED;
-            ret   = wh_Client_KeyCache(ctx, WH_TEST_ALL_USAGE_FLAGS, labelIn,
-                                       sizeof(labelIn), key, sizeof(key), &keyId);
+            ret   = wh_Client_KeyCache(
+                  ctx, WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT,
+                  labelIn, sizeof(labelIn), key, sizeof(key), &keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
             }
@@ -2403,8 +2397,9 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
         }
         else {
             keyId = WH_KEYID_ERASED;
-            ret   = wh_Client_KeyCache(ctx, WH_TEST_ALL_USAGE_FLAGS, labelIn,
-                                       sizeof(labelIn), key, sizeof(key), &keyId);
+            ret   = wh_Client_KeyCache(
+                  ctx, WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT,
+                  labelIn, sizeof(labelIn), key, sizeof(key), &keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
             }
@@ -2518,8 +2513,9 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
             WH_ERROR_PRINT("Failed to wc_AesInit %d\n", ret);
         } else {
             keyId = WH_KEYID_ERASED;
-            ret   = wh_Client_KeyCache(ctx, WH_TEST_ALL_USAGE_FLAGS, labelIn,
-                                       sizeof(labelIn), key, sizeof(key), &keyId);
+            ret   = wh_Client_KeyCache(
+                  ctx, WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT,
+                  labelIn, sizeof(labelIn), key, sizeof(key), &keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
             } else {
@@ -2628,8 +2624,9 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
             WH_ERROR_PRINT("Failed to wc_AesInit %d\n", ret);
         } else {
             keyId = WH_KEYID_ERASED;
-            ret   = wh_Client_KeyCache(ctx, WH_TEST_ALL_USAGE_FLAGS, labelIn,
-                                       sizeof(labelIn), key, sizeof(key), &keyId);
+            ret   = wh_Client_KeyCache(
+                  ctx, WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT,
+                  labelIn, sizeof(labelIn), key, sizeof(key), &keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
             } else {
@@ -2748,7 +2745,7 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
     if (ret == 0) {
         /* test oneshot generate with pre-cached key */
         keyId = WH_KEYID_ERASED;
-        ret   = wh_Client_KeyCache(ctx, WH_TEST_ALL_USAGE_FLAGS, labelIn,
+        ret   = wh_Client_KeyCache(ctx, WH_NVM_FLAGS_USAGE_SIGN, labelIn,
                                    sizeof(labelIn), knownCmacKey,
                                    sizeof(knownCmacKey), &keyId);
         if (ret != 0) {
@@ -2816,7 +2813,7 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
     if (ret == 0) {
         /* test oneshot verify with committed key */
         keyId = WH_KEYID_ERASED;
-        ret   = wh_Client_KeyCache(ctx, WH_TEST_ALL_USAGE_FLAGS, labelIn,
+        ret   = wh_Client_KeyCache(ctx, WH_NVM_FLAGS_USAGE_VERIFY, labelIn,
                                    sizeof(labelIn), knownCmacKey,
                                    sizeof(knownCmacKey), &keyId);
         if (ret != 0) {
