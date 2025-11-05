@@ -2499,9 +2499,24 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
                 len   = sizeof(ctx->crypto->algoCtx.cmac);
                 keyId = wh_KeyId_TranslateFromClient(
                     WH_KEYTYPE_CRYPTO, ctx->comm->client_id, req.keyId);
-                ret   = wh_Server_KeystoreReadKey(
-                      ctx, keyId, NULL, (uint8_t*)ctx->crypto->algoCtx.cmac,
-                      (uint32_t*)&len);
+
+                /* Validate key usage policy - CMAC accepts sign or verify */
+                if (!WH_KEYID_ISERASED(keyId)) {
+                    ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                        ctx, keyId, WH_NVM_FLAGS_USAGE_SIGN);
+                    if (ret == WH_ERROR_USAGE) {
+                        /* Sign not allowed, try verify */
+                        ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                            ctx, keyId, WH_NVM_FLAGS_USAGE_VERIFY);
+                    }
+                    if (ret != WH_ERROR_OK) {
+                        return ret;
+                    }
+                }
+
+                ret = wh_Server_KeystoreReadKey(
+                    ctx, keyId, meta, (uint8_t*)ctx->crypto->algoCtx.cmac,
+                    (uint32_t*)&len);
                 if (ret == WH_ERROR_OK) {
                     /* if the key size is a multiple of aes, init the key and
                      * overwrite the existing key on exit */
@@ -2612,12 +2627,22 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
                 if (moveToBigCache == 1) {
                     ret = wh_Server_KeystoreEvictKey(ctx, keyId);
                 }
-                if (ret == 0) {
+                if (ret == WH_ERROR_OK) {
                     meta->id  = keyId;
                     meta->len = sizeof(ctx->crypto->algoCtx.cmac);
-                    ret       = wh_Server_KeystoreCacheKey(
+                    /* Nonzero key size means the client provided the key and
+                     * wasn't able to provide flags, therefore we tag the key as
+                     * useable for sign/verify operations. If the client instead
+                     * wants to refer to the key by ID, meta->flags should
+                     * already hold the flags set on the original AES key from
+                     * the earlier read operation */
+                    if (req.keySz != 0) {
+                        meta->flags =
+                            WH_NVM_FLAGS_USAGE_SIGN | WH_NVM_FLAGS_USAGE_VERIFY;
+                    }
+                    ret = wh_Server_KeystoreCacheKey(
                         ctx, meta, (uint8_t*)ctx->crypto->algoCtx.cmac);
-                    if (ret == 0) {
+                    if (ret == WH_ERROR_OK) {
                         res.keyId = wh_KeyId_TranslateToClient(keyId);
                         res.outSz = 0;
                     }
@@ -4692,6 +4717,22 @@ static int _HandleCmacDma(whServerContext* ctx, uint16_t magic, uint16_t seq,
                         keyId = wh_KeyId_TranslateFromClient(
                             WH_KEYTYPE_CRYPTO, ctx->comm->client_id,
                             clientKeyId);
+
+                        /* Validate key usage policy - CMAC accepts sign or
+                         * verify */
+                        if (!WH_KEYID_ISERASED(keyId)) {
+                            ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                                ctx, keyId, WH_NVM_FLAGS_USAGE_SIGN);
+                            if (ret == WH_ERROR_USAGE) {
+                                /* Sign not allowed, try verify */
+                                ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                                    ctx, keyId, WH_NVM_FLAGS_USAGE_VERIFY);
+                            }
+                            if (ret != WH_ERROR_OK) {
+                                return ret;
+                            }
+                        }
+
                         keyLen = sizeof(tmpKey);
 
                         /* Load key from cache */
@@ -4756,6 +4797,22 @@ static int _HandleCmacDma(whServerContext* ctx, uint16_t magic, uint16_t seq,
                         /* Get key ID from CMAC context */
                         keyId = wh_KeyId_TranslateFromClient(
                             WH_KEYTYPE_CRYPTO, ctx->comm->client_id, nvmId);
+
+                        /* Validate key usage policy - CMAC accepts sign or
+                         * verify */
+                        if (!WH_KEYID_ISERASED(keyId)) {
+                            ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                                ctx, keyId, WH_NVM_FLAGS_USAGE_SIGN);
+                            if (ret == WH_ERROR_USAGE) {
+                                /* Sign not allowed, try verify */
+                                ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                                    ctx, keyId, WH_NVM_FLAGS_USAGE_VERIFY);
+                            }
+                            if (ret != WH_ERROR_OK) {
+                                return ret;
+                            }
+                        }
+
                         keyLen = sizeof(tmpKey);
 
                         /* Load key from cache */

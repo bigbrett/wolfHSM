@@ -4029,6 +4029,108 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
         return ret;
 #endif /* HAVE_HKDF */
 
+#if defined(WOLFSSL_CMAC) && !defined(NO_AES) && defined(WOLFSSL_AES_DIRECT)
+    /* CMAC Generate without SIGN flag */
+    printf("  Testing CMAC generate without SIGN flag...\n");
+    {
+        Cmac    cmac;
+        whKeyId keyId = WH_KEYID_ERASED;
+        uint8_t message[64];
+        uint8_t tag[AES_BLOCK_SIZE];
+        word32  tagLen = sizeof(tag);
+
+        /* Generate random message */
+        ret = wc_RNG_GenerateBlock(rng, message, sizeof(message));
+        if (ret == 0) {
+            /* Cache AES key without SIGN flag */
+            ret = wh_Client_KeyCache(
+                client, WH_NVM_FLAGS_NONE, (uint8_t*)"cmac-no-sign",
+                strlen("cmac-no-sign"), key, AES_128_KEY_SIZE, &keyId);
+        }
+
+        if (ret == 0) {
+            /* Initialize CMAC with HSM device ID */
+            ret = wc_InitCmac_ex(&cmac, NULL, 0, WC_CMAC_AES, NULL, NULL,
+                                 WH_DEV_ID);
+            if (ret == 0) {
+                /* Associate cached key */
+                ret = wh_Client_CmacSetKeyId(&cmac, keyId);
+                if (ret == 0) {
+                    /* Try to generate CMAC - should fail */
+                    ret = wc_AesCmacGenerate_ex(&cmac, tag, &tagLen, message,
+                                                sizeof(message), NULL, 0, NULL,
+                                                WH_DEV_ID);
+                    if (ret == WH_ERROR_USAGE) {
+                        printf("    PASS: Correctly denied CMAC generate\n");
+                        ret = 0; /* Test passed */
+                    }
+                    else {
+                        WH_ERROR_PRINT(
+                            "    FAIL: Expected WH_ERROR_USAGE, got %d\n", ret);
+                        ret = WH_ERROR_ABORTED;
+                    }
+                }
+                wc_CmacFree(&cmac);
+            }
+            wh_Client_KeyEvict(client, keyId);
+        }
+    }
+    if (ret != 0)
+        return ret;
+
+    /* CMAC Verify without VERIFY flag */
+    printf("  Testing CMAC verify without VERIFY flag...\n");
+    {
+        Cmac    cmac;
+        whKeyId keyId = WH_KEYID_ERASED;
+        uint8_t message[64];
+        uint8_t tag[AES_BLOCK_SIZE];
+        word32  tagLen = sizeof(tag);
+
+        /* Generate random message and tag */
+        ret = wc_RNG_GenerateBlock(rng, message, sizeof(message));
+        if (ret == 0) {
+            ret = wc_RNG_GenerateBlock(rng, tag, sizeof(tag));
+        }
+
+        if (ret == 0) {
+            /* Cache AES key without VERIFY flag */
+            ret = wh_Client_KeyCache(
+                client, WH_NVM_FLAGS_NONE, (uint8_t*)"cmac-no-verify",
+                strlen("cmac-no-verify"), key, AES_128_KEY_SIZE, &keyId);
+        }
+
+        if (ret == 0) {
+            /* Initialize CMAC with HSM device ID */
+            ret = wc_InitCmac_ex(&cmac, NULL, 0, WC_CMAC_AES, NULL, NULL,
+                                 WH_DEV_ID);
+            if (ret == 0) {
+                /* Associate cached key */
+                ret = wh_Client_CmacSetKeyId(&cmac, keyId);
+                if (ret == 0) {
+                    /* Try to verify CMAC - should fail */
+                    ret = wc_AesCmacVerify_ex(&cmac, tag, tagLen, message,
+                                              sizeof(message), NULL, 0, NULL,
+                                              WH_DEV_ID);
+                    if (ret == WH_ERROR_USAGE) {
+                        printf("    PASS: Correctly denied CMAC verify\n");
+                        ret = 0; /* Test passed */
+                    }
+                    else {
+                        WH_ERROR_PRINT(
+                            "    FAIL: Expected WH_ERROR_USAGE, got %d\n", ret);
+                        ret = WH_ERROR_ABORTED;
+                    }
+                }
+                wc_CmacFree(&cmac);
+            }
+            wh_Client_KeyEvict(client, keyId);
+        }
+    }
+    if (ret != 0)
+        return ret;
+#endif /* WOLFSSL_CMAC && !NO_AES && WOLFSSL_AES_DIRECT */
+
 #ifdef WOLFHSM_CFG_KEYWRAP
     /* Key wrap without WRAP flag */
     printf("  Testing key wrap without WRAP flag...\n");
