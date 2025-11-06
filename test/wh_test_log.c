@@ -184,15 +184,6 @@ static whLogCb mockLogCb = {
     .GetTime  = mockLog_GetTime,
 };
 
-/* Helper for export callback */
-static int exportCallbackHelper(void* arg, const whLogEntry* entry)
-{
-    int* count = (int*)arg;
-    (void)entry;
-    (*count)++;
-    return 0;
-}
-
 /* Helper for iterate callback - counts entries */
 static int iterateCallbackCounter(void* arg, const whLogEntry* entry)
 {
@@ -202,99 +193,117 @@ static int iterateCallbackCounter(void* arg, const whLogEntry* entry)
     return 0;
 }
 
+/* Helper for iterate callback - validates specific entries */
+typedef struct {
+    int count;
+    int valid; /* Set to 0 if entry doesn't match expected pattern */
+} iterateValidationArgs;
+
+static int iterateCallbackValidator(void* arg, const whLogEntry* entry)
+{
+    iterateValidationArgs* args = (iterateValidationArgs*)arg;
+    char                   expected[32];
+
+    /* Expect messages like "Entry 0", "Entry 1", etc. */
+    snprintf(expected, sizeof(expected), "Entry %d", args->count);
+
+    if (strcmp(entry->msg, expected) != 0) {
+        args->valid = 0;
+    }
+    if (entry->level != WH_LOG_LEVEL_INFO) {
+        args->valid = 0;
+    }
+
+    args->count++;
+    return 0;
+}
+
 /* Frontend API tests */
 static int whTest_LogFrontend(void)
 {
-    whLogContext   logCtx;
-    mockLogContext mockCtx;
-    whLogConfig    logConfig;
-    whLogEntry     entry;
-    int            export_count = 0;
+    whLogContext          logCtx;
+    mockLogContext        mockCtx;
+    whLogConfig           logConfig;
+    int                   iterate_count = 0;
+    int                   i;
+    mockLogExportArg      exportArgs;
+    iterateValidationArgs valArgs;
 
-    /* Test: Init with valid config */
+    /* Setup */
     memset(&logCtx, 0, sizeof(logCtx));
     memset(&mockCtx, 0, sizeof(mockCtx));
     logConfig.cb      = &mockLogCb;
     logConfig.context = &mockCtx;
     logConfig.config  = NULL;
 
-    WH_TEST_RETURN_ON_FAIL(wh_Log_Init(&logCtx, &logConfig));
-    WH_TEST_ASSERT_RETURN(mockCtx.init_called == 1);
-    WH_TEST_ASSERT_RETURN(logCtx.cb == &mockLogCb);
-    WH_TEST_ASSERT_RETURN(logCtx.context == &mockCtx);
-
-    /* Test: Init with NULL context (expect WH_ERROR_BADARGS) */
+    /* Test: NULL input rejections */
     WH_TEST_ASSERT_RETURN(wh_Log_Init(NULL, &logConfig) == WH_ERROR_BADARGS);
-
-    /* Test: Init with NULL config (expect WH_ERROR_BADARGS) */
     WH_TEST_ASSERT_RETURN(wh_Log_Init(&logCtx, NULL) == WH_ERROR_BADARGS);
-
-    /* Test: AddEntry with valid entry */
-    memset(&entry, 0, sizeof(entry));
-    entry.timestamp = 1234567890000ULL;
-    entry.level     = WH_LOG_LEVEL_INFO;
-    entry.file      = __FILE__;
-    entry.function  = __func__;
-    entry.line      = __LINE__;
-    entry.msg_len   = 11;
-    memcpy(entry.msg, "Test message", 12);
-
-    WH_TEST_RETURN_ON_FAIL(wh_Log_AddEntry(&logCtx, &entry));
-    WH_TEST_ASSERT_RETURN(mockCtx.count == 1);
-    WH_TEST_ASSERT_RETURN(mockCtx.entries[0].level == WH_LOG_LEVEL_INFO);
-    WH_TEST_ASSERT_RETURN(strcmp(mockCtx.entries[0].msg, "Test message") == 0);
-
-    /* Test: AddEntry with NULL context (expect WH_ERROR_BADARGS) */
-    WH_TEST_ASSERT_RETURN(wh_Log_AddEntry(NULL, &entry) == WH_ERROR_BADARGS);
-
-    /* Test: AddEntry with NULL entry (expect WH_ERROR_BADARGS) */
-    WH_TEST_ASSERT_RETURN(wh_Log_AddEntry(&logCtx, NULL) == WH_ERROR_BADARGS);
-
-    /* Test: Export with callback validation */
-    export_count = 0;
-    mockLogExportArg exportArgs = {.callback     = exportCallbackHelper,
-                                   .callback_arg = &export_count};
-    WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, &exportArgs));
-    WH_TEST_ASSERT_RETURN(export_count == 1);
-
-    /* Test: Export with NULL context (expect WH_ERROR_BADARGS) */
+    WH_TEST_ASSERT_RETURN(wh_Log_Cleanup(NULL) == WH_ERROR_BADARGS);
+    WH_TEST_ASSERT_RETURN(wh_Log_Clear(NULL) == WH_ERROR_BADARGS);
     WH_TEST_ASSERT_RETURN(wh_Log_Export(NULL, &exportArgs) == WH_ERROR_BADARGS);
-
-    /* Test: Export with NULL arg (should succeed but do nothing) */
-    WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, NULL));
-
-    /* Test: Iterate with callback validation */
-    export_count = 0;
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &export_count));
-    WH_TEST_ASSERT_RETURN(export_count == 1);
-
-    /* Test: Iterate with NULL context (expect WH_ERROR_BADARGS) */
     WH_TEST_ASSERT_RETURN(wh_Log_Iterate(NULL, iterateCallbackCounter,
-                                         &export_count) == WH_ERROR_BADARGS);
-
-    /* Test: Iterate with NULL callback (expect WH_ERROR_BADARGS) */
-    WH_TEST_ASSERT_RETURN(wh_Log_Iterate(&logCtx, NULL, &export_count) ==
+                                         &iterate_count) == WH_ERROR_BADARGS);
+    WH_TEST_ASSERT_RETURN(wh_Log_Iterate(&logCtx, NULL, &iterate_count) ==
                           WH_ERROR_BADARGS);
 
-    /* Test: Add more entries to test early termination */
-    WH_TEST_RETURN_ON_FAIL(wh_Log_AddEntry(&logCtx, &entry));
-    WH_TEST_RETURN_ON_FAIL(wh_Log_AddEntry(&logCtx, &entry));
-    WH_TEST_ASSERT_RETURN(mockCtx.count == 3);
+    /* Initialize the log context */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Init(&logCtx, &logConfig));
+    WH_TEST_ASSERT_RETURN(mockCtx.init_called == 1);
 
-    /* Test: Clear operation */
+    /* Test: Fill buffer completely and verify all entries */
+    for (i = 0; i < MOCK_LOG_MAX_ENTRIES; i++) {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Entry %d", i);
+        WH_LOG_INFO(&logCtx, msg);
+    }
+    WH_TEST_ASSERT_RETURN(mockCtx.count == MOCK_LOG_MAX_ENTRIES);
+
+    /* Verify each entry has correct content */
+    for (i = 0; i < MOCK_LOG_MAX_ENTRIES; i++) {
+        char expected[32];
+        snprintf(expected, sizeof(expected), "Entry %d", i);
+        WH_TEST_ASSERT_RETURN(strcmp(mockCtx.entries[i].msg, expected) == 0);
+        WH_TEST_ASSERT_RETURN(mockCtx.entries[i].level == WH_LOG_LEVEL_INFO);
+        WH_TEST_ASSERT_RETURN(mockCtx.entries[i].file != NULL);
+        WH_TEST_ASSERT_RETURN(mockCtx.entries[i].function != NULL);
+        WH_TEST_ASSERT_RETURN(mockCtx.entries[i].line > 0);
+        WH_TEST_ASSERT_RETURN(mockCtx.entries[i].timestamp > 0);
+    }
+
+    /* Test: Export works */
+    iterate_count           = 0;
+    exportArgs.callback     = iterateCallbackCounter;
+    exportArgs.callback_arg = &iterate_count;
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, &exportArgs));
+    WH_TEST_ASSERT_RETURN(iterate_count == MOCK_LOG_MAX_ENTRIES);
+
+    /* Test: Iterate works and iterates over expected elements */
+    valArgs.count = 0;
+    valArgs.valid = 1;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackValidator, &valArgs));
+    WH_TEST_ASSERT_RETURN(valArgs.count == MOCK_LOG_MAX_ENTRIES);
+    WH_TEST_ASSERT_RETURN(valArgs.valid == 1);
+
+    /* Test: Clear works */
     WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
     WH_TEST_ASSERT_RETURN(mockCtx.count == 0);
 
-    /* Test: Clear with NULL context (expect WH_ERROR_BADARGS) */
-    WH_TEST_ASSERT_RETURN(wh_Log_Clear(NULL) == WH_ERROR_BADARGS);
+    /* Verify buffer is actually empty via iterate */
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 0);
 
-    /* Test: Cleanup */
+    /* Test: Can write after clear */
+    WH_LOG_INFO(&logCtx, "Entry 0");
+    WH_TEST_ASSERT_RETURN(mockCtx.count == 1);
+    WH_TEST_ASSERT_RETURN(strcmp(mockCtx.entries[0].msg, "Entry 0") == 0);
+
+    /* Cleanup */
     WH_TEST_RETURN_ON_FAIL(wh_Log_Cleanup(&logCtx));
     WH_TEST_ASSERT_RETURN(mockCtx.cleanup_called == 1);
-
-    /* Test: Cleanup with NULL context (expect WH_ERROR_BADARGS) */
-    WH_TEST_ASSERT_RETURN(wh_Log_Cleanup(NULL) == WH_ERROR_BADARGS);
 
     return 0;
 }
