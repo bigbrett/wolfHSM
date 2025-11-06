@@ -94,19 +94,31 @@ static int mockLog_AddEntry(void* context, const whLogEntry* entry)
     return 0;
 }
 
-static int mockLog_Export(void* context, whLogExportCb export_cb,
-                          void* export_arg)
-{
-    mockLogContext* ctx = (mockLogContext*)context;
-    int             i;
-    int             ret;
+/* Test-specific export structure for mock backend */
+typedef struct {
+    int (*callback)(void* arg, const whLogEntry* entry);
+    void* callback_arg;
+} mockLogExportArg;
 
-    if (ctx == NULL || export_cb == NULL) {
+static int mockLog_Export(void* context, void* export_arg)
+{
+    mockLogContext*   ctx  = (mockLogContext*)context;
+    mockLogExportArg* args = (mockLogExportArg*)export_arg;
+    int               i;
+    int               ret;
+
+    if (ctx == NULL) {
         return WH_ERROR_BADARGS;
     }
 
+    /* If no export args or callback, just succeed */
+    if (args == NULL || args->callback == NULL) {
+        return 0;
+    }
+
+    /* Iterate and call user's callback */
     for (i = 0; i < ctx->count; i++) {
-        ret = export_cb(export_arg, &ctx->entries[i]);
+        ret = args->callback(args->callback_arg, &ctx->entries[i]);
         if (ret != 0) {
             return ret;
         }
@@ -207,17 +219,16 @@ static int whTest_LogFrontend(void)
 
     /* Test: Export with callback validation */
     export_count = 0;
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Export(&logCtx, exportCallbackHelper, &export_count));
+    mockLogExportArg exportArgs = {.callback     = exportCallbackHelper,
+                                   .callback_arg = &export_count};
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, &exportArgs));
     WH_TEST_ASSERT_RETURN(export_count == 1);
 
     /* Test: Export with NULL context (expect WH_ERROR_BADARGS) */
-    WH_TEST_ASSERT_RETURN(wh_Log_Export(NULL, exportCallbackHelper, NULL) ==
-                          WH_ERROR_BADARGS);
+    WH_TEST_ASSERT_RETURN(wh_Log_Export(NULL, &exportArgs) == WH_ERROR_BADARGS);
 
-    /* Test: Export with NULL callback (expect WH_ERROR_BADARGS) */
-    WH_TEST_ASSERT_RETURN(wh_Log_Export(&logCtx, NULL, NULL) ==
-                          WH_ERROR_BADARGS);
+    /* Test: Export with NULL arg (should succeed but do nothing) */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, NULL));
 
     /* Test: Clear operation */
     WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
@@ -320,23 +331,52 @@ static int whTest_LogPosixFile(void)
     WH_LOG_SECEVENT(&logCtx, "First security event");
 
     /* Test: Export reads back all entries correctly */
+    /* For POSIX backend, export to a temp file and count lines */
+    FILE* export_fp = fopen("/tmp/wolfhsm_export_verify.txt", "w");
+    WH_TEST_ASSERT_RETURN(export_fp != NULL);
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, export_fp));
+    fclose(export_fp);
+
+    /* Count lines in exported file */
+    export_fp = fopen("/tmp/wolfhsm_export_verify.txt", "r");
+    WH_TEST_ASSERT_RETURN(export_fp != NULL);
     export_count = 0;
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Export(&logCtx, exportCallbackHelper, &export_count));
+    char line[2048];
+    while (fgets(line, sizeof(line), export_fp) != NULL) {
+        export_count++;
+    }
+    fclose(export_fp);
+    unlink("/tmp/wolfhsm_export_verify.txt");
     WH_TEST_ASSERT_RETURN(export_count == 3);
 
     /* Test: Append preserves existing entries */
     WH_LOG_INFO(&logCtx, "Second info message");
+    export_fp = fopen("/tmp/wolfhsm_export_verify.txt", "w");
+    WH_TEST_ASSERT_RETURN(export_fp != NULL);
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, export_fp));
+    fclose(export_fp);
+    export_fp    = fopen("/tmp/wolfhsm_export_verify.txt", "r");
     export_count = 0;
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Export(&logCtx, exportCallbackHelper, &export_count));
+    while (fgets(line, sizeof(line), export_fp) != NULL) {
+        export_count++;
+    }
+    fclose(export_fp);
+    unlink("/tmp/wolfhsm_export_verify.txt");
     WH_TEST_ASSERT_RETURN(export_count == 4);
 
     /* Test: Clear truncates file */
     WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
+    export_fp = fopen("/tmp/wolfhsm_export_verify.txt", "w");
+    WH_TEST_ASSERT_RETURN(export_fp != NULL);
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, export_fp));
+    fclose(export_fp);
+    export_fp    = fopen("/tmp/wolfhsm_export_verify.txt", "r");
     export_count = 0;
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Export(&logCtx, exportCallbackHelper, &export_count));
+    while (fgets(line, sizeof(line), export_fp) != NULL) {
+        export_count++;
+    }
+    fclose(export_fp);
+    unlink("/tmp/wolfhsm_export_verify.txt");
     WH_TEST_ASSERT_RETURN(export_count == 0);
 
     /* Cleanup */
@@ -440,9 +480,22 @@ static int whTest_LogPosixFileConcurrent(void)
     }
 
     /* Verify all entries were written */
+    /* For POSIX backend, export to a temp file and count lines */
+    FILE* verify_fp = fopen("/tmp/wolfhsm_export_verify_concurrent.txt", "w");
+    WH_TEST_ASSERT_RETURN(verify_fp != NULL);
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, verify_fp));
+    fclose(verify_fp);
+
+    /* Count lines in exported file */
+    verify_fp = fopen("/tmp/wolfhsm_export_verify_concurrent.txt", "r");
+    WH_TEST_ASSERT_RETURN(verify_fp != NULL);
     export_count = 0;
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Export(&logCtx, exportCallbackHelper, &export_count));
+    char line[2048];
+    while (fgets(line, sizeof(line), verify_fp) != NULL) {
+        export_count++;
+    }
+    fclose(verify_fp);
+    unlink("/tmp/wolfhsm_export_verify_concurrent.txt");
     WH_TEST_ASSERT_RETURN(export_count == NUM_THREADS * ITERATIONS_PER_THREAD);
 
     /* Cleanup */

@@ -26,7 +26,7 @@
 #include "wolfhsm/wh_settings.h"
 
 #include <stdint.h>
-#include <stddef.h> /* For NULL */
+#include <stddef.h>
 
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_log.h"
@@ -43,6 +43,7 @@ int wh_Log_Init(whLogContext* ctx, const whLogConfig* config)
     ctx->cb      = config->cb;
     ctx->context = config->context;
 
+    /* Init callback can be optional */
     if (ctx->cb->Init != NULL) {
         rc = ctx->cb->Init(ctx->context, config->config);
         if (rc != 0) {
@@ -56,15 +57,18 @@ int wh_Log_Init(whLogContext* ctx, const whLogConfig* config)
 
 int wh_Log_Cleanup(whLogContext* ctx)
 {
+    int rc = 0;
+
     if ((ctx == NULL) || (ctx->cb == NULL)) {
         return WH_ERROR_BADARGS;
     }
 
-    /* No callback? Return ABORTED */
-    if (ctx->cb->Cleanup == NULL) {
-        return WH_ERROR_ABORTED;
+    /* Cleanup callback can be optional */
+    if (ctx->cb->Cleanup != NULL) {
+        rc = ctx->cb->Cleanup(ctx->context);
     }
-    return ctx->cb->Cleanup(ctx->context);
+
+    return rc;
 }
 
 int wh_Log_AddEntry(whLogContext* ctx, const whLogEntry* entry)
@@ -73,24 +77,26 @@ int wh_Log_AddEntry(whLogContext* ctx, const whLogEntry* entry)
         return WH_ERROR_BADARGS;
     }
 
-    /* No callback? Return ABORTED */
+    /* TODO: should add entry CB be optional? */
     if (ctx->cb->AddEntry == NULL) {
         return WH_ERROR_ABORTED;
     }
+
     return ctx->cb->AddEntry(ctx->context, entry);
 }
 
-int wh_Log_Export(whLogContext* ctx, whLogExportCb export_cb, void* export_arg)
+int wh_Log_Export(whLogContext* ctx, void* export_arg)
 {
-    if ((ctx == NULL) || (ctx->cb == NULL) || (export_cb == NULL)) {
+    if ((ctx == NULL) || (ctx->cb == NULL)) {
         return WH_ERROR_BADARGS;
     }
 
-    /* No callback? Return ABORTED */
+    /* TODO: should export CB be optional? */
     if (ctx->cb->Export == NULL) {
         return WH_ERROR_ABORTED;
     }
-    return ctx->cb->Export(ctx->context, export_cb, export_arg);
+
+    return ctx->cb->Export(ctx->context, export_arg);
 }
 
 int wh_Log_Clear(whLogContext* ctx)
@@ -99,9 +105,10 @@ int wh_Log_Clear(whLogContext* ctx)
         return WH_ERROR_BADARGS;
     }
 
-    /* No callback? Return ABORTED */
+    /* TODO: Should clear CB be optional? */
     if (ctx->cb->Clear == NULL) {
         return WH_ERROR_ABORTED;
     }
+
     return ctx->cb->Clear(ctx->context);
 }

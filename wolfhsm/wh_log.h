@@ -57,20 +57,12 @@ typedef struct {
                                         * terminator */
 } whLogEntry;
 
-/**
- * Export callback - invoked for each log entry during export
- * @param arg User-supplied argument (passed through from wh_Log_Export)
- * @param entry Pointer to log entry being exported
- * @return 0 to continue iteration, non-zero to abort export
- */
-typedef int (*whLogExportCb)(void* arg, const whLogEntry* entry);
-
 /** Backend callback interface */
 typedef struct {
     int (*Init)(void* context, const void* config);
     int (*Cleanup)(void* context);
     int (*AddEntry)(void* context, const whLogEntry* entry);
-    int (*Export)(void* context, whLogExportCb export_cb, void* export_arg);
+    int (*Export)(void* context, void* export_arg);
     int (*Clear)(void* context);
     whLogGetTimeCb GetTime; /* Required: backend provides time */
 } whLogCb;
@@ -78,7 +70,7 @@ typedef struct {
 /** Frontend context */
 typedef struct {
     whLogCb* cb;      /* Callback table */
-    void*    context; /* Opaque backend context (no dynamic allocation) */
+    void*    context; /* Opaque backend context */
 } whLogContext;
 
 /** Frontend configuration */
@@ -92,7 +84,7 @@ typedef struct {
 int wh_Log_Init(whLogContext* ctx, const whLogConfig* config);
 int wh_Log_Cleanup(whLogContext* ctx);
 int wh_Log_AddEntry(whLogContext* ctx, const whLogEntry* entry);
-int wh_Log_Export(whLogContext* ctx, whLogExportCb export_cb, void* export_arg);
+int wh_Log_Export(whLogContext* ctx, void* export_arg);
 int wh_Log_Clear(whLogContext* ctx);
 
 /** Helper macros with static assert for compile-time message size validation

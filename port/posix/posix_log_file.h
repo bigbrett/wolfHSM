@@ -46,8 +46,11 @@ typedef struct posixLogFileConfig_t {
 int      posixLogFile_Init(void* context, const void* config);
 int      posixLogFile_Cleanup(void* context);
 int      posixLogFile_AddEntry(void* context, const whLogEntry* entry);
-int      posixLogFile_Export(void* context, whLogExportCb export_cb,
-                             void* export_arg);
+/* Export log entries to FILE* specified by export_arg.
+ * @param context posixLogFileContext
+ * @param export_arg FILE* to write to, or NULL to write to stdout
+ * @return 0 on success, error code on failure */
+int      posixLogFile_Export(void* context, void* export_arg);
 int      posixLogFile_Clear(void* context);
 uint64_t posixLogFile_GetTime(void* context);
 
