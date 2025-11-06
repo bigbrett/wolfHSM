@@ -128,6 +128,28 @@ static int mockLog_Export(void* context, void* export_arg)
     return 0;
 }
 
+static int mockLog_Iterate(void* context, whLogIterateCb iterate_cb,
+                           void* iterate_arg)
+{
+    mockLogContext* ctx = (mockLogContext*)context;
+    int             i;
+    int             ret;
+
+    if (ctx == NULL || iterate_cb == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    /* Iterate and call user's callback */
+    for (i = 0; i < ctx->count; i++) {
+        ret = iterate_cb(iterate_arg, &ctx->entries[i]);
+        if (ret != 0) {
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
 static int mockLog_Clear(void* context)
 {
     mockLogContext* ctx = (mockLogContext*)context;
@@ -157,12 +179,22 @@ static whLogCb mockLogCb = {
     .Cleanup  = mockLog_Cleanup,
     .AddEntry = mockLog_AddEntry,
     .Export   = mockLog_Export,
+    .Iterate  = mockLog_Iterate,
     .Clear    = mockLog_Clear,
     .GetTime  = mockLog_GetTime,
 };
 
 /* Helper for export callback */
 static int exportCallbackHelper(void* arg, const whLogEntry* entry)
+{
+    int* count = (int*)arg;
+    (void)entry;
+    (*count)++;
+    return 0;
+}
+
+/* Helper for iterate callback - counts entries */
+static int iterateCallbackCounter(void* arg, const whLogEntry* entry)
 {
     int* count = (int*)arg;
     (void)entry;
@@ -230,6 +262,25 @@ static int whTest_LogFrontend(void)
 
     /* Test: Export with NULL arg (should succeed but do nothing) */
     WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, NULL));
+
+    /* Test: Iterate with callback validation */
+    export_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &export_count));
+    WH_TEST_ASSERT_RETURN(export_count == 1);
+
+    /* Test: Iterate with NULL context (expect WH_ERROR_BADARGS) */
+    WH_TEST_ASSERT_RETURN(wh_Log_Iterate(NULL, iterateCallbackCounter,
+                                         &export_count) == WH_ERROR_BADARGS);
+
+    /* Test: Iterate with NULL callback (expect WH_ERROR_BADARGS) */
+    WH_TEST_ASSERT_RETURN(wh_Log_Iterate(&logCtx, NULL, &export_count) ==
+                          WH_ERROR_BADARGS);
+
+    /* Test: Add more entries to test early termination */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_AddEntry(&logCtx, &entry));
+    WH_TEST_RETURN_ON_FAIL(wh_Log_AddEntry(&logCtx, &entry));
+    WH_TEST_ASSERT_RETURN(mockCtx.count == 3);
 
     /* Test: Clear operation */
     WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
@@ -312,6 +363,7 @@ static int whTest_LogRingbuf(void)
     whLogRingbufContext ringbufCtx;
     whLogConfig         logConfig;
     int                 i;
+    int                 iterate_count;
     uint32_t            capacity = WOLFHSM_CFG_LOG_RINGBUF_SIZE;
 
     /* Setup ring buffer backend */
@@ -384,6 +436,35 @@ static int whTest_LogRingbuf(void)
     /* Verify some non-overwritten entries still exist */
     WH_TEST_ASSERT_RETURN(strncmp(ringbufCtx.entries[5].msg, "Entry ", 6) == 0);
 
+    /* Test: Iterate through ring buffer */
+    /* Clear and add known entries for iteration test */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
+    for (i = 0; i < 3; i++) {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Iterate test %d", i);
+        WH_LOG_INFO(&logCtx, msg);
+    }
+
+    /* Count entries via iteration */
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 3);
+
+    /* Test: Iterate when buffer is full and wrapped */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
+    for (i = 0; i < (int)capacity + 5; i++) {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Wrap %d", i);
+        WH_LOG_INFO(&logCtx, msg);
+    }
+
+    /* Should iterate exactly capacity entries */
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == (int)capacity);
+
     /* Cleanup */
     WH_TEST_RETURN_ON_FAIL(wh_Log_Cleanup(&logCtx));
     WH_TEST_ASSERT_RETURN(ringbufCtx.initialized == 0);
@@ -403,6 +484,7 @@ static int whTest_LogPosixFile(void)
     whLogCb             posixCb       = POSIX_LOG_FILE_CB;
     const char*         test_log_file = "/tmp/wolfhsm_test_log.txt";
     int                 export_count;
+    int                 iterate_count;
 
     /* Remove any existing test log file */
     unlink(test_log_file);
@@ -473,6 +555,18 @@ static int whTest_LogPosixFile(void)
     fclose(export_fp);
     unlink("/tmp/wolfhsm_export_verify.txt");
     WH_TEST_ASSERT_RETURN(export_count == 0);
+
+    /* Test: Iterate functionality with parsing */
+    /* Add entries for iterate test */
+    WH_LOG_INFO(&logCtx, "Iterate message 1");
+    WH_LOG_ERROR(&logCtx, "Iterate message 2");
+    WH_LOG_SECEVENT(&logCtx, "Iterate message 3");
+
+    /* Count entries via iteration */
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 3);
 
     /* Cleanup */
     WH_TEST_RETURN_ON_FAIL(wh_Log_Cleanup(&logCtx));

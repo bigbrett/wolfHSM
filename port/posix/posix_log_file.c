@@ -52,6 +52,21 @@ static const char* posixLogFile_LevelToString(whLogLevel level)
     }
 }
 
+/* Helper function to convert string to log level */
+static whLogLevel posixLogFile_StringToLevel(const char* str)
+{
+    if (strcmp(str, "INFO") == 0) {
+        return WH_LOG_LEVEL_INFO;
+    }
+    else if (strcmp(str, "ERROR") == 0) {
+        return WH_LOG_LEVEL_ERROR;
+    }
+    else if (strcmp(str, "SECEVENT") == 0) {
+        return WH_LOG_LEVEL_SECEVENT;
+    }
+    return WH_LOG_LEVEL_INFO; /* Default */
+}
+
 int posixLogFile_Init(void* c, const void* cf)
 {
     posixLogFileContext*      context = c;
@@ -208,6 +223,93 @@ int posixLogFile_Export(void* c, void* export_arg)
     }
 
     fclose(in_fp); /* Also closes fd_dup */
+
+    /* Unlock mutex */
+    pthread_mutex_unlock(&context->mutex);
+
+    return ret;
+}
+
+int posixLogFile_Iterate(void* c, whLogIterateCb iterate_cb, void* iterate_arg)
+{
+    posixLogFileContext* context = c;
+    FILE*                fp      = NULL;
+    char                 line[2048];
+    int                  ret = 0;
+
+    if ((context == NULL) || (iterate_cb == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    if (!context->initialized || context->fd < 0) {
+        return WH_ERROR_ABORTED;
+    }
+
+    /* Lock mutex */
+    pthread_mutex_lock(&context->mutex);
+
+    /* Flush any pending writes */
+    if (fsync(context->fd) != 0) {
+        pthread_mutex_unlock(&context->mutex);
+        return WH_ERROR_ABORTED;
+    }
+
+    /* Open file for reading (using fdopen with dup'd fd) */
+    int fd_dup = dup(context->fd);
+    if (fd_dup < 0) {
+        pthread_mutex_unlock(&context->mutex);
+        return WH_ERROR_ABORTED;
+    }
+
+    /* Seek to beginning */
+    lseek(fd_dup, 0, SEEK_SET);
+
+    fp = fdopen(fd_dup, "r");
+    if (fp == NULL) {
+        close(fd_dup);
+        pthread_mutex_unlock(&context->mutex);
+        return WH_ERROR_ABORTED;
+    }
+
+    /* Read and parse each line */
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        whLogEntry         entry;
+        char               level_str[32];
+        char               file_buf[256];
+        char               func_buf[256];
+        char               msg_buf[WOLFHSM_CFG_LOG_MSG_MAX];
+        unsigned long long timestamp;
+        unsigned int       line_num;
+
+        memset(&entry, 0, sizeof(entry));
+
+        /* Parse: TIMESTAMP|LEVEL|FILE:LINE|FUNCTION|MESSAGE\n */
+        int parsed =
+            sscanf(line, "%llu|%31[^|]|%255[^:]:%u|%255[^|]|%[^\n]", &timestamp,
+                   level_str, file_buf, &line_num, func_buf, msg_buf);
+
+        if (parsed == 6) {
+            entry.timestamp = timestamp;
+            entry.level     = posixLogFile_StringToLevel(level_str);
+            entry.file      = file_buf;
+            entry.function  = func_buf;
+            entry.line      = line_num;
+            entry.msg_len   = strlen(msg_buf);
+            if (entry.msg_len >= WOLFHSM_CFG_LOG_MSG_MAX) {
+                entry.msg_len = WOLFHSM_CFG_LOG_MSG_MAX - 1;
+            }
+            memcpy(entry.msg, msg_buf, entry.msg_len);
+            entry.msg[entry.msg_len] = '\0';
+
+            /* Invoke callback */
+            ret = iterate_cb(iterate_arg, &entry);
+            if (ret != 0) {
+                break;
+            }
+        }
+    }
+
+    fclose(fp); /* Also closes fd_dup */
 
     /* Unlock mutex */
     pthread_mutex_unlock(&context->mutex);

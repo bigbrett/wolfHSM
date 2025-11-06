@@ -57,12 +57,17 @@ typedef struct {
                                         * terminator */
 } whLogEntry;
 
+/** User-provided callback for iterating log entries.
+ * Return 0 to continue iteration, non-zero to stop early. */
+typedef int (*whLogIterateCb)(void* arg, const whLogEntry* entry);
+
 /** Backend callback interface */
 typedef struct {
     int (*Init)(void* context, const void* config);
     int (*Cleanup)(void* context);
     int (*AddEntry)(void* context, const whLogEntry* entry);
     int (*Export)(void* context, void* export_arg);
+    int (*Iterate)(void* context, whLogIterateCb iterate_cb, void* iterate_arg);
     int (*Clear)(void* context);
     whLogGetTimeCb GetTime; /* Required: backend provides time */
 } whLogCb;
@@ -85,6 +90,8 @@ int wh_Log_Init(whLogContext* ctx, const whLogConfig* config);
 int wh_Log_Cleanup(whLogContext* ctx);
 int wh_Log_AddEntry(whLogContext* ctx, const whLogEntry* entry);
 int wh_Log_Export(whLogContext* ctx, void* export_arg);
+int wh_Log_Iterate(whLogContext* ctx, whLogIterateCb iterate_cb,
+                   void* iterate_arg);
 int wh_Log_Clear(whLogContext* ctx);
 
 /** Helper macros with static assert for compile-time message size validation

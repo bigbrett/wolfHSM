@@ -44,6 +44,8 @@ int whLogRingbuf_Init(void* context, const void* config);
 int whLogRingbuf_Cleanup(void* context);
 int whLogRingbuf_AddEntry(void* context, const whLogEntry* entry);
 int whLogRingbuf_Export(void* context, void* export_arg);
+int whLogRingbuf_Iterate(void* context, whLogIterateCb iterate_cb,
+                         void* iterate_arg);
 int whLogRingbuf_Clear(void* context);
 
 /* Convenience macro for callback table initialization.
@@ -59,6 +61,7 @@ int whLogRingbuf_Clear(void* context);
         .Cleanup = whLogRingbuf_Cleanup,                                      \
         .AddEntry = whLogRingbuf_AddEntry,                                    \
         .Export = whLogRingbuf_Export,                                        \
+        .Iterate = whLogRingbuf_Iterate,                                      \
         .Clear = whLogRingbuf_Clear,                                          \
         .GetTime = NULL,                                                      \
     }

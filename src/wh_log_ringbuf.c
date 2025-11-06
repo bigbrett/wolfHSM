@@ -101,6 +101,53 @@ int whLogRingbuf_Export(void* c, void* export_arg)
     return WH_ERROR_OK;
 }
 
+int whLogRingbuf_Iterate(void* c, whLogIterateCb iterate_cb, void* iterate_arg)
+{
+    whLogRingbufContext* context = (whLogRingbufContext*)c;
+    uint32_t             capacity;
+    uint32_t             start_idx;
+    uint32_t             i;
+    int                  ret = 0;
+
+    if ((context == NULL) || (iterate_cb == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    if (!context->initialized) {
+        return WH_ERROR_ABORTED;
+    }
+
+    capacity = WOLFHSM_CFG_LOG_RINGBUF_SIZE;
+
+    /* If buffer is empty, nothing to iterate */
+    if (context->count == 0) {
+        return WH_ERROR_OK;
+    }
+
+    /* Determine starting index for iteration:
+     * - If not full: start at 0 (oldest entry)
+     * - If full: start at head (oldest entry, about to be overwritten)
+     */
+    if (context->count < capacity) {
+        start_idx = 0;
+    }
+    else {
+        start_idx = context->head;
+    }
+
+    /* Iterate through entries in buffer order */
+    for (i = 0; i < context->count; i++) {
+        uint32_t idx = (start_idx + i) % capacity;
+        ret          = iterate_cb(iterate_arg, &context->entries[idx]);
+        if (ret != 0) {
+            /* User callback requested early termination */
+            break;
+        }
+    }
+
+    return ret;
+}
+
 int whLogRingbuf_Clear(void* c)
 {
     whLogRingbufContext* context = (whLogRingbufContext*)c;

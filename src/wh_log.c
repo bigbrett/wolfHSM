@@ -99,6 +99,20 @@ int wh_Log_Export(whLogContext* ctx, void* export_arg)
     return ctx->cb->Export(ctx->context, export_arg);
 }
 
+int wh_Log_Iterate(whLogContext* ctx, whLogIterateCb iterate_cb,
+                   void* iterate_arg)
+{
+    if ((ctx == NULL) || (ctx->cb == NULL) || (iterate_cb == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    if (ctx->cb->Iterate == NULL) {
+        return WH_ERROR_ABORTED;
+    }
+
+    return ctx->cb->Iterate(ctx->context, iterate_cb, iterate_arg);
+}
+
 int wh_Log_Clear(whLogContext* ctx)
 {
     if ((ctx == NULL) || (ctx->cb == NULL)) {

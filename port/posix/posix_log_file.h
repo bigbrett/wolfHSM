@@ -51,6 +51,13 @@ int      posixLogFile_AddEntry(void* context, const whLogEntry* entry);
  * @param export_arg FILE* to write to, or NULL to write to stdout
  * @return 0 on success, error code on failure */
 int      posixLogFile_Export(void* context, void* export_arg);
+/* Iterate log entries by parsing file and invoking callback for each entry.
+ * @param context posixLogFileContext
+ * @param iterate_cb User callback invoked for each parsed entry
+ * @param iterate_arg User argument passed to callback
+ * @return 0 on success, non-zero if callback stops iteration early */
+int      posixLogFile_Iterate(void* context, whLogIterateCb iterate_cb,
+                              void* iterate_arg);
 int      posixLogFile_Clear(void* context);
 uint64_t posixLogFile_GetTime(void* context);
 
@@ -62,6 +69,7 @@ uint64_t posixLogFile_GetTime(void* context);
         .Cleanup = posixLogFile_Cleanup,                                      \
         .AddEntry = posixLogFile_AddEntry,                                    \
         .Export = posixLogFile_Export,                                        \
+        .Iterate = posixLogFile_Iterate,                                      \
         .Clear = posixLogFile_Clear,                                          \
         .GetTime = posixLogFile_GetTime,                                      \
     }
