@@ -30,6 +30,7 @@
 #include "wh_test_common.h"
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_log.h"
+#include "wolfhsm/wh_log_ringbuf.h"
 
 #if defined(WOLFHSM_CFG_TEST_POSIX)
 #include <pthread.h>
@@ -296,6 +297,100 @@ static int whTest_LogMacros(void)
     return 0;
 }
 
+/* Simple GetTime function for ring buffer tests */
+static uint64_t ringbufTestGetTime(void* context)
+{
+    static uint64_t counter = 5000000000000ULL;
+    (void)context; /* Unused */
+    return counter++;
+}
+
+/* Ring buffer backend tests */
+static int whTest_LogRingbuf(void)
+{
+    whLogContext        logCtx;
+    whLogRingbufContext ringbufCtx;
+    whLogConfig         logConfig;
+    int                 i;
+    uint32_t            capacity = WOLFHSM_CFG_LOG_RINGBUF_SIZE;
+
+    /* Setup ring buffer backend */
+    memset(&logCtx, 0, sizeof(logCtx));
+    memset(&ringbufCtx, 0, sizeof(ringbufCtx));
+
+    /* Initialize callback table */
+    whLogCb ringbufCb = WH_LOG_RINGBUF_CB;
+    ringbufCb.GetTime = ringbufTestGetTime;
+
+    logConfig.cb      = &ringbufCb;
+    logConfig.context = &ringbufCtx;
+    logConfig.config  = NULL;
+
+    /* Test: Init with valid config */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Init(&logCtx, &logConfig));
+    WH_TEST_ASSERT_RETURN(ringbufCtx.initialized == 1);
+    WH_TEST_ASSERT_RETURN(ringbufCtx.head == 0);
+    WH_TEST_ASSERT_RETURN(ringbufCtx.count == 0);
+
+    /* Test: Add a few entries */
+    for (i = 0; i < 5; i++) {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Message %d", i);
+        WH_LOG_INFO(&logCtx, msg);
+    }
+
+    WH_TEST_ASSERT_RETURN(ringbufCtx.count == 5);
+    WH_TEST_ASSERT_RETURN(ringbufCtx.head == 5);
+
+    /* Verify the entries are correct */
+    WH_TEST_ASSERT_RETURN(ringbufCtx.count == 5);
+    WH_TEST_ASSERT_RETURN(ringbufCtx.head == 5);
+    for (i = 0; i < 5; i++) {
+        char expected[32];
+        snprintf(expected, sizeof(expected), "Message %d", i);
+        WH_TEST_ASSERT_RETURN(strcmp(ringbufCtx.entries[i].msg, expected) == 0);
+    }
+
+    /* Test: Clear buffer */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
+    WH_TEST_ASSERT_RETURN(ringbufCtx.count == 0);
+    WH_TEST_ASSERT_RETURN(ringbufCtx.head == 0);
+
+    /* Test: Fill buffer to capacity */
+    for (i = 0; i < (int)capacity; i++) {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Entry %d", i);
+        WH_LOG_INFO(&logCtx, msg);
+    }
+
+    WH_TEST_ASSERT_RETURN(ringbufCtx.count == capacity);
+    WH_TEST_ASSERT_RETURN(ringbufCtx.head == 0); /* Wrapped around */
+
+    /* Test: Wraparound - add more entries to overwrite oldest */
+    for (i = 0; i < 5; i++) {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Wrapped %d", i);
+        WH_LOG_INFO(&logCtx, msg);
+    }
+
+    /* Count should still be at capacity */
+    WH_TEST_ASSERT_RETURN(ringbufCtx.count == capacity);
+    WH_TEST_ASSERT_RETURN(ringbufCtx.head == 5); /* 5 entries past wrap */
+
+    /* Verify oldest entries were overwritten */
+    WH_TEST_ASSERT_RETURN(strcmp(ringbufCtx.entries[0].msg, "Wrapped 0") == 0);
+    WH_TEST_ASSERT_RETURN(strcmp(ringbufCtx.entries[4].msg, "Wrapped 4") == 0);
+
+    /* Verify some non-overwritten entries still exist */
+    WH_TEST_ASSERT_RETURN(strncmp(ringbufCtx.entries[5].msg, "Entry ", 6) == 0);
+
+    /* Cleanup */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Cleanup(&logCtx));
+    WH_TEST_ASSERT_RETURN(ringbufCtx.initialized == 0);
+
+    return 0;
+}
+
 #if defined(WOLFHSM_CFG_TEST_POSIX)
 
 /* POSIX file backend tests */
@@ -519,6 +614,10 @@ int whTest_Log(void)
     printf("Testing log macros...\n");
     WH_TEST_RETURN_ON_FAIL(whTest_LogMacros());
     printf("Log macro tests passed\n");
+
+    printf("Testing ring buffer backend...\n");
+    WH_TEST_RETURN_ON_FAIL(whTest_LogRingbuf());
+    printf("Ring buffer backend tests passed\n");
 
 #if defined(WOLFHSM_CFG_TEST_POSIX)
     printf("Testing POSIX file backend...\n");
