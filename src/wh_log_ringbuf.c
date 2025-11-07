@@ -33,7 +33,7 @@ int whLogRingbuf_Init(void* c, const void* cf)
 {
     whLogRingbufContext*      context = (whLogRingbufContext*)c;
     const whLogRingbufConfig* config  = (const whLogRingbufConfig*)cf;
-    uint32_t                  capacity;
+    size_t                    capacity;
 
     if (context == NULL || config == NULL || config->buffer == NULL ||
         config->buffer_size < sizeof(whLogEntry)) {
@@ -73,7 +73,7 @@ int whLogRingbuf_Cleanup(void* c)
 int whLogRingbuf_AddEntry(void* c, const whLogEntry* entry)
 {
     whLogRingbufContext* context = (whLogRingbufContext*)c;
-    uint32_t             capacity;
+    size_t               capacity;
 
     if ((context == NULL) || (entry == NULL)) {
         return WH_ERROR_BADARGS;
@@ -109,9 +109,9 @@ int whLogRingbuf_Export(void* c, void* export_arg)
 int whLogRingbuf_Iterate(void* c, whLogIterateCb iterate_cb, void* iterate_arg)
 {
     whLogRingbufContext* context = (whLogRingbufContext*)c;
-    uint32_t             capacity;
-    uint32_t             start_idx;
-    uint32_t             i;
+    size_t               capacity;
+    size_t               start_idx;
+    size_t               i;
     int                  ret = 0;
 
     if ((context == NULL) || (iterate_cb == NULL)) {
@@ -142,8 +142,8 @@ int whLogRingbuf_Iterate(void* c, whLogIterateCb iterate_cb, void* iterate_arg)
 
     /* Iterate through entries in buffer order */
     for (i = 0; i < context->count; i++) {
-        uint32_t idx = (start_idx + i) % capacity;
-        ret          = iterate_cb(iterate_arg, &context->entries[idx]);
+        size_t idx = (start_idx + i) % capacity;
+        ret        = iterate_cb(iterate_arg, &context->entries[idx]);
         if (ret != 0) {
             /* User callback requested early termination */
             break;
