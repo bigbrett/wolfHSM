@@ -40,16 +40,19 @@ int wh_Log_Init(whLogContext* ctx, const whLogConfig* config)
         return WH_ERROR_BADARGS;
     }
 
+    /* Backend doesn't support this operation */
+    if (config->cb->Init == NULL) {
+        return WH_ERROR_NOTIMPL;
+    }
+
     ctx->cb      = config->cb;
     ctx->context = config->context;
 
-    /* Init callback can be optional */
-    if (ctx->cb->Init != NULL) {
-        rc = ctx->cb->Init(ctx->context, config->config);
-        if (rc != 0) {
-            ctx->cb      = NULL;
-            ctx->context = NULL;
-        }
+    rc = ctx->cb->Init(ctx->context, config->config);
+    if (rc != WH_ERROR_OK) {
+        /* Init failed, deinitialized context */
+        ctx->cb      = NULL;
+        ctx->context = NULL;
     }
 
     return rc;
@@ -57,18 +60,16 @@ int wh_Log_Init(whLogContext* ctx, const whLogConfig* config)
 
 int wh_Log_Cleanup(whLogContext* ctx)
 {
-    int rc = 0;
-
     if ((ctx == NULL) || (ctx->cb == NULL)) {
         return WH_ERROR_BADARGS;
     }
 
-    /* Cleanup callback can be optional */
-    if (ctx->cb->Cleanup != NULL) {
-        rc = ctx->cb->Cleanup(ctx->context);
+    /* Backend doesn't support this operation */
+    if (ctx->cb->Cleanup == NULL) {
+        return WH_ERROR_NOTIMPL;
     }
 
-    return rc;
+    return ctx->cb->Cleanup(ctx->context);
 }
 
 int wh_Log_AddEntry(whLogContext* ctx, const whLogEntry* entry)
@@ -77,9 +78,9 @@ int wh_Log_AddEntry(whLogContext* ctx, const whLogEntry* entry)
         return WH_ERROR_BADARGS;
     }
 
-    /* TODO: should add entry CB be optional? */
+    /* Backend doesn't support this operation */
     if (ctx->cb->AddEntry == NULL) {
-        return WH_ERROR_ABORTED;
+        return WH_ERROR_NOTIMPL;
     }
 
     return ctx->cb->AddEntry(ctx->context, entry);
@@ -91,9 +92,9 @@ int wh_Log_Export(whLogContext* ctx, void* export_arg)
         return WH_ERROR_BADARGS;
     }
 
-    /* TODO: should export CB be optional? */
+    /* Backend doesn't support this operation */
     if (ctx->cb->Export == NULL) {
-        return WH_ERROR_ABORTED;
+        return WH_ERROR_NOTIMPL;
     }
 
     return ctx->cb->Export(ctx->context, export_arg);
@@ -106,8 +107,9 @@ int wh_Log_Iterate(whLogContext* ctx, whLogIterateCb iterate_cb,
         return WH_ERROR_BADARGS;
     }
 
+    /* Backend doesn't support this operation */
     if (ctx->cb->Iterate == NULL) {
-        return WH_ERROR_ABORTED;
+        return WH_ERROR_NOTIMPL;
     }
 
     return ctx->cb->Iterate(ctx->context, iterate_cb, iterate_arg);
@@ -119,9 +121,9 @@ int wh_Log_Clear(whLogContext* ctx)
         return WH_ERROR_BADARGS;
     }
 
-    /* TODO: Should clear CB be optional? */
+    /* Backend doesn't support this operation */
     if (ctx->cb->Clear == NULL) {
-        return WH_ERROR_ABORTED;
+        return WH_ERROR_NOTIMPL;
     }
 
     return ctx->cb->Clear(ctx->context);
