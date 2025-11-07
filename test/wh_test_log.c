@@ -370,14 +370,23 @@ static int whTest_LogRingbuf(void)
 {
     whLogContext        logCtx;
     whLogRingbufContext ringbufCtx;
+    whLogRingbufConfig  ringbufConfig;
     whLogConfig         logConfig;
     int                 i;
     int                 iterate_count;
-    uint32_t            capacity = WOLFHSM_CFG_LOG_RINGBUF_SIZE;
+    uint32_t            capacity;
+    /* Backend storage for ring buffer */
+    const size_t numLogEntries = 32;
+    whLogEntry   ringbuf_buffer[numLogEntries];
 
     /* Setup ring buffer backend */
     memset(&logCtx, 0, sizeof(logCtx));
     memset(&ringbufCtx, 0, sizeof(ringbufCtx));
+    memset(&ringbuf_buffer, 0, sizeof(ringbuf_buffer));
+
+    /* Configure ring buffer with user-supplied buffer */
+    ringbufConfig.buffer      = ringbuf_buffer;
+    ringbufConfig.buffer_size = sizeof(ringbuf_buffer);
 
     /* Initialize callback table */
     whLogCb ringbufCb = WH_LOG_RINGBUF_CB;
@@ -385,13 +394,17 @@ static int whTest_LogRingbuf(void)
 
     logConfig.cb      = &ringbufCb;
     logConfig.context = &ringbufCtx;
-    logConfig.config  = NULL;
+    logConfig.config  = &ringbufConfig;
 
     /* Test: Init with valid config */
     WH_TEST_RETURN_ON_FAIL(wh_Log_Init(&logCtx, &logConfig));
     WH_TEST_ASSERT_RETURN(ringbufCtx.initialized == 1);
     WH_TEST_ASSERT_RETURN(ringbufCtx.head == 0);
     WH_TEST_ASSERT_RETURN(ringbufCtx.count == 0);
+
+    /* Get capacity from initialized context */
+    capacity = ringbufCtx.capacity;
+    WH_TEST_ASSERT_RETURN(capacity == numLogEntries);
 
     /* Test: Add a few entries */
     for (i = 0; i < 5; i++) {

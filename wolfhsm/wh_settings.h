@@ -228,12 +228,6 @@
 #define WOLFHSM_CFG_LOG_MSG_MAX 256
 #endif
 
-/*  WOLFHSM_CFG_LOG_RINGBUF_SIZE - Number of log entries in ring buffer backend
- *      Default: 32 */
-#ifndef WOLFHSM_CFG_LOG_RINGBUF_SIZE
-#define WOLFHSM_CFG_LOG_RINGBUF_SIZE 32
-#endif
-
 /* Maximum size of a certificate */
 #ifndef WOLFHSM_CFG_MAX_CERT_SIZE
 #ifndef WOLFHSM_CFG_DMA

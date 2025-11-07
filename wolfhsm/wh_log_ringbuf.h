@@ -31,12 +31,19 @@
 
 #include <stdint.h>
 
+/* Ring buffer configuration structure */
+typedef struct whLogRingbufConfig_t {
+    void*    buffer;      /* User-supplied buffer */
+    uint32_t buffer_size; /* Size of buffer in bytes */
+} whLogRingbufConfig;
+
 /* Ring buffer context structure */
 typedef struct whLogRingbufContext_t {
-    whLogEntry entries[WOLFHSM_CFG_LOG_RINGBUF_SIZE]; /* Fixed-size buffer */
-    uint32_t   head;        /* Next write position (0 to capacity-1) */
-    uint32_t   count;       /* Current entries (0 to capacity) */
-    int        initialized; /* Initialization flag */
+    whLogEntry* entries;     /* Pointer to user-supplied buffer */
+    uint32_t    capacity;    /* Number of entries buffer can hold */
+    uint32_t    head;        /* Next write position (0 to capacity-1) */
+    uint32_t    count;       /* Current entries (0 to capacity) */
+    int         initialized; /* Initialization flag */
 } whLogRingbufContext;
 
 /* Callback functions */
