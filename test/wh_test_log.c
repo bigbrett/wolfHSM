@@ -40,7 +40,12 @@
 
 #include "wh_test_log.h"
 
-/* Mock backend for frontend API testing */
+#define ITERATE_STOP_MAGIC 99
+#define ITERATE_STOP_COUNT 3
+
+
+/* Mock log backend definitions */
+
 #define MOCK_LOG_MAX_ENTRIES 16
 
 typedef struct {
@@ -184,13 +189,27 @@ static whLogCb mockLogCb = {
     .GetTime  = mockLog_GetTime,
 };
 
+
 /* Helper for iterate callback - counts entries */
-static int iterateCallbackCounter(void* arg, const whLogEntry* entry)
+static int iterateCallbackCount(void* arg, const whLogEntry* entry)
 {
     int* count = (int*)arg;
     (void)entry;
     (*count)++;
     return 0;
+}
+
+/* Helper callback - stops iteration after 2 entries */
+static int iterateCallbackStopAt2(void* arg, const whLogEntry* entry)
+{
+    int* count = (int*)arg;
+    (void)entry;
+    (*count)++;
+    if (*count >= ITERATE_STOP_COUNT) {
+        /* Custom return code to test propagation */
+        return ITERATE_STOP_MAGIC;
+    }
+    return WH_ERROR_OK;
 }
 
 /* Helper for iterate callback - validates specific entries */
@@ -218,7 +237,7 @@ static int iterateCallbackValidator(void* arg, const whLogEntry* entry)
     return 0;
 }
 
-/* Frontend API tests */
+/* Frontend API test using mock backend */
 static int whTest_LogFrontend(void)
 {
     whLogContext          logCtx;
@@ -228,6 +247,7 @@ static int whTest_LogFrontend(void)
     int                   i;
     mockLogExportArg      exportArgs;
     iterateValidationArgs valArgs;
+    whLogEntry            entry = {0};
 
     /* Setup */
     memset(&logCtx, 0, sizeof(logCtx));
@@ -239,10 +259,12 @@ static int whTest_LogFrontend(void)
     /* Test: NULL input rejections */
     WH_TEST_ASSERT_RETURN(wh_Log_Init(NULL, &logConfig) == WH_ERROR_BADARGS);
     WH_TEST_ASSERT_RETURN(wh_Log_Init(&logCtx, NULL) == WH_ERROR_BADARGS);
+    WH_TEST_ASSERT_RETURN(wh_Log_AddEntry(NULL, &entry) == WH_ERROR_BADARGS);
+    WH_TEST_ASSERT_RETURN(wh_Log_AddEntry(&logCtx, NULL) == WH_ERROR_BADARGS);
     WH_TEST_ASSERT_RETURN(wh_Log_Cleanup(NULL) == WH_ERROR_BADARGS);
     WH_TEST_ASSERT_RETURN(wh_Log_Clear(NULL) == WH_ERROR_BADARGS);
     WH_TEST_ASSERT_RETURN(wh_Log_Export(NULL, &exportArgs) == WH_ERROR_BADARGS);
-    WH_TEST_ASSERT_RETURN(wh_Log_Iterate(NULL, iterateCallbackCounter,
+    WH_TEST_ASSERT_RETURN(wh_Log_Iterate(NULL, iterateCallbackCount,
                                          &iterate_count) == WH_ERROR_BADARGS);
     WH_TEST_ASSERT_RETURN(wh_Log_Iterate(&logCtx, NULL, &iterate_count) ==
                           WH_ERROR_BADARGS);
@@ -273,7 +295,7 @@ static int whTest_LogFrontend(void)
 
     /* Test: Export works */
     iterate_count           = 0;
-    exportArgs.callback     = iterateCallbackCounter;
+    exportArgs.callback     = iterateCallbackCount;
     exportArgs.callback_arg = &iterate_count;
     WH_TEST_RETURN_ON_FAIL(wh_Log_Export(&logCtx, &exportArgs));
     WH_TEST_ASSERT_RETURN(iterate_count == MOCK_LOG_MAX_ENTRIES);
@@ -293,7 +315,7 @@ static int whTest_LogFrontend(void)
     /* Verify buffer is actually empty via iterate */
     iterate_count = 0;
     WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &iterate_count));
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
     WH_TEST_ASSERT_RETURN(iterate_count == 0);
 
     /* Test: Can write after clear */
@@ -308,7 +330,7 @@ static int whTest_LogFrontend(void)
     return 0;
 }
 
-/* Macro tests */
+/* Test helper macros using mock backend */
 static int whTest_LogMacros(void)
 {
     whLogContext   logCtx;
@@ -356,6 +378,303 @@ static int whTest_LogMacros(void)
 
     return 0;
 }
+
+
+/*
+ * Generic backend test - smoke test for basic operations
+ */
+static int whTest_LogBackend_BasicOperations(whTestLogBackendTestConfig* cfg)
+{
+    whLogContext logCtx;
+    whLogConfig  logConfig;
+    void*        backend_context;
+    int          iterate_count;
+
+    /* Use driver-provided backend context */
+    backend_context = cfg->backend_context;
+    WH_TEST_ASSERT_RETURN(backend_context != NULL);
+    memset(backend_context, 0, cfg->config_size);
+
+    /* Setup log configuration */
+    memset(&logCtx, 0, sizeof(logCtx));
+    logConfig.cb      = cfg->cb;
+    logConfig.context = backend_context;
+    logConfig.config  = cfg->config;
+
+    /* Test: Init with valid config */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Init(&logCtx, &logConfig));
+
+    /* Test: Add single entry */
+    WH_LOG_INFO(&logCtx, "Single entry");
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 1);
+
+    /* Test: Add multiple entries (3) */
+    WH_LOG_INFO(&logCtx, "Entry 0");
+    WH_LOG_INFO(&logCtx, "Entry 1");
+    WH_LOG_INFO(&logCtx, "Entry 2");
+
+    /* Verify count via Iterate */
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 4); /* 1 + 3 */
+
+    /* Test: Clear and verify empty */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 0);
+
+    /* Test: Cleanup */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Cleanup(&logCtx));
+
+    return WH_ERROR_OK;
+}
+
+/*
+ * Generic backend test - Capacity Handling
+ * Tests behavior when buffer reaches capacity
+ */
+static int whTest_LogBackend_CapacityHandling(whTestLogBackendTestConfig* cfg)
+{
+    whLogContext logCtx;
+    whLogConfig  logConfig;
+    void*        backend_context;
+    int          iterate_count;
+    int          i;
+
+    /* Skip if capacity is unlimited */
+    if (cfg->expected_capacity < 0) {
+        printf("    Skipped (unlimited capacity)\n");
+        return WH_ERROR_OK;
+    }
+
+    /* Use driver-provided backend context */
+    backend_context = cfg->backend_context;
+    WH_TEST_ASSERT_RETURN(backend_context != NULL);
+    memset(backend_context, 0, cfg->config_size);
+
+    /* Setup and init */
+    memset(&logCtx, 0, sizeof(logCtx));
+    logConfig.cb      = cfg->cb;
+    logConfig.context = backend_context;
+    logConfig.config  = cfg->config;
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Init(&logCtx, &logConfig));
+
+    /* Test: Fill to capacity */
+    for (i = 0; i < cfg->expected_capacity; i++) {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Entry %d", i);
+        WH_LOG_INFO(&logCtx, msg);
+    }
+
+    /* Verify count == capacity */
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == cfg->expected_capacity);
+
+    /* Test: Add 10 more entries (overflow) */
+    for (i = 0; i < 10; i++) {
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Overflow %d", i);
+        WH_LOG_INFO(&logCtx, msg);
+    }
+
+    /* Verify count still == capacity (overflow behavior) */
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == cfg->expected_capacity);
+
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Cleanup(&logCtx));
+    return WH_ERROR_OK;
+}
+
+/*
+ * Generic backend test - Message Handling
+ * Tests various message sizes and special characters
+ */
+static int whTest_LogBackend_MessageHandling(whTestLogBackendTestConfig* cfg)
+{
+    whLogContext logCtx;
+    whLogConfig  logConfig;
+    void*        backend_context;
+    int          iterate_count;
+    whLogEntry   entry;
+    char         maxMsg[WOLFHSM_CFG_LOG_MSG_MAX];
+
+    /* Use driver-provided backend context */
+    backend_context = cfg->backend_context;
+    WH_TEST_ASSERT_RETURN(backend_context != NULL);
+    memset(backend_context, 0, cfg->config_size);
+
+    /* Setup and init */
+    memset(&logCtx, 0, sizeof(logCtx));
+    logConfig.cb      = cfg->cb;
+    logConfig.context = backend_context;
+    logConfig.config  = cfg->config;
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Init(&logCtx, &logConfig));
+
+    /* Test: Empty message */
+    WH_LOG_INFO(&logCtx, "");
+
+    /* Test: Short message */
+    WH_LOG_INFO(&logCtx, "Hi");
+
+    /* Test: Max size message (255 chars + null) */
+    memset(maxMsg, 'A', sizeof(maxMsg) - 1);
+    maxMsg[sizeof(maxMsg) - 1] = '\0';
+    memset(&entry, 0, sizeof(entry));
+    entry.timestamp = cfg->cb->GetTime ? cfg->cb->GetTime(backend_context) : 0;
+    entry.level     = WH_LOG_LEVEL_INFO;
+    entry.file      = __FILE__;
+    entry.function  = __func__;
+    entry.line      = __LINE__;
+    entry.msg_len   = strlen(maxMsg);
+    memcpy(entry.msg, maxMsg, entry.msg_len);
+    entry.msg[entry.msg_len] = '\0';
+    WH_TEST_RETURN_ON_FAIL(wh_Log_AddEntry(&logCtx, &entry));
+
+
+    /* Verify all entries were added */
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 3);
+
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Cleanup(&logCtx));
+    return WH_ERROR_OK;
+}
+
+/*
+ * Generic backend test - Iteration
+ * Tests iteration behavior in various scenarios
+ */
+static int whTest_LogBackend_Iteration(whTestLogBackendTestConfig* cfg)
+{
+    whLogContext logCtx;
+    whLogConfig  logConfig;
+    void*        backend_context;
+    int          iterate_count;
+    int          ret;
+
+    /* Use driver-provided backend context */
+    backend_context = cfg->backend_context;
+    WH_TEST_ASSERT_RETURN(backend_context != NULL);
+    memset(backend_context, 0, cfg->config_size);
+
+    /* Setup and init */
+    memset(&logCtx, 0, sizeof(logCtx));
+    logConfig.cb      = cfg->cb;
+    logConfig.context = backend_context;
+    logConfig.config  = cfg->config;
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Init(&logCtx, &logConfig));
+
+    /* Clear first to ensure clean state for persistent backends */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
+
+    /* Test: Iterate empty log */
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 0);
+
+    /* Test: Iterate single entry */
+    WH_LOG_INFO(&logCtx, "Single");
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 1);
+
+    /* Test: Iterate 3 entries */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
+    WH_LOG_INFO(&logCtx, "Entry 1");
+    WH_LOG_INFO(&logCtx, "Entry 2");
+    WH_LOG_INFO(&logCtx, "Entry 3");
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 3);
+
+    /* Test: Early termination (callback returns magic number after
+     * fixed number of entries) */
+    iterate_count = 0;
+    ret = wh_Log_Iterate(&logCtx, iterateCallbackStopAt2, &iterate_count);
+    WH_TEST_ASSERT_RETURN(ret == ITERATE_STOP_MAGIC);
+    WH_TEST_ASSERT_RETURN(iterate_count == ITERATE_STOP_COUNT);
+
+    /* Test: Iterate after clear */
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Clear(&logCtx));
+    iterate_count = 0;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
+    WH_TEST_ASSERT_RETURN(iterate_count == 0);
+
+    WH_TEST_RETURN_ON_FAIL(wh_Log_Cleanup(&logCtx));
+    return WH_ERROR_OK;
+}
+
+/*
+ * Generic backend tests - Main runner
+ * Executes all generic backend tests on a given backend test config
+ */
+int whTest_LogBackend_RunAll(whTestLogBackendTestConfig* cfg)
+{
+    int ret = 0;
+
+    /* Call setup hook if provided */
+    if (cfg->setup != NULL) {
+        if (cfg->setup(&cfg->test_context) != 0) {
+            printf("ERROR: Setup hook failed\n");
+            return WH_TEST_FAIL;
+        }
+    }
+
+    /* Run all test suites */
+    ret = whTest_LogBackend_BasicOperations(cfg);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("whTest_LogBackend_BasicOperations returned %d\n", ret);
+    }
+
+    if (ret == WH_ERROR_OK) {
+        ret = whTest_LogBackend_CapacityHandling(cfg);
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("whTest_LogBackend_CapacityHandling returned %d\n",
+                           ret);
+        }
+    }
+
+    if (ret == WH_ERROR_OK) {
+        ret = whTest_LogBackend_MessageHandling(cfg);
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("whTest_LogBackend_MessageHandling returned %d\n",
+                           ret);
+        }
+    }
+
+    if (ret == WH_ERROR_OK) {
+        ret = whTest_LogBackend_Iteration(cfg);
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("whTest_LogBackend_Iteration returned %d\n", ret);
+        }
+    }
+
+    /* Call teardown hook if provided */
+    if (cfg->teardown != NULL) {
+        if (cfg->teardown(cfg->test_context) != 0) {
+            WH_ERROR_PRINT("Teardown hook failed\n");
+            return WH_TEST_FAIL;
+        }
+    }
+
+    return ret;
+}
+
 
 /* Simple GetTime function for ring buffer tests */
 static uint64_t ringbufTestGetTime(void* context)
@@ -470,7 +789,7 @@ static int whTest_LogRingbuf(void)
     /* Count entries via iteration */
     iterate_count = 0;
     WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &iterate_count));
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
     WH_TEST_ASSERT_RETURN(iterate_count == 3);
 
     /* Test: Iterate when buffer is full and wrapped */
@@ -484,7 +803,7 @@ static int whTest_LogRingbuf(void)
     /* Should iterate exactly capacity entries */
     iterate_count = 0;
     WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &iterate_count));
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
     WH_TEST_ASSERT_RETURN(iterate_count == (int)capacity);
 
     /* Cleanup */
@@ -587,7 +906,7 @@ static int whTest_LogPosixFile(void)
     /* Count entries via iteration */
     iterate_count = 0;
     WH_TEST_RETURN_ON_FAIL(
-        wh_Log_Iterate(&logCtx, iterateCallbackCounter, &iterate_count));
+        wh_Log_Iterate(&logCtx, iterateCallbackCount, &iterate_count));
     WH_TEST_ASSERT_RETURN(iterate_count == 3);
 
     /* Cleanup */
@@ -720,30 +1039,143 @@ static int whTest_LogPosixFileConcurrent(void)
 
 #endif /* WOLFHSM_CFG_TEST_POSIX */
 
+/* Generic backend tests using test harness */
+
+/* Mock backend generic tests */
+static int whTest_LogMock_Generic(void)
+{
+    mockLogContext             mockCtx;
+    whTestLogBackendTestConfig testCfg;
+
+    memset(&mockCtx, 0, sizeof(mockCtx));
+
+    testCfg.backend_name        = "Mock";
+    testCfg.cb                  = &mockLogCb;
+    testCfg.config              = NULL;
+    testCfg.config_size         = sizeof(mockLogContext);
+    testCfg.backend_context     = &mockCtx;
+    testCfg.expected_capacity   = MOCK_LOG_MAX_ENTRIES;
+    testCfg.supports_concurrent = 0;
+    testCfg.setup               = NULL;
+    testCfg.teardown            = NULL;
+    testCfg.test_context        = NULL;
+
+    return whTest_LogBackend_RunAll(&testCfg);
+}
+
+/* Ring buffer backend generic tests */
+static int whTest_LogRingbuf_Generic(void)
+{
+    whLogRingbufContext        ringbufCtx;
+    whLogRingbufConfig         ringbufConfig;
+    whTestLogBackendTestConfig testCfg;
+    whLogCb                    ringbufCb;
+    const size_t               numLogEntries = 32;
+    static whLogEntry          ringbuf_buffer[32];
+
+    /* Setup ring buffer configuration with user-supplied buffer */
+    memset(&ringbuf_buffer, 0, sizeof(ringbuf_buffer));
+    memset(&ringbufCtx, 0, sizeof(ringbufCtx));
+    ringbufConfig.buffer      = ringbuf_buffer;
+    ringbufConfig.buffer_size = sizeof(ringbuf_buffer);
+
+    /* Initialize callback table with GetTime function (C90 compatible) */
+    memset(&ringbufCb, 0, sizeof(ringbufCb));
+    ringbufCb.Init     = whLogRingbuf_Init;
+    ringbufCb.Cleanup  = whLogRingbuf_Cleanup;
+    ringbufCb.AddEntry = whLogRingbuf_AddEntry;
+    ringbufCb.Export   = whLogRingbuf_Export;
+    ringbufCb.Iterate  = whLogRingbuf_Iterate;
+    ringbufCb.Clear    = whLogRingbuf_Clear;
+    ringbufCb.GetTime  = ringbufTestGetTime;
+
+    testCfg.backend_name        = "RingBuffer";
+    testCfg.cb                  = &ringbufCb;
+    testCfg.config              = &ringbufConfig;
+    testCfg.config_size         = sizeof(whLogRingbufContext);
+    testCfg.backend_context     = &ringbufCtx;
+    testCfg.expected_capacity   = numLogEntries;
+    testCfg.supports_concurrent = 0;
+    testCfg.setup               = NULL;
+    testCfg.teardown            = NULL;
+    testCfg.test_context        = NULL;
+
+    return whTest_LogBackend_RunAll(&testCfg);
+}
+
+#if defined(WOLFHSM_CFG_TEST_POSIX)
+/* POSIX file backend generic tests */
+static int whTest_LogPosixFile_Generic(void)
+{
+    posixLogFileContext        posixCtx;
+    posixLogFileConfig         posixCfg;
+    whTestLogBackendTestConfig testCfg;
+    whLogCb                    posixCb;
+    const char*                test_log_file = "/tmp/wolfhsm_test_generic.log";
+
+    /* Initialize callback table (C90 compatible) */
+    memset(&posixCtx, 0, sizeof(posixCtx));
+    memset(&posixCb, 0, sizeof(posixCb));
+    posixCb.Init     = posixLogFile_Init;
+    posixCb.Cleanup  = posixLogFile_Cleanup;
+    posixCb.AddEntry = posixLogFile_AddEntry;
+    posixCb.Export   = posixLogFile_Export;
+    posixCb.Iterate  = posixLogFile_Iterate;
+    posixCb.Clear    = posixLogFile_Clear;
+    posixCb.GetTime  = posixLogFile_GetTime;
+
+    /* Remove any existing test log file */
+    unlink(test_log_file);
+
+    posixCfg.filename = test_log_file;
+
+    testCfg.backend_name        = "PosixFile";
+    testCfg.cb                  = &posixCb;
+    testCfg.config              = &posixCfg;
+    testCfg.config_size         = sizeof(posixLogFileContext);
+    testCfg.backend_context     = &posixCtx;
+    testCfg.expected_capacity   = -1; /* Unlimited */
+    testCfg.supports_concurrent = 1;
+    testCfg.setup               = NULL;
+    testCfg.teardown            = NULL;
+    testCfg.test_context        = NULL;
+
+    return whTest_LogBackend_RunAll(&testCfg);
+}
+#endif /* WOLFHSM_CFG_TEST_POSIX */
+
 /* Main test entry point */
 int whTest_Log(void)
 {
     printf("Testing log frontend API...\n");
     WH_TEST_RETURN_ON_FAIL(whTest_LogFrontend());
-    printf("Log frontend API tests passed\n");
 
     printf("Testing log macros...\n");
     WH_TEST_RETURN_ON_FAIL(whTest_LogMacros());
-    printf("Log macro tests passed\n");
 
+    printf("Running Generic Backend Tests...\n");
+    printf("Testing mock log backend in generic harness...\n");
+    WH_TEST_RETURN_ON_FAIL(whTest_LogMock_Generic());
+    printf("Testing ringbuf backend in generic harness...\n");
+    WH_TEST_RETURN_ON_FAIL(whTest_LogRingbuf_Generic());
+#if defined(WOLFHSM_CFG_TEST_POSIX)
+    printf("Testing posix file backend in generic harness...\n");
+    WH_TEST_RETURN_ON_FAIL(whTest_LogPosixFile_Generic());
+#endif
+
+    printf("Running Backend-Specific Tests... n");
     printf("Testing ring buffer backend...\n");
     WH_TEST_RETURN_ON_FAIL(whTest_LogRingbuf());
-    printf("Ring buffer backend tests passed\n");
 
 #if defined(WOLFHSM_CFG_TEST_POSIX)
     printf("Testing POSIX file backend...\n");
     WH_TEST_RETURN_ON_FAIL(whTest_LogPosixFile());
-    printf("POSIX file backend tests passed\n");
 
     printf("Testing POSIX file backend with concurrent access...\n");
     WH_TEST_RETURN_ON_FAIL(whTest_LogPosixFileConcurrent());
-    printf("POSIX file backend concurrent tests passed\n");
 #endif
 
-    return 0;
+    printf("Log tests PASSED\n");
+
+    return WH_ERROR_OK;
 }

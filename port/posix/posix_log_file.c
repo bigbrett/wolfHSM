@@ -288,7 +288,8 @@ int posixLogFile_Iterate(void* c, whLogIterateCb iterate_cb, void* iterate_arg)
             sscanf(line, "%llu|%31[^|]|%255[^:]:%u|%255[^|]|%[^\n]", &timestamp,
                    level_str, file_buf, &line_num, func_buf, msg_buf);
 
-        if (parsed == 6) {
+        /* Minimum number of fields to parse is 5, msg is optional */
+        if (parsed >= 5) {
             entry.timestamp = timestamp;
             entry.level     = posixLogFile_StringToLevel(level_str);
             entry.file      = file_buf;
