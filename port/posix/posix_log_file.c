@@ -37,6 +37,8 @@
 
 #include "posix_log_file.h"
 
+#ifdef WOLFHSM_CFG_LOGGING
+
 /* Helper function to convert log level to string */
 static const char* posixLogFile_LevelToString(whLogLevel level)
 {
@@ -365,3 +367,5 @@ uint64_t posixLogFile_GetTime(void* c)
     /* Return milliseconds since epoch */
     return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
+
+#endif /* WOLFHSM_CFG_LOGGING */

@@ -31,6 +31,7 @@
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_log.h"
 
+#ifdef WOLFHSM_CFG_LOGGING
 
 int wh_Log_Init(whLogContext* ctx, const whLogConfig* config)
 {
@@ -128,3 +129,5 @@ int wh_Log_Clear(whLogContext* ctx)
 
     return ctx->cb->Clear(ctx->context);
 }
+
+#endif /* WOLFHSM_CFG_LOGGING */

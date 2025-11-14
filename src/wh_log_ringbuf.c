@@ -29,6 +29,8 @@
 #include "wolfhsm/wh_log.h"
 #include "wolfhsm/wh_log_ringbuf.h"
 
+#ifdef WOLFHSM_CFG_LOGGING
+
 int whLogRingbuf_Init(void* c, const void* cf)
 {
     whLogRingbufContext*      context = (whLogRingbufContext*)c;
@@ -170,3 +172,5 @@ int whLogRingbuf_Clear(void* c)
 
     return WH_ERROR_OK;
 }
+
+#endif /* WOLFHSM_CFG_LOGGING */

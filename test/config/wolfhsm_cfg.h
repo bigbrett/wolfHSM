@@ -35,6 +35,9 @@
 /* Enable global keys feature for testing */
 #define WOLFHSM_CFG_GLOBAL_KEYS
 
+/* Enable logging feature for testing */
+#define WOLFHSM_CFG_LOGGING
+
 #define WOLFHSM_CFG_NVM_OBJECT_COUNT 30
 #define WOLFHSM_CFG_SERVER_KEYCACHE_COUNT 9
 #define WOLFHSM_CFG_SERVER_KEYCACHE_BUFSIZE 300
@@ -59,6 +62,7 @@
 #define WOLFHSM_CFG_CANCEL_API
 #endif
 
+/* Test log-based NVM flash backend */
 #define WOLFHSM_CFG_SERVER_NVM_FLASH_LOG
 
 #endif /* WOLFHSM_CFG_H_ */

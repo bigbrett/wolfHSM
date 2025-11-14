@@ -101,6 +101,7 @@ int wh_Log_Clear(whLogContext* ctx);
  * Both silently truncate to WOLFHSM_CFG_LOG_MSG_MAX - 1 and always
  * null-terminate the stored message.
  */
+#ifdef WOLFHSM_CFG_LOGGING
 /* clang-format off */
 #define WH_LOG(ctx, lvl, message)                                              \
     do {                                                                       \
@@ -165,5 +166,35 @@ int wh_Log_Clear(whLogContext* ctx);
 #define WH_LOG_INFO_STR(ctx, s) WH_LOG_STR(ctx, WH_LOG_LEVEL_INFO, (s))
 #define WH_LOG_ERROR_STR(ctx, s) WH_LOG_STR(ctx, WH_LOG_LEVEL_ERROR, (s))
 #define WH_LOG_SECEVENT_STR(ctx, s) WH_LOG_STR(ctx, WH_LOG_LEVEL_SECEVENT, (s))
+
+#else /* !WOLFHSM_CFG_LOGGING */
+
+/* Stub macros that compile to nothing when logging is disabled */
+#define WH_LOG(ctx, lvl, message) \
+    do {                          \
+    } while (0)
+#define WH_LOG_STR(ctx, lvl, cstr) \
+    do {                           \
+    } while (0)
+#define WH_LOG_INFO(ctx, msg) \
+    do {                      \
+    } while (0)
+#define WH_LOG_ERROR(ctx, msg) \
+    do {                       \
+    } while (0)
+#define WH_LOG_SECEVENT(ctx, msg) \
+    do {                          \
+    } while (0)
+#define WH_LOG_INFO_STR(ctx, s) \
+    do {                        \
+    } while (0)
+#define WH_LOG_ERROR_STR(ctx, s) \
+    do {                         \
+    } while (0)
+#define WH_LOG_SECEVENT_STR(ctx, s) \
+    do {                            \
+    } while (0)
+
+#endif /* WOLFHSM_CFG_LOGGING */
 
 #endif /* WOLFHSM_WH_LOG_H_ */

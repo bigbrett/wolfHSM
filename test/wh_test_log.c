@@ -40,6 +40,8 @@
 
 #include "wh_test_log.h"
 
+#ifdef WOLFHSM_CFG_LOGGING
+
 #define ITERATE_STOP_MAGIC 99
 #define ITERATE_STOP_COUNT 3
 
@@ -1307,3 +1309,5 @@ int whTest_Log(void)
 
     return WH_ERROR_OK;
 }
+
+#endif /* WOLFHSM_CFG_LOGGING */

@@ -119,6 +119,11 @@ ifeq ($(SHE),1)
 	DEF += -DWOLFHSM_CFG_SHE_EXTENSION
 endif
 
+# Support a logging-capable build
+ifeq ($(LOGGING),1)
+	DEF += -DWOLFHSM_CFG_LOGGING
+endif
+
 ## Project defines
 # Option to build wolfcrypt tests
 ifeq ($(TESTWOLFCRYPT),1)
