@@ -40,8 +40,7 @@ typedef enum {
     WH_LOG_LEVEL_SECEVENT = 2  /* Security event */
 } whLogLevel;
 
-/** Backend provides timestamp via callback (no system clock dependency in
- * frontend) */
+/** Backend provides timestamp via callback */
 typedef uint64_t (*whLogGetTimeCb)(void* context);
 
 /** Log entry structure with fixed-size message buffer */
@@ -94,53 +93,77 @@ int wh_Log_Iterate(whLogContext* ctx, whLogIterateCb iterate_cb,
                    void* iterate_arg);
 int wh_Log_Clear(whLogContext* ctx);
 
-/** Helper macros with static assert for compile-time message size validation
+/** Helper macros
+ *
+ * WH_LOG:     for string literals (compile-time known size)
+ * WH_LOG_STR: for runtime C strings (char*)
+ *
+ * Both silently truncate to WOLFHSM_CFG_LOG_MSG_MAX - 1 and always
+ * null-terminate the stored message.
  */
-/* Static assert for C11+ or C++, runtime check for C90/C99 */
-#if (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || \
-    (defined(__cplusplus) && (__cplusplus >= 201103L))
-#define WH_LOG(ctx, lvl, message)                                        \
-    do {                                                                 \
-        WH_UTILS_STATIC_ASSERT(                                          \
-            sizeof(message) <= WOLFHSM_CFG_LOG_MSG_MAX,                  \
-            "WH_LOG: message exceeds WOLFHSM_CFG_LOG_MSG_MAX");          \
-        uint64_t   _timestamp = ((ctx)->cb && (ctx)->cb->GetTime)        \
-                                    ? (ctx)->cb->GetTime((ctx)->context) \
-                                    : 0;                                 \
-        size_t     _len       = sizeof(message) - 1;                     \
-        whLogEntry _entry     = {.timestamp = _timestamp,                \
-                                 .level     = (lvl),                     \
-                                 .file      = __FILE__,                  \
-                                 .function  = __func__,                  \
-                                 .line      = __LINE__,                  \
-                                 .msg_len   = _len};                       \
-        memcpy(_entry.msg, message, sizeof(message));                    \
-        wh_Log_AddEntry((ctx), &_entry);                                 \
+/* clang-format off */
+#define WH_LOG(ctx, lvl, message)                                              \
+    do {                                                                       \
+        uint64_t _timestamp =                                                  \
+            (((ctx) != NULL) && (ctx)->cb && (ctx)->cb->GetTime)               \
+                ? (ctx)->cb->GetTime((ctx)->context)                           \
+                : 0;                                                           \
+        size_t _src_len = sizeof(message) - 1;                                 \
+        size_t _max_len =                                                      \
+            (WOLFHSM_CFG_LOG_MSG_MAX > 0) ? (WOLFHSM_CFG_LOG_MSG_MAX - 1) : 0; \
+        size_t     _copy_len = (_src_len < _max_len) ? _src_len : _max_len;    \
+        whLogEntry _entry    = {.timestamp = _timestamp,                       \
+                                .level     = (lvl),                            \
+                                .file      = __FILE__,                         \
+                                .function  = __func__,                         \
+                                .line      = __LINE__,                         \
+                                .msg_len   = (uint32_t)_copy_len};             \
+        if (_copy_len > 0) {                                                   \
+            memcpy(_entry.msg, (message), _copy_len);                          \
+        }                                                                      \
+        _entry.msg[_copy_len] = '\0';                                          \
+        wh_Log_AddEntry((ctx), &_entry);                                       \
     } while (0)
-#else
-/* C90/C99: Skip static assert to avoid unused typedef warnings */
-#define WH_LOG(ctx, lvl, message)                                        \
-    do {                                                                 \
-        uint64_t   _timestamp = ((ctx)->cb && (ctx)->cb->GetTime)        \
-                                    ? (ctx)->cb->GetTime((ctx)->context) \
-                                    : 0;                                 \
-        size_t     _len       = sizeof(message) - 1;                     \
-        whLogEntry _entry     = {.timestamp = _timestamp,                \
-                                 .level     = (lvl),                     \
-                                 .file      = __FILE__,                  \
-                                 .function  = __func__,                  \
-                                 .line      = __LINE__,                  \
-                                 .msg_len   = _len};                       \
-        if (sizeof(message) > WOLFHSM_CFG_LOG_MSG_MAX) {                 \
-            _len = WOLFHSM_CFG_LOG_MSG_MAX - 1;                          \
-        }                                                                \
-        memcpy(_entry.msg, message, _len + 1);                           \
-        wh_Log_AddEntry((ctx), &_entry);                                 \
+
+#define WH_LOG_STR(ctx, lvl, cstr)                                             \
+    do {                                                                       \
+        uint64_t _timestamp =                                                  \
+            (((ctx) != NULL) && (ctx)->cb && (ctx)->cb->GetTime)               \
+                ? (ctx)->cb->GetTime((ctx)->context)                           \
+                : 0;                                                           \
+        const char* _s = (const char*)(cstr);                                  \
+        size_t      _max_len =                                                 \
+            (WOLFHSM_CFG_LOG_MSG_MAX > 0) ? (WOLFHSM_CFG_LOG_MSG_MAX - 1) : 0; \
+        size_t _copy_len = 0;                                                  \
+        if (_s != NULL) {                                                      \
+            size_t _i;                                                         \
+            for (_i = 0; _i < _max_len; _i++) {                                \
+                if (_s[_i] == '\0') {                                          \
+                    break;                                                     \
+                }                                                              \
+            }                                                                  \
+            _copy_len = _i;                                                    \
+        }                                                                      \
+        whLogEntry _entry = {.timestamp = _timestamp,                          \
+                             .level     = (lvl),                               \
+                             .file      = __FILE__,                            \
+                             .function  = __func__,                            \
+                             .line      = __LINE__,                            \
+                             .msg_len   = (uint32_t)_copy_len};                \
+        if ((_s != NULL) && (_copy_len > 0)) {                                 \
+            memcpy(_entry.msg, _s, _copy_len);                                 \
+        }                                                                      \
+        _entry.msg[_copy_len] = '\0';                                          \
+        wh_Log_AddEntry((ctx), &_entry);                                       \
     } while (0)
-#endif
+/* clang-format on */
 
 #define WH_LOG_INFO(ctx, msg) WH_LOG(ctx, WH_LOG_LEVEL_INFO, msg)
 #define WH_LOG_ERROR(ctx, msg) WH_LOG(ctx, WH_LOG_LEVEL_ERROR, msg)
 #define WH_LOG_SECEVENT(ctx, msg) WH_LOG(ctx, WH_LOG_LEVEL_SECEVENT, msg)
 
-#endif /* !WOLFHSM_WH_LOG_H_ */
+#define WH_LOG_INFO_STR(ctx, s) WH_LOG_STR(ctx, WH_LOG_LEVEL_INFO, (s))
+#define WH_LOG_ERROR_STR(ctx, s) WH_LOG_STR(ctx, WH_LOG_LEVEL_ERROR, (s))
+#define WH_LOG_SECEVENT_STR(ctx, s) WH_LOG_STR(ctx, WH_LOG_LEVEL_SECEVENT, (s))
+
+#endif /* WOLFHSM_WH_LOG_H_ */
