@@ -112,6 +112,12 @@ int wh_Server_ImgMgrVerifyImg(whServerImgMgrContext*      context,
         return ret;
     }
 
+    /* Enforce key usage policy for verification */
+    ret = wh_Server_KeystoreEnforceKeyUsage(keyMeta, WH_NVM_FLAGS_USAGE_VERIFY);
+    if (ret != WH_ERROR_OK) {
+        return ret;
+    }
+
     /* Load the signature from NVM */
     ret = wh_Nvm_GetMetadata(server->nvm, img->sigNvmId, &sigMeta);
     if (ret != WH_ERROR_OK) {
@@ -123,7 +129,8 @@ int wh_Server_ImgMgrVerifyImg(whServerImgMgrContext*      context,
         return WH_ERROR_BADARGS;
     }
 
-    ret = wh_Nvm_Read(server->nvm, img->sigNvmId, 0, sigMeta.len, sigBuf);
+    ret =
+        wh_Nvm_ReadChecked(server->nvm, img->sigNvmId, 0, sigMeta.len, sigBuf);
     if (ret != WH_ERROR_OK) {
         return ret;
     }

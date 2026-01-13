@@ -363,7 +363,7 @@ static int whTest_ServerImgMgrServerCfgEcc256(whServerConfig* serverCfg)
     whNvmMetadata keyMeta = {0};
     keyMeta.id            = testEccKeyId;
     keyMeta.access        = WH_NVM_ACCESS_ANY;
-    keyMeta.flags         = WH_NVM_FLAGS_NONE;
+    keyMeta.flags         = WH_NVM_FLAGS_USAGE_VERIFY;
     keyMeta.len           = pubKeyDerLen;
     snprintf((char*)keyMeta.label, WH_NVM_LABEL_LEN, "TestKey");
 
@@ -655,7 +655,7 @@ static int whTest_ServerImgMgrServerCfgAes128Cmac(whServerConfig* serverCfg)
     whNvmMetadata keyMeta = {0};
     keyMeta.id            = testAesCmacKeyId;
     keyMeta.access        = WH_NVM_ACCESS_ANY;
-    keyMeta.flags         = WH_NVM_FLAGS_NONE;
+    keyMeta.flags         = WH_NVM_FLAGS_USAGE_VERIFY;
     keyMeta.len           = sizeof(testAes128Key);
     snprintf((char*)keyMeta.label, WH_NVM_LABEL_LEN, "TestAes128Key");
 
@@ -982,7 +982,7 @@ static int whTest_ServerImgMgrServerCfgRsa2048(whServerConfig* serverCfg)
     whNvmMetadata keyMeta = {0};
     keyMeta.id            = testRsaKeyId;
     keyMeta.access        = WH_NVM_ACCESS_ANY;
-    keyMeta.flags         = WH_NVM_FLAGS_NONE;
+    keyMeta.flags         = WH_NVM_FLAGS_USAGE_VERIFY;
     keyMeta.len           = pubKeyDerLen;
     snprintf((char*)keyMeta.label, WH_NVM_LABEL_LEN, "TestRsaKey");
 
