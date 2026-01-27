@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "wolfhsm/wh_settings.h"
 
@@ -58,6 +59,84 @@ static int whTest_CertNonExportable(whClientContext* client);
 #define FLASH_PAGE_SIZE (8) /* 8B */
 
 #ifdef WOLFHSM_CFG_ENABLE_SERVER
+
+#ifdef WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES
+/* Test that the trusted intermediate certificate cache actually works.
+ * Proves cache works by swapping root cert and showing chain still verifies. */
+static int whTest_CertTrustedIntermediateCache(whServerContext* server)
+{
+    int           rc         = WH_ERROR_OK;
+    const whNvmId testRootId = 100; /* NVM ID for test root (overwritable) */
+    const whNvmId freshRootId =
+        101; /* Fresh NVM ID with no cache association */
+
+    WH_TEST_PRINT("Testing trusted intermediate certificate cache...\n");
+
+    /* Step 1: Add ROOT_A at testRootId WITHOUT NONMODIFIABLE flag */
+    WH_TEST_DEBUG_PRINT("  Step 1: Adding ROOT_A at testRootId=%d...\n",
+                        testRootId);
+    WH_TEST_RETURN_ON_FAIL(wh_Server_CertAddTrusted(
+        server, testRootId, WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE, NULL, 0,
+        ROOT_A_CERT, ROOT_A_CERT_len));
+
+    /* Step 2: Verify CHAIN_A - caches (SHA256(INTERMEDIATE_A), rootId=100) */
+    WH_TEST_DEBUG_PRINT("  Step 2: Verifying CHAIN_A (populates cache)...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Server_CertVerify(
+        server, RAW_CERT_CHAIN_A, RAW_CERT_CHAIN_A_len, testRootId,
+        WH_CERT_FLAGS_NONE, WH_NVM_FLAGS_USAGE_ANY, NULL));
+
+    /* Step 3: Replace ROOT_A with ROOT_B at testRootId */
+    WH_TEST_DEBUG_PRINT("  Step 3: Replacing ROOT_A with ROOT_B...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Server_CertEraseTrusted(server, testRootId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_CertAddTrusted(
+        server, testRootId, WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE, NULL, 0,
+        ROOT_B_CERT, ROOT_B_CERT_len));
+
+    /* Step 4: Verify CHAIN_A again - SHOULD SUCCEED via cache
+     * Without cache: would fail (INTERMEDIATE_A not signed by ROOT_B) */
+    WH_TEST_DEBUG_PRINT("  Step 4: Verifying CHAIN_A with swapped root...\n");
+    rc = wh_Server_CertVerify(server, RAW_CERT_CHAIN_A, RAW_CERT_CHAIN_A_len,
+                              testRootId, WH_CERT_FLAGS_NONE,
+                              WH_NVM_FLAGS_USAGE_ANY, NULL);
+    if (rc != WH_ERROR_OK) {
+        WH_ERROR_PRINT("Cache test FAILED: expected OK, got %d\n", rc);
+        goto cleanup;
+    }
+    WH_TEST_DEBUG_PRINT(
+        "  Step 4: SUCCESS - Cache trusted the intermediate!\n");
+
+    /* Step 5: Add ROOT_B at freshRootId (no cache for this rootId) */
+    WH_TEST_DEBUG_PRINT("  Step 5: Adding ROOT_B at freshRootId=%d...\n",
+                        freshRootId);
+    WH_TEST_RETURN_ON_FAIL(wh_Server_CertAddTrusted(
+        server, freshRootId, WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE, NULL, 0,
+        ROOT_B_CERT, ROOT_B_CERT_len));
+
+    /* Step 6: Verify CHAIN_A with freshRootId - SHOULD FAIL
+     * No cache entry for rootId=101, INTERMEDIATE_A fails vs ROOT_B */
+    WH_TEST_DEBUG_PRINT("  Step 6: Verifying CHAIN_A with freshRootId...\n");
+    rc = wh_Server_CertVerify(server, RAW_CERT_CHAIN_A, RAW_CERT_CHAIN_A_len,
+                              freshRootId, WH_CERT_FLAGS_NONE,
+                              WH_NVM_FLAGS_USAGE_ANY, NULL);
+    if (rc != WH_ERROR_CERT_VERIFY) {
+        WH_ERROR_PRINT(
+            "Cache test FAILED: expected CERT_VERIFY error, got %d\n", rc);
+        rc = WH_TEST_FAIL;
+        goto cleanup;
+    }
+    WH_TEST_DEBUG_PRINT(
+        "  Step 6: SUCCESS - Verification failed without cache!\n");
+
+    rc = WH_ERROR_OK;
+    WH_TEST_PRINT("Trusted intermediate certificate cache test PASSED\n");
+
+cleanup:
+    (void)wh_Server_CertEraseTrusted(server, testRootId);
+    (void)wh_Server_CertEraseTrusted(server, freshRootId);
+    return rc;
+}
+#endif /* WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES */
+
 /* Run certificate configuration tests */
 int whTest_CertServerCfg(whServerConfig* serverCfg)
 {
@@ -70,6 +149,12 @@ int whTest_CertServerCfg(whServerConfig* serverCfg)
     WH_TEST_RETURN_ON_FAIL(wh_Server_Init(server, serverCfg));
     WH_TEST_DEBUG_PRINT("Server initialized successfully\n");
     WH_TEST_RETURN_ON_FAIL(wh_Server_CertInit(server));
+
+#ifdef WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES
+    /* Test the trusted intermediate certificate cache FIRST before other certs
+     * are added, to ensure sufficient NVM space (especially for FLASH_LOG) */
+    WH_TEST_RETURN_ON_FAIL(whTest_CertTrustedIntermediateCache(server));
+#endif
 
     /* Add trusted root certificate for chain A */
     WH_TEST_DEBUG_PRINT("Adding trusted root certificate for chain A...\n");

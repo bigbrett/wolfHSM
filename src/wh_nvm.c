@@ -104,6 +104,13 @@ int wh_Nvm_Init(whNvmContext* context, const whNvmConfig* config)
     memset(&context->globalCache, 0, sizeof(context->globalCache));
 #endif
 
+#if !defined(WOLFHSM_CFG_NO_CRYPTO) && \
+    defined(WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES)
+    /* Initialize the trusted intermediate certificate cache */
+    memset(&context->trustedIntermediateCache, 0,
+           sizeof(context->trustedIntermediateCache));
+#endif
+
     if (context->cb != NULL && context->cb->Init != NULL) {
         rc = context->cb->Init(context->context, config->config);
         if (rc != 0) {

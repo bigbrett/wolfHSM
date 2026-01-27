@@ -418,10 +418,33 @@
 #endif /* !WOLFSSL_ACERT || !WOLFSSL_ASN_TEMPLATE */
 #endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER_ACERT */
 
+/* Trusted intermediate certificate cache - error checks require crypto */
+#ifdef WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES
+
+#if !defined(WOLFHSM_CFG_CERTIFICATE_MANAGER)
+#error \
+    "WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES requires WOLFHSM_CFG_CERTIFICATE_MANAGER"
+#endif
+#if defined(NO_SHA256)
+#error "WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES requires SHA256"
+#endif
+
+#endif /* WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES */
+
 #endif /* !WOLFHSM_CFG_NO_CRYPTO */
 
 #if defined(WOLFHSM_CFG_NO_CRYPTO) && defined(WOLFHSM_CFG_KEYWRAP)
 #error "WOLFHSM_CFG_KEYWRAP is incompatible with WOLFHSM_CFG_NO_CRYPTO"
+#endif
+
+/* Trusted intermediate certificate cache count - only define when crypto is
+ * enabled since the feature requires certificate manager which requires crypto
+ */
+#if !defined(WOLFHSM_CFG_NO_CRYPTO) && \
+    defined(WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES)
+#ifndef WOLFHSM_CFG_TRUSTED_INTERMEDIATE_CACHE_COUNT
+#define WOLFHSM_CFG_TRUSTED_INTERMEDIATE_CACHE_COUNT 16
+#endif
 #endif
 
 /** Cache flushing and memory fencing synchronization primitives */

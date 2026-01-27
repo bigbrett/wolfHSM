@@ -89,12 +89,38 @@ typedef struct {
 
 
 /** NVM Context helper structs and functions */
+
+#if !defined(WOLFHSM_CFG_NO_CRYPTO) && \
+    defined(WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES)
+/* SHA256 digest size - defined locally to avoid including sha256.h in header */
+#define WH_TRUSTED_CERT_CACHE_HASH_SIZE 32
+
+/* Entry: SHA256 hash of a verified intermediate certificate + root context */
+typedef struct whTrustedIntermediateCacheEntry {
+    uint8_t hash[WH_TRUSTED_CERT_CACHE_HASH_SIZE]; /* SHA256 of DER cert */
+    whNvmId rootId; /* Root cert it was verified against */
+    uint8_t inUse;  /* 1=occupied, 0=free */
+} whTrustedIntermediateCacheEntry;
+
+/* Global cache context for trusted intermediate certificates */
+typedef struct whTrustedIntermediateCacheContext {
+    whTrustedIntermediateCacheEntry
+             entries[WOLFHSM_CFG_TRUSTED_INTERMEDIATE_CACHE_COUNT];
+    uint16_t nextWriteIndex; /* FIFO eviction index */
+} whTrustedIntermediateCacheContext;
+#endif /* !WOLFHSM_CFG_NO_CRYPTO && \
+          WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES */
+
 /* Simple helper context structure associated with an NVM instance */
 typedef struct whNvmContext_t {
     whNvmCb *cb;
     void* context;
 #if !defined(WOLFHSM_CFG_NO_CRYPTO) && defined(WOLFHSM_CFG_GLOBAL_KEYS)
     whKeyCacheContext globalCache; /* Global key cache */
+#endif
+#if !defined(WOLFHSM_CFG_NO_CRYPTO) && \
+    defined(WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES)
+    whTrustedIntermediateCacheContext trustedIntermediateCache;
 #endif
 } whNvmContext;
 

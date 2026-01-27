@@ -42,19 +42,84 @@
 #include "wolfssl/ssl.h"
 #include "wolfssl/wolfcrypt/asn.h"
 
+#ifdef WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES
+#include "wolfssl/wolfcrypt/sha256.h"
+#include "wolfhsm/wh_nvm.h" /* For WH_TRUSTED_CERT_CACHE_HASH_SIZE */
+/* Compute SHA256 hash of DER certificate */
+static int _computeCertHash(const uint8_t* cert, uint32_t certLen,
+                            uint8_t* hashOut)
+{
+    return wc_Sha256Hash(cert, certLen, hashOut);
+}
 
-static int _verifyChainAgainstCmStore(whServerContext*      server,
-                                      WOLFSSL_CERT_MANAGER* cm,
-                                      const uint8_t* chain, uint32_t chain_len,
-                                      whCertFlags flags,
-                                      whNvmFlags  cachedKeyFlags,
-                                      whKeyId*    inout_keyId)
+/* Check if certificate hash is in trusted cache for the given root */
+static int _isInTrustedIntermediateCache(whNvmContext*  nvm,
+                                         const uint8_t* certHash,
+                                         whNvmId        rootId)
+{
+    int                                i;
+    whTrustedIntermediateCacheContext* cache;
+
+    if (nvm == NULL || certHash == NULL) {
+        return 0;
+    }
+
+    cache = &nvm->trustedIntermediateCache;
+    for (i = 0; i < WOLFHSM_CFG_TRUSTED_INTERMEDIATE_CACHE_COUNT; i++) {
+        if (cache->entries[i].inUse && cache->entries[i].rootId == rootId &&
+            memcmp(cache->entries[i].hash, certHash,
+                   WH_TRUSTED_CERT_CACHE_HASH_SIZE) == 0) {
+            return 1; /* Found */
+        }
+    }
+    return 0; /* Not found */
+}
+
+/* Add certificate hash to trusted cache (FIFO eviction) */
+static int _addToTrustedIntermediateCache(whNvmContext*  nvm,
+                                          const uint8_t* certHash,
+                                          whNvmId        rootId)
+{
+    uint16_t                           idx;
+    whTrustedIntermediateCacheContext* cache;
+
+    if (nvm == NULL || certHash == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    cache = &nvm->trustedIntermediateCache;
+    idx   = cache->nextWriteIndex;
+
+    memcpy(cache->entries[idx].hash, certHash, WH_TRUSTED_CERT_CACHE_HASH_SIZE);
+    cache->entries[idx].rootId = rootId;
+    cache->entries[idx].inUse  = 1;
+
+    /* Advance FIFO index with wraparound */
+    cache->nextWriteIndex =
+        (idx + 1) % WOLFHSM_CFG_TRUSTED_INTERMEDIATE_CACHE_COUNT;
+
+    return WH_ERROR_OK;
+}
+#endif /* WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES */
+
+
+static int
+_verifyChainAgainstCmStore(whServerContext* server, WOLFSSL_CERT_MANAGER* cm,
+                           const uint8_t* chain, uint32_t chain_len,
+                           whCertFlags flags, whNvmFlags cachedKeyFlags,
+                           whKeyId* inout_keyId, whNvmId trustedRootId)
 {
     int            rc            = 0;
     const uint8_t* cert_ptr      = chain;
     uint32_t       remaining_len = chain_len;
     int            cert_len      = 0;
     word32         idx           = 0;
+#ifdef WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES
+    uint8_t certHash[WH_TRUSTED_CERT_CACHE_HASH_SIZE];
+    int     isCached = 0;
+#endif
+
+    (void)trustedRootId; /* May be unused if cache feature is disabled */
 
     if (cm == NULL || chain == NULL || chain_len == 0) {
         return WH_ERROR_BADARGS;
@@ -76,10 +141,28 @@ static int _verifyChainAgainstCmStore(whServerContext*      server,
             return WH_ERROR_ABORTED;
         }
 
-        /* Verify the current certificate */
-        rc = wolfSSL_CertManagerVerifyBuffer(cm, cert_ptr, cert_len + idx,
-                                             WOLFSSL_FILETYPE_ASN1);
-
+        /* Verify the current certificate (skip if already cached) */
+#ifdef WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES
+        isCached = 0;
+        {
+            int hashRc = _computeCertHash(cert_ptr, cert_len + idx, certHash);
+            if (hashRc == 0 && _isInTrustedIntermediateCache(
+                                   server->nvm, certHash, trustedRootId)) {
+                /* Already verified previously - skip verification */
+                isCached = 1;
+                rc       = WOLFSSL_SUCCESS;
+            }
+            else {
+                rc = wolfSSL_CertManagerVerifyBuffer(
+                    cm, cert_ptr, cert_len + idx, WOLFSSL_FILETYPE_ASN1);
+            }
+        }
+#else
+        {
+            rc = wolfSSL_CertManagerVerifyBuffer(cm, cert_ptr, cert_len + idx,
+                                                 WOLFSSL_FILETYPE_ASN1);
+        }
+#endif
 
         /* If this is not the leaf certificate and it's trusted, add it to the
          * CM store */
@@ -104,6 +187,13 @@ static int _verifyChainAgainstCmStore(whServerContext*      server,
                     wc_FreeDecodedCert(&dc);
                     return rc;
                 }
+#ifdef WOLFHSM_CFG_CERT_MANAGER_CACHE_TRUSTED_INTERMEDIATES
+                /* Cache this intermediate for future verification requests */
+                if (!isCached) {
+                    (void)_addToTrustedIntermediateCache(server->nvm, certHash,
+                                                         trustedRootId);
+                }
+#endif
             }
             /* This is the leaf cert, so if requested, cache the public key */
             else if (flags & WH_CERT_FLAGS_CACHE_LEAF_PUBKEY) {
@@ -296,7 +386,8 @@ int wh_Server_CertVerify(whServerContext* server, const uint8_t* cert,
         if (rc == WOLFSSL_SUCCESS) {
             /* Verify the certificate */
             rc = _verifyChainAgainstCmStore(server, cm, cert, cert_len, flags,
-                                            cachedKeyFlags, inout_keyId);
+                                            cachedKeyFlags, inout_keyId,
+                                            trustedRootNvmId);
             if (rc != WH_ERROR_OK) {
                 rc = WH_ERROR_CERT_VERIFY;
             }
