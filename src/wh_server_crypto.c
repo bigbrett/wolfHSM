@@ -3015,15 +3015,70 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
             uint8_t tmpKey[AES_MAX_KEY_SIZE];
             word32  tmpKeyLen = 0;
 
-            /* attempt oneshot if all fields are present */
-            if (req.inSz != 0 && req.keySz != 0 && req.outSz != 0) {
+            /* attempt oneshot if input and output are both present */
+            if (req.inSz != 0 && req.outSz != 0) {
                 len = req.outSz;
-                WH_DEBUG_SERVER_VERBOSE("cmac generate oneshot\n");
 
-                ret = wc_AesCmacGenerate_ex(ctx->crypto->algoCtx.cmac, out,
-                                            &len, in, req.inSz, key, req.keySz,
-                                            NULL, ctx->crypto->devId);
-                res.outSz = len;
+                if (req.keySz != 0) {
+                    /* Client-supplied key - direct one-shot */
+                    WH_DEBUG_SERVER_VERBOSE("cmac generate oneshot\n");
+
+                    ret = wc_AesCmacGenerate_ex(
+                        ctx->crypto->algoCtx.cmac, out, &len, in, req.inSz, key,
+                        req.keySz, NULL, ctx->crypto->devId);
+                }
+                else if (!WH_KEYID_ISERASED(req.keyId)) {
+                    /* HSM-local key via keyId */
+                    whKeyId keyId = wh_KeyId_TranslateFromClient(
+                        WH_KEYTYPE_CRYPTO, ctx->comm->client_id, req.keyId);
+
+                    WH_DEBUG_SERVER_VERBOSE(
+                        "cmac generate oneshot with keyId:%x\n", keyId);
+
+                    /* Enforce usage policy (sign or verify) */
+                    ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                        ctx, keyId, WH_NVM_FLAGS_USAGE_SIGN);
+                    if (ret == WH_ERROR_USAGE) {
+                        ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                            ctx, keyId, WH_NVM_FLAGS_USAGE_VERIFY);
+                    }
+
+                    if (ret == WH_ERROR_OK) {
+                        tmpKeyLen = sizeof(tmpKey);
+                        ret       = wh_Server_KeystoreReadKey(ctx, keyId, NULL,
+                                                              tmpKey, &tmpKeyLen);
+                    }
+
+                    if (ret == WH_ERROR_OK) {
+                        /* Validate AES key size */
+                        if (tmpKeyLen != AES_128_KEY_SIZE &&
+                            tmpKeyLen != AES_192_KEY_SIZE &&
+                            tmpKeyLen != AES_256_KEY_SIZE) {
+                            ret = WH_ERROR_ABORTED;
+                        }
+                    }
+
+                    if (ret == WH_ERROR_OK) {
+                        ret = wc_InitCmac_ex(ctx->crypto->algoCtx.cmac, tmpKey,
+                                             tmpKeyLen, req.type, NULL, NULL,
+                                             ctx->crypto->devId);
+                    }
+
+                    if (ret == WH_ERROR_OK) {
+                        ret = wc_AesCmacGenerate_ex(
+                            ctx->crypto->algoCtx.cmac, out, &len, in, req.inSz,
+                            NULL, 0, NULL, ctx->crypto->devId);
+                    }
+                }
+                else {
+                    /* No key available */
+                    ret = BAD_FUNC_ARG;
+                }
+
+                if (ret == 0) {
+                    res.outSz = len;
+                    res.keyId = WH_KEYID_ERASED;
+                }
             }
             else {
                 WH_DEBUG_SERVER_VERBOSE(
