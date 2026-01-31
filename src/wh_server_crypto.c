@@ -3014,6 +3014,7 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
         case WC_CMAC_AES: {
             uint8_t tmpKey[AES_MAX_KEY_SIZE];
             word32  tmpKeyLen = 0;
+            Cmac    cmac[1];
 
             /* attempt oneshot if input and output are both present */
             if (req.inSz != 0 && req.outSz != 0) {
@@ -3023,9 +3024,9 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
                     /* Client-supplied key - direct one-shot */
                     WH_DEBUG_SERVER_VERBOSE("cmac generate oneshot\n");
 
-                    ret = wc_AesCmacGenerate_ex(
-                        ctx->crypto->algoCtx.cmac, out, &len, in, req.inSz, key,
-                        req.keySz, NULL, ctx->crypto->devId);
+                    ret = wc_AesCmacGenerate_ex(cmac, out, &len, in, req.inSz,
+                                                key, req.keySz, NULL,
+                                                ctx->crypto->devId);
                 }
                 else if (!WH_KEYID_ISERASED(req.keyId)) {
                     /* HSM-local key via keyId */
@@ -3059,15 +3060,14 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
                     }
 
                     if (ret == WH_ERROR_OK) {
-                        ret = wc_InitCmac_ex(ctx->crypto->algoCtx.cmac, tmpKey,
-                                             tmpKeyLen, req.type, NULL, NULL,
-                                             ctx->crypto->devId);
+                        ret = wc_InitCmac_ex(cmac, tmpKey, tmpKeyLen, req.type,
+                                             NULL, NULL, ctx->crypto->devId);
                     }
 
                     if (ret == WH_ERROR_OK) {
-                        ret = wc_AesCmacGenerate_ex(
-                            ctx->crypto->algoCtx.cmac, out, &len, in, req.inSz,
-                            NULL, 0, NULL, ctx->crypto->devId);
+                        ret = wc_AesCmacGenerate_ex(cmac, out, &len, in,
+                                                    req.inSz, NULL, 0, NULL,
+                                                    ctx->crypto->devId);
                     }
                 }
                 else {
@@ -3125,9 +3125,8 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
                  */
                 if (ret == 0) {
 
-                    ret = wc_InitCmac_ex(ctx->crypto->algoCtx.cmac, tmpKey,
-                                         tmpKeyLen, req.type, NULL, NULL,
-                                         ctx->crypto->devId);
+                    ret = wc_InitCmac_ex(cmac, tmpKey, tmpKeyLen, req.type,
+                                         NULL, NULL, ctx->crypto->devId);
                     WH_DEBUG_SERVER_VERBOSE(
                         "cmac init with keylen:%d, type:%d ret:%d\n", tmpKeyLen,
                         req.type, ret);
@@ -3139,21 +3138,18 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
                  * subsequent calls (update/final), this restores the running
                  * intermediate state. */
                 if (ret == 0) {
-                    memcpy(ctx->crypto->algoCtx.cmac->buffer,
-                           req.resumeState.buffer, AES_BLOCK_SIZE);
-                    memcpy(ctx->crypto->algoCtx.cmac->digest,
-                           req.resumeState.digest, AES_BLOCK_SIZE);
-                    ctx->crypto->algoCtx.cmac->bufferSz =
-                        req.resumeState.bufferSz;
-                    ctx->crypto->algoCtx.cmac->totalSz =
-                        req.resumeState.totalSz;
+                    memcpy(cmac->buffer, req.resumeState.buffer,
+                           AES_BLOCK_SIZE);
+                    memcpy(cmac->digest, req.resumeState.digest,
+                           AES_BLOCK_SIZE);
+                    cmac->bufferSz = req.resumeState.bufferSz;
+                    cmac->totalSz  = req.resumeState.totalSz;
                 }
 
                 /* Handle CMAC update */
                 if (ret == 0 && req.inSz != 0) {
                     (void)seq;
-                    ret =
-                        wc_CmacUpdate(ctx->crypto->algoCtx.cmac, in, req.inSz);
+                    ret = wc_CmacUpdate(cmac, in, req.inSz);
                     WH_DEBUG_SERVER_VERBOSE("cmac update done. ret:%d\n", ret);
                 }
 
@@ -3161,20 +3157,18 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
                     /* Finalize CMAC operation */
                     len = req.outSz;
                     WH_DEBUG_SERVER_VERBOSE("cmac final len:%d\n", len);
-                    ret = wc_CmacFinal(ctx->crypto->algoCtx.cmac, out, &len);
+                    ret       = wc_CmacFinal(cmac, out, &len);
                     res.outSz = len;
                     res.keyId = WH_KEYID_ERASED;
                 }
                 else if (ret == 0) {
                     /* Not finalizing - return updated state to client */
-                    memcpy(res.resumeState.buffer,
-                           ctx->crypto->algoCtx.cmac->buffer, AES_BLOCK_SIZE);
-                    memcpy(res.resumeState.digest,
-                           ctx->crypto->algoCtx.cmac->digest, AES_BLOCK_SIZE);
-                    res.resumeState.bufferSz =
-                        ctx->crypto->algoCtx.cmac->bufferSz;
-                    res.resumeState.totalSz =
-                        ctx->crypto->algoCtx.cmac->totalSz;
+                    memcpy(res.resumeState.buffer, cmac->buffer,
+                           AES_BLOCK_SIZE);
+                    memcpy(res.resumeState.digest, cmac->digest,
+                           AES_BLOCK_SIZE);
+                    res.resumeState.bufferSz = cmac->bufferSz;
+                    res.resumeState.totalSz  = cmac->totalSz;
                     res.keyId = req.keyId;
                     res.outSz = 0;
                 }
@@ -5170,7 +5164,7 @@ static int _HandleCmacDma(whServerContext* ctx, uint16_t magic, uint16_t seq,
         case WC_CMAC_AES: {
             uint8_t tmpKey[AES_MAX_KEY_SIZE];
             word32  tmpKeyLen = 0;
-            Cmac*   cmac      = ctx->crypto->algoCtx.cmac;
+            Cmac    cmac[1];
 
             /* Attempt oneshot if input and output are both present */
             if (req.input.sz != 0 && req.outSz != 0) {
