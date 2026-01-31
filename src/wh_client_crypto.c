@@ -3686,8 +3686,8 @@ int wh_Client_Cmac(whClientContext* ctx, Cmac* cmac, CmacType type,
         } while (ret == WH_ERROR_NOTREADY);
         if (ret == WH_ERROR_OK) {
             /* Get response */
-            ret = _getCryptoResponse(dataPtr, WC_ALGO_TYPE_CMAC,
-                                     (uint8_t**)&res);
+            ret =
+                _getCryptoResponse(dataPtr, WC_ALGO_TYPE_CMAC, (uint8_t**)&res);
             /* wolfCrypt allows positive error codes on success in some
              * scenarios */
             if (ret >= 0) {

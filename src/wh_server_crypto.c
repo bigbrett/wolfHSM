@@ -2998,7 +2998,7 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
         return WH_ERROR_BADARGS;
     }
 
-    word32   len;
+    word32 len;
 
     /* Setup fixed size fields */
     uint8_t* in =
@@ -3169,8 +3169,8 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
                            AES_BLOCK_SIZE);
                     res.resumeState.bufferSz = cmac->bufferSz;
                     res.resumeState.totalSz  = cmac->totalSz;
-                    res.keyId = req.keyId;
-                    res.outSz = 0;
+                    res.keyId                = req.keyId;
+                    res.outSz                = 0;
                 }
             }
         } break;
@@ -3180,8 +3180,8 @@ static int _HandleCmac(whServerContext* ctx, uint16_t magic, uint16_t seq,
         ret = CRYPTOCB_UNAVAILABLE;
     }
     if (ret == 0) {
-        ret = wh_MessageCrypto_TranslateCmacResponse(magic, &res,
-                                                     cryptoDataOut);
+        ret =
+            wh_MessageCrypto_TranslateCmacResponse(magic, &res, cryptoDataOut);
         if (ret == 0) {
             *outSize = sizeof(res) + res.outSz;
         }

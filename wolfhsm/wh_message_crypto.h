@@ -824,23 +824,23 @@ typedef struct {
 
 /* CMAC Response */
 typedef struct {
-    uint32_t outSz; /* actual output MAC size */
-    uint16_t keyId; /* key ID (ERASED for non-HSM) */
+    uint32_t                  outSz; /* actual output MAC size */
+    uint16_t                  keyId; /* key ID (ERASED for non-HSM) */
     uint8_t  WH_PAD[2];
     whMessageCrypto_CmacState resumeState;
-    uint8_t  WH_PAD2[12]; /* pad to match request size */
+    uint8_t                   WH_PAD2[12]; /* pad to match request size */
     /* Data follows:
      * uint8_t out[outSz]
      */
 } whMessageCrypto_CmacResponse;
 
 WH_UTILS_STATIC_ASSERT(sizeof(whMessageCrypto_CmacRequest) ==
-                            sizeof(whMessageCrypto_CmacResponse),
-                        "CmacRequest and CmacResponse must be the same size");
+                           sizeof(whMessageCrypto_CmacResponse),
+                       "CmacRequest and CmacResponse must be the same size");
 
-int wh_MessageCrypto_TranslateCmacState(
-    uint16_t magic, const whMessageCrypto_CmacState* src,
-    whMessageCrypto_CmacState* dest);
+int wh_MessageCrypto_TranslateCmacState(uint16_t                         magic,
+                                        const whMessageCrypto_CmacState* src,
+                                        whMessageCrypto_CmacState*       dest);
 
 int wh_MessageCrypto_TranslateCmacRequest(
     uint16_t magic, const whMessageCrypto_CmacRequest* src,
