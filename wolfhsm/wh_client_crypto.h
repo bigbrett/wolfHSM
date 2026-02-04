@@ -65,6 +65,11 @@
  */
 int wh_Client_RngGenerate(whClientContext* ctx, uint8_t* out, uint32_t size);
 
+/** Async Request/Response for RNG (single chunk only) */
+int wh_Client_RngGenerateRequest(whClientContext* ctx, uint32_t size);
+int wh_Client_RngGenerateResponse(whClientContext* ctx, uint8_t* out,
+                                  uint32_t* out_size);
+
 #ifdef WOLFHSM_CFG_DMA
 /**
  * @brief Generate random bytes using DMA
@@ -210,6 +215,14 @@ int wh_Client_Curve25519SharedSecret(whClientContext* ctx,
         curve25519_key* priv_key, curve25519_key* pub_key,
         int endian, uint8_t* out, uint16_t *out_size);
 
+/** Async Request/Response for Curve25519 shared secret.
+ *  Keys must be pre-cached on server (key_id must not be erased). */
+int wh_Client_Curve25519SharedSecretRequest(whClientContext* ctx,
+                                            whKeyId          prv_key_id,
+                                            whKeyId pub_key_id, int endian);
+int wh_Client_Curve25519SharedSecretResponse(whClientContext* ctx, uint8_t* out,
+                                             uint16_t* out_size);
+
 #endif /* HAVE_CURVE25519 */
 
 #ifdef HAVE_ECC
@@ -261,17 +274,40 @@ int wh_Client_EccSharedSecret(whClientContext* ctx,
                                 ecc_key* priv_key, ecc_key* pub_key,
                                 uint8_t* out, uint16_t *out_size);
 
+/** Async Request/Response for ECC shared secret.
+ *  Keys must be pre-cached on server (key_id must not be erased). */
+int wh_Client_EccSharedSecretRequest(whClientContext* ctx, whKeyId prv_key_id,
+                                     whKeyId pub_key_id);
+int wh_Client_EccSharedSecretResponse(whClientContext* ctx, uint8_t* out,
+                                      uint16_t* out_size);
+
 /* TODO: Server generates signature of input hash */
 int wh_Client_EccSign(whClientContext* ctx,
         ecc_key* key,
         const uint8_t* hash, uint16_t hash_len,
         uint8_t* sig, uint16_t *inout_sig_len);
 
+/** Async Request/Response for ECC sign.
+ *  Key must be pre-cached on server (key_id must not be erased). */
+int wh_Client_EccSignRequest(whClientContext* ctx, whKeyId key_id,
+                             const uint8_t* hash, uint16_t hash_len);
+int wh_Client_EccSignResponse(whClientContext* ctx, uint8_t* sig,
+                              uint16_t* inout_sig_len);
+
 /* TODO: Server verifies the signature of the provided hash */
 int wh_Client_EccVerify(whClientContext* ctx, ecc_key* key,
         const uint8_t* sig, uint16_t sig_len,
         const uint8_t* hash, uint16_t hash_len,
         int *out_res);
+
+/** Async Request/Response for ECC verify.
+ *  Key must be pre-cached on server (key_id must not be erased). */
+int wh_Client_EccVerifyRequest(whClientContext* ctx, whKeyId key_id,
+                               int export_pub_key, const uint8_t* sig,
+                               uint16_t sig_len, const uint8_t* hash,
+                               uint16_t hash_len);
+int wh_Client_EccVerifyResponse(whClientContext* ctx, ecc_key* key,
+                                int* out_res);
 
 #endif /* HAVE_ECC */
 
@@ -322,6 +358,15 @@ int wh_Client_Ed25519Sign(whClientContext* ctx, ed25519_key* key,
                           const uint8_t* context, uint32_t contextLen,
                           uint8_t* sig, uint32_t* inout_sig_len);
 
+/** Async Request/Response for Ed25519 sign.
+ *  Key must be pre-cached on server (key_id must not be erased). */
+int wh_Client_Ed25519SignRequest(whClientContext* ctx, whKeyId key_id,
+                                 const uint8_t* msg, uint32_t msgLen,
+                                 uint8_t type, const uint8_t* context,
+                                 uint32_t contextLen);
+int wh_Client_Ed25519SignResponse(whClientContext* ctx, uint8_t* sig,
+                                  uint32_t* inout_sig_len);
+
 /**
  * @brief Verify a message signature using an Ed25519 key on the server.
  */
@@ -330,6 +375,15 @@ int wh_Client_Ed25519Verify(whClientContext* ctx, ed25519_key* key,
                             const uint8_t* msg, uint32_t msgLen, uint8_t type,
                             const uint8_t* context, uint32_t contextLen,
                             int* out_res);
+
+/** Async Request/Response for Ed25519 verify.
+ *  Key must be pre-cached on server (key_id must not be erased). */
+int wh_Client_Ed25519VerifyRequest(whClientContext* ctx, whKeyId key_id,
+                                   const uint8_t* sig, uint32_t sigLen,
+                                   const uint8_t* msg, uint32_t msgLen,
+                                   uint8_t type, const uint8_t* context,
+                                   uint32_t contextLen);
+int wh_Client_Ed25519VerifyResponse(whClientContext* ctx, int* out_res);
 
 #ifdef WOLFHSM_CFG_DMA
 /**
@@ -433,10 +487,22 @@ int wh_Client_RsaFunction(whClientContext* ctx,
         const uint8_t* in, uint16_t in_len,
         uint8_t* out, uint16_t *inout_out_len);
 
+/** Async Request/Response for RSA function.
+ *  Key must be pre-cached on server (key_id must not be erased). */
+int wh_Client_RsaFunctionRequest(whClientContext* ctx, whKeyId key_id,
+                                 int rsa_type, const uint8_t* in,
+                                 uint16_t in_len, uint16_t out_len);
+int wh_Client_RsaFunctionResponse(whClientContext* ctx, uint8_t* out,
+                                  uint16_t* inout_out_len);
+
 /* TODO: Request server to get the RSA size */
 int wh_Client_RsaGetSize(whClientContext* ctx,
         const RsaKey* key, int* out_size);
 
+/** Async Request/Response for RSA get size.
+ *  Key must be pre-cached on server (key_id must not be erased). */
+int wh_Client_RsaGetSizeRequest(whClientContext* ctx, whKeyId key_id);
+int wh_Client_RsaGetSizeResponse(whClientContext* ctx, int* out_size);
 
 #endif /* !NO_RSA */
 
@@ -600,16 +666,34 @@ int wh_Client_AesGetKeyId(Aes* key, whNvmId* outId);
 #ifdef WOLFSSL_AES_COUNTER
 int wh_Client_AesCtr(whClientContext* ctx, Aes* aes, int enc, const uint8_t* in,
                      uint32_t len, uint8_t* out);
+
+/** Async Request/Response for AES-CTR */
+int wh_Client_AesCtrRequest(whClientContext* ctx, Aes* aes, int enc,
+                            const uint8_t* in, uint32_t len);
+int wh_Client_AesCtrResponse(whClientContext* ctx, Aes* aes, int enc,
+                             uint32_t len, uint8_t* out);
 #endif /* WOLFSSL_AES_COUNTER */
 #ifdef HAVE_AES_ECB
 int wh_Client_AesEcb(whClientContext* ctx, Aes* aes, int enc, const uint8_t* in,
                      uint32_t len, uint8_t* out);
+
+/** Async Request/Response for AES-ECB */
+int wh_Client_AesEcbRequest(whClientContext* ctx, Aes* aes, int enc,
+                            const uint8_t* in, uint32_t len);
+int wh_Client_AesEcbResponse(whClientContext* ctx, Aes* aes, int enc,
+                             uint32_t len, uint8_t* out);
 #endif /* HAVE_AES_ECB */
 #ifdef HAVE_AES_CBC
 int wh_Client_AesCbc(whClientContext* ctx,
         Aes* aes, int enc,
         const uint8_t* in, uint32_t len,
         uint8_t* out);
+
+/** Async Request/Response for AES-CBC */
+int wh_Client_AesCbcRequest(whClientContext* ctx, Aes* aes, int enc,
+                            const uint8_t* in, uint32_t len);
+int wh_Client_AesCbcResponse(whClientContext* ctx, Aes* aes, int enc,
+                             uint32_t len, uint8_t* out);
 #endif /* HAVE_AES_CBC */
 
 #ifdef HAVE_AESGCM
@@ -621,6 +705,16 @@ int wh_Client_AesGcm(whClientContext* ctx,
         const uint8_t* authin, uint32_t authin_len,
         const uint8_t* dec_tag, uint8_t* enc_tag, uint32_t tag_len,
         uint8_t* out);
+
+/** Async Request/Response for AES-GCM */
+int wh_Client_AesGcmRequest(whClientContext* ctx, Aes* aes, int enc,
+                            const uint8_t* in, uint32_t len, const uint8_t* iv,
+                            uint32_t iv_len, const uint8_t* authin,
+                            uint32_t authin_len, const uint8_t* dec_tag,
+                            uint32_t tag_len);
+int wh_Client_AesGcmResponse(whClientContext* ctx, Aes* aes, int enc,
+                             uint32_t len, uint8_t* out, uint8_t* enc_tag,
+                             uint32_t tag_len);
 
 #ifdef WOLFHSM_CFG_DMA
 /**
@@ -682,6 +776,14 @@ int wh_Client_AesGcmDma(whClientContext* ctx, Aes* aes, int enc,
 int wh_Client_Cmac(whClientContext* ctx, Cmac* cmac, CmacType type,
                    const uint8_t* key, uint32_t keyLen, const uint8_t* in,
                    uint32_t inLen, uint8_t* outMac, uint32_t* outMacLen);
+
+/** Async Request/Response for CMAC */
+int wh_Client_CmacRequest(whClientContext* ctx, Cmac* cmac, CmacType type,
+                          const uint8_t* key, uint32_t keyLen,
+                          const uint8_t* in, uint32_t inLen,
+                          uint32_t outMacLen);
+int wh_Client_CmacResponse(whClientContext* ctx, Cmac* cmac, uint8_t* outMac,
+                           uint32_t* outMacLen);
 
 /**
  * @brief Handle cancelable CMAC response.
@@ -993,6 +1095,13 @@ int wh_Client_MlDsaMakeCacheKey(whClientContext* ctx, int size, int level,
 int wh_Client_MlDsaSign(whClientContext* ctx, const byte* in, word32 in_len,
                         byte* out, word32* out_len, MlDsaKey* key);
 
+/** Async Request/Response for ML-DSA sign.
+ *  Key must be pre-cached on server (key_id must not be erased). */
+int wh_Client_MlDsaSignRequest(whClientContext* ctx, whKeyId key_id, int level,
+                               const byte* in, word32 in_len);
+int wh_Client_MlDsaSignResponse(whClientContext* ctx, byte* out,
+                                word32* inout_len);
+
 /**
  * @brief Verify a ML-DSA signature.
  *
@@ -1010,6 +1119,13 @@ int wh_Client_MlDsaSign(whClientContext* ctx, const byte* in, word32 in_len,
 int wh_Client_MlDsaVerify(whClientContext* ctx, const byte* sig, word32 sig_len,
                           const byte* msg, word32 msg_len, int* res,
                           MlDsaKey* key);
+
+/** Async Request/Response for ML-DSA verify.
+ *  Key must be pre-cached on server (key_id must not be erased). */
+int wh_Client_MlDsaVerifyRequest(whClientContext* ctx, whKeyId key_id,
+                                 int level, const byte* sig, word32 sig_len,
+                                 const byte* msg, word32 msg_len);
+int wh_Client_MlDsaVerifyResponse(whClientContext* ctx, int* out_res);
 
 /**
  * @brief Check a ML-DSA private key.
