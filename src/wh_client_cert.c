@@ -958,6 +958,170 @@ int wh_Client_CertVerifyAcertDma(whClientContext* c, const void* cert,
 
 #endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER_ACERT */
 
+#ifdef WOLFHSM_CFG_KEYWRAP
+
+int wh_Client_CertWrapRequest(whClientContext*   ctx,
+                              enum wc_CipherType cipherType,
+                              whKeyId serverKeyId, const uint8_t* cert,
+                              uint32_t certSz, whNvmMetadata* meta)
+{
+    if ((ctx == NULL) || (cert == NULL) || (certSz == 0) || (meta == NULL) ||
+        (certSz > UINT16_MAX)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    meta->len = certSz;
+
+    return wh_Client_KeyWrapRequest(ctx, cipherType, serverKeyId, (void*)cert,
+                                    (uint16_t)certSz, meta);
+}
+
+int wh_Client_CertWrapResponse(whClientContext*   ctx,
+                               enum wc_CipherType cipherType,
+                               uint8_t* wrappedOut, uint16_t* inout_wrappedSz)
+{
+    if ((ctx == NULL) || (wrappedOut == NULL) || (inout_wrappedSz == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    return wh_Client_KeyWrapResponse(ctx, cipherType, wrappedOut,
+                                     inout_wrappedSz);
+}
+
+int wh_Client_CertWrap(whClientContext* ctx, enum wc_CipherType cipherType,
+                       whKeyId serverKeyId, const uint8_t* cert,
+                       uint32_t certSz, whNvmMetadata* meta,
+                       uint8_t* wrappedOut, uint16_t* inout_wrappedSz)
+{
+    int rc;
+
+    if ((ctx == NULL) || (cert == NULL) || (certSz == 0) || (meta == NULL) ||
+        (wrappedOut == NULL) || (inout_wrappedSz == NULL) ||
+        (certSz > UINT16_MAX)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    rc = wh_Client_CertWrapRequest(ctx, cipherType, serverKeyId, cert, certSz,
+                                   meta);
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
+
+    do {
+        rc = wh_Client_CertWrapResponse(ctx, cipherType, wrappedOut,
+                                        inout_wrappedSz);
+    } while (rc == WH_ERROR_NOTREADY);
+
+    return rc;
+}
+
+int wh_Client_CertUnwrapAndExportRequest(whClientContext*   ctx,
+                                         enum wc_CipherType cipherType,
+                                         whKeyId            serverKeyId,
+                                         const uint8_t*     wrappedCert,
+                                         uint16_t           wrappedCertSz)
+{
+    if ((ctx == NULL) || (wrappedCert == NULL) || (wrappedCertSz == 0)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    return wh_Client_KeyUnwrapAndExportRequest(
+        ctx, cipherType, serverKeyId, (void*)wrappedCert, wrappedCertSz);
+}
+
+int wh_Client_CertUnwrapAndExportResponse(whClientContext*   ctx,
+                                          enum wc_CipherType cipherType,
+                                          whNvmMetadata*     metadataOut,
+                                          uint8_t*           certOut,
+                                          uint16_t*          inout_certSz)
+{
+    if ((ctx == NULL) || (certOut == NULL) || (inout_certSz == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    return wh_Client_KeyUnwrapAndExportResponse(ctx, cipherType, metadataOut,
+                                                certOut, inout_certSz);
+}
+
+int wh_Client_CertUnwrapAndExport(
+    whClientContext* ctx, enum wc_CipherType cipherType, whKeyId serverKeyId,
+    const uint8_t* wrappedCert, uint16_t wrappedCertSz,
+    whNvmMetadata* metadataOut, uint8_t* certOut, uint16_t* inout_certSz)
+{
+    int rc;
+
+    if ((ctx == NULL) || (wrappedCert == NULL) || (wrappedCertSz == 0) ||
+        (certOut == NULL) || (inout_certSz == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    rc = wh_Client_CertUnwrapAndExportRequest(ctx, cipherType, serverKeyId,
+                                              wrappedCert, wrappedCertSz);
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
+
+    do {
+        rc = wh_Client_CertUnwrapAndExportResponse(ctx, cipherType, metadataOut,
+                                                   certOut, inout_certSz);
+    } while (rc == WH_ERROR_NOTREADY);
+
+    return rc;
+}
+
+int wh_Client_CertUnwrapAndCacheRequest(whClientContext*   ctx,
+                                        enum wc_CipherType cipherType,
+                                        whKeyId            serverKeyId,
+                                        const uint8_t*     wrappedCert,
+                                        uint16_t           wrappedCertSz)
+{
+    if ((ctx == NULL) || (wrappedCert == NULL) || (wrappedCertSz == 0)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    return wh_Client_KeyUnwrapAndCacheRequest(
+        ctx, cipherType, serverKeyId, (void*)wrappedCert, wrappedCertSz);
+}
+
+int wh_Client_CertUnwrapAndCacheResponse(whClientContext*   ctx,
+                                         enum wc_CipherType cipherType,
+                                         whKeyId*           out_certId)
+{
+    if ((ctx == NULL) || (out_certId == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    return wh_Client_KeyUnwrapAndCacheResponse(ctx, cipherType, out_certId);
+}
+
+int wh_Client_CertUnwrapAndCache(whClientContext*   ctx,
+                                 enum wc_CipherType cipherType,
+                                 whKeyId            serverKeyId,
+                                 const uint8_t*     wrappedCert,
+                                 uint16_t wrappedCertSz, whKeyId* out_certId)
+{
+    int rc;
+
+    if ((ctx == NULL) || (wrappedCert == NULL) || (wrappedCertSz == 0) ||
+        (out_certId == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    rc = wh_Client_CertUnwrapAndCacheRequest(ctx, cipherType, serverKeyId,
+                                             wrappedCert, wrappedCertSz);
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
+
+    do {
+        rc = wh_Client_CertUnwrapAndCacheResponse(ctx, cipherType, out_certId);
+    } while (rc == WH_ERROR_NOTREADY);
+
+    return rc;
+}
+
+#endif /* WOLFHSM_CFG_KEYWRAP */
+
 #endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER && !WOLFHSM_CFG_NO_CRYPTO */
 
 #endif /* WOLFHSM_CFG_ENABLE_CLIENT */

@@ -51,6 +51,13 @@
 
 #ifdef WOLFHSM_CFG_ENABLE_CLIENT
 static int whTest_CertNonExportable(whClientContext* client);
+#ifdef WOLFHSM_CFG_KEYWRAP
+static int whTest_CertCacheVerify(whClientContext* client);
+static int whTest_CertCacheReadTrusted(whClientContext* client);
+#if defined(WOLFHSM_CFG_DMA)
+static int whTest_CertCacheVerifyDma(whClientContext* client);
+#endif
+#endif
 #endif
 
 #define FLASH_RAM_SIZE (1024 * 1024) /* 1MB */
@@ -259,6 +266,13 @@ int whTest_CertClient(whClientContext* client)
     /* Test non-exportable flag enforcement */
     WH_TEST_RETURN_ON_FAIL(whTest_CertNonExportable(client));
 
+#ifdef WOLFHSM_CFG_KEYWRAP
+    /* Test cache-based cert verification (wrapped cert in cache instead of
+     * NVM) */
+    WH_TEST_RETURN_ON_FAIL(whTest_CertCacheVerify(client));
+    WH_TEST_RETURN_ON_FAIL(whTest_CertCacheReadTrusted(client));
+#endif
+
     WH_TEST_PRINT("Certificate client test completed successfully\n");
 
     return rc;
@@ -442,6 +456,11 @@ int whTest_CertClientDma_ClientServerTestInternal(whClientContext* client)
         wh_Client_CertEraseTrusted(client, rootCertB_id, &out_rc));
     WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_OK);
 
+#ifdef WOLFHSM_CFG_KEYWRAP
+    /* Test DMA verify and ReadTrusted with wrapped/cached root cert */
+    WH_TEST_RETURN_ON_FAIL(whTest_CertCacheVerifyDma(client));
+#endif
+
     WH_TEST_PRINT("Certificate client DMA test completed successfully\n");
 
     return rc;
@@ -512,6 +531,225 @@ int whTest_CertClientAcertDma_ClientServerTestInternal(whClientContext* client)
 #endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER_ACERT */
 
 #endif /* WOLFHSM_CFG_DMA */
+
+#if defined(WOLFHSM_CFG_DMA) && defined(WOLFHSM_CFG_KEYWRAP)
+/* Test DMA verify and DMA ReadTrusted with a wrapped/cached root cert. This
+ * exercises the conditional-locking logic for wrapped certs in the DMA
+ * handlers. */
+static int whTest_CertCacheVerifyDma(whClientContext* client)
+{
+    int      rc     = WH_ERROR_OK;
+    int32_t  out_rc = 0;
+    whKeyId  kekId  = 12;
+    uint8_t  wrappedCert[2048];
+    uint16_t wrappedCertSz = sizeof(wrappedCert);
+    whKeyId  cachedCertId  = WH_KEYID_ERASED;
+    uint8_t  readBackCert[2048];
+
+    /* AES-256 key for wrapping */
+    uint8_t kek[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+                     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+                     0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20};
+
+    WH_TEST_PRINT("Starting DMA cache-based cert verification test...\n");
+
+    /* Provision the wrapping key (KEK) on the server (non-DMA, no DMA wrap
+     * variant exists) */
+    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyCache(
+        client, WH_NVM_FLAGS_USAGE_WRAP, NULL, 0, kek, sizeof(kek), &kekId));
+
+    /* Wrap the root CA cert */
+    whNvmMetadata certMeta = {0};
+    certMeta.id = WH_CLIENT_KEYID_MAKE_WRAPPED_META(client->comm->client_id, 7);
+    certMeta.flags  = WH_NVM_FLAGS_USAGE_ANY;
+    certMeta.access = WH_NVM_ACCESS_ANY;
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertWrap(
+        client, WC_CIPHER_AES_GCM, kekId, ROOT_A_CERT, ROOT_A_CERT_len,
+        &certMeta, wrappedCert, &wrappedCertSz));
+
+    /* Unwrap and cache the root cert on the server */
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertUnwrapAndCache(
+        client, WC_CIPHER_AES_GCM, kekId, wrappedCert, wrappedCertSz,
+        &cachedCertId));
+
+    /* DMA Verify intermediate cert against the cached root cert */
+    WH_TEST_PRINT("DMA verifying intermediate cert against cached root...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertVerifyDma(
+        client, INTERMEDIATE_A_CERT, INTERMEDIATE_A_CERT_len,
+        WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId), &out_rc));
+    WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_OK);
+
+    /* DMA Verify a full chain against the cached root cert */
+    WH_TEST_PRINT("DMA verifying certificate chain against cached root...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertVerifyDma(
+        client, RAW_CERT_CHAIN_A, RAW_CERT_CHAIN_A_len,
+        WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId), &out_rc));
+    WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_OK);
+
+    /* DMA Verify that a mismatched chain fails against the cached root */
+    WH_TEST_PRINT("DMA verifying mismatched chain against cached root (should "
+                  "fail)...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertVerifyDma(
+        client, RAW_CERT_CHAIN_B, RAW_CERT_CHAIN_B_len,
+        WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId), &out_rc));
+    WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_CERT_VERIFY);
+
+    /* DMA ReadTrusted of cached cert */
+    WH_TEST_PRINT("DMA reading back cached cert via CertReadTrustedDma...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertReadTrustedDma(
+        client, WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId), readBackCert,
+        sizeof(readBackCert), &out_rc));
+    WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(0 ==
+                          memcmp(readBackCert, ROOT_A_CERT, ROOT_A_CERT_len));
+
+    /* Cleanup: evict cached cert and KEK */
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_KeyEvict(client, WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId)));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyEvict(client, kekId));
+
+    WH_TEST_PRINT(
+        "DMA cache-based cert verification test completed successfully\n");
+    return rc;
+}
+#endif /* WOLFHSM_CFG_DMA && WOLFHSM_CFG_KEYWRAP */
+
+#ifdef WOLFHSM_CFG_KEYWRAP
+/* Test certificate verification using a wrapped/cached root cert instead of
+ * NVM. This validates the cache-aware path in wh_Server_CertReadTrusted and
+ * the conditional NVM locking in the handlers. */
+static int whTest_CertCacheVerify(whClientContext* client)
+{
+    int      rc     = WH_ERROR_OK;
+    int32_t  out_rc = 0;
+    whKeyId  kekId  = 10;
+    uint8_t  wrappedCert[2048];
+    uint16_t wrappedCertSz = sizeof(wrappedCert);
+    whKeyId  cachedCertId  = WH_KEYID_ERASED;
+
+    /* AES-256 key for wrapping */
+    uint8_t kek[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+                     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+                     0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20};
+
+    WH_TEST_PRINT("Starting cache-based cert verification test...\n");
+
+    /* Provision the wrapping key (KEK) on the server */
+    WH_TEST_PRINT("Provisioning wrapping key on server...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyCache(
+        client, WH_NVM_FLAGS_USAGE_WRAP, NULL, 0, kek, sizeof(kek), &kekId));
+
+    /* Wrap the root CA cert for client-side storage.
+     * certMeta.id must have WH_KEYTYPE_WRAPPED set in metadata. */
+    whNvmMetadata certMeta = {0};
+    certMeta.id = WH_CLIENT_KEYID_MAKE_WRAPPED_META(client->comm->client_id, 5);
+    certMeta.flags  = WH_NVM_FLAGS_USAGE_ANY;
+    certMeta.access = WH_NVM_ACCESS_ANY;
+    WH_TEST_PRINT("Wrapping root certificate...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertWrap(
+        client, WC_CIPHER_AES_GCM, kekId, ROOT_A_CERT, ROOT_A_CERT_len,
+        &certMeta, wrappedCert, &wrappedCertSz));
+
+    /* Unwrap and cache the root cert on the server */
+    WH_TEST_PRINT("Unwrapping and caching root certificate on server...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertUnwrapAndCache(
+        client, WC_CIPHER_AES_GCM, kekId, wrappedCert, wrappedCertSz,
+        &cachedCertId));
+
+    /* Verify intermediate cert against the cached root cert.
+     * Must mark the cachedCertId as wrapped so the server routes to cache */
+    WH_TEST_PRINT("Verifying intermediate cert against cached root...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertVerify(
+        client, INTERMEDIATE_A_CERT, INTERMEDIATE_A_CERT_len,
+        WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId), &out_rc));
+    WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_OK);
+
+    /* Verify a full chain against the cached root cert */
+    WH_TEST_PRINT("Verifying certificate chain against cached root...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertVerify(
+        client, RAW_CERT_CHAIN_A, RAW_CERT_CHAIN_A_len,
+        WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId), &out_rc));
+    WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_OK);
+
+    /* Verify that a mismatched chain fails against the cached root */
+    WH_TEST_PRINT(
+        "Verifying mismatched chain against cached root (should fail)...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertVerify(
+        client, RAW_CERT_CHAIN_B, RAW_CERT_CHAIN_B_len,
+        WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId), &out_rc));
+    WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_CERT_VERIFY);
+
+    /* Cleanup: evict cached cert and KEK */
+    WH_TEST_PRINT("Cleaning up cached cert and KEK...\n");
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_KeyEvict(client, WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId)));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyEvict(client, kekId));
+
+    WH_TEST_PRINT(
+        "Cache-based cert verification test completed successfully\n");
+    return rc;
+}
+
+/* Test reading back a wrapped/cached cert via CertReadTrusted. This exercises
+ * the cache path in the READTRUSTED handler. */
+static int whTest_CertCacheReadTrusted(whClientContext* client)
+{
+    int      rc     = WH_ERROR_OK;
+    int32_t  out_rc = 0;
+    whKeyId  kekId  = 11;
+    uint8_t  wrappedCert[2048];
+    uint16_t wrappedCertSz = sizeof(wrappedCert);
+    whKeyId  cachedCertId  = WH_KEYID_ERASED;
+    uint8_t  readBackCert[2048];
+    uint32_t readBackCertLen = sizeof(readBackCert);
+
+    /* AES-256 key for wrapping */
+    uint8_t kek[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+                     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+                     0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20};
+
+    WH_TEST_PRINT("Starting cache-based cert ReadTrusted test...\n");
+
+    /* Provision the wrapping key (KEK) on the server */
+    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyCache(
+        client, WH_NVM_FLAGS_USAGE_WRAP, NULL, 0, kek, sizeof(kek), &kekId));
+
+    /* Wrap the root CA cert */
+    whNvmMetadata certMeta = {0};
+    certMeta.id = WH_CLIENT_KEYID_MAKE_WRAPPED_META(client->comm->client_id, 6);
+    certMeta.flags  = WH_NVM_FLAGS_USAGE_ANY;
+    certMeta.access = WH_NVM_ACCESS_ANY;
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertWrap(
+        client, WC_CIPHER_AES_GCM, kekId, ROOT_A_CERT, ROOT_A_CERT_len,
+        &certMeta, wrappedCert, &wrappedCertSz));
+
+    /* Unwrap and cache the root cert on the server */
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertUnwrapAndCache(
+        client, WC_CIPHER_AES_GCM, kekId, wrappedCert, wrappedCertSz,
+        &cachedCertId));
+
+    /* Read back the cached cert via CertReadTrusted */
+    WH_TEST_PRINT("Reading back cached cert via CertReadTrusted...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CertReadTrusted(
+        client, WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId), readBackCert,
+        &readBackCertLen, &out_rc));
+    WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(readBackCertLen == ROOT_A_CERT_len);
+    WH_TEST_ASSERT_RETURN(0 ==
+                          memcmp(readBackCert, ROOT_A_CERT, ROOT_A_CERT_len));
+
+    /* Cleanup: evict cached cert and KEK */
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_KeyEvict(client, WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId)));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyEvict(client, kekId));
+
+    WH_TEST_PRINT("Cache-based cert ReadTrusted test completed successfully\n");
+    return rc;
+}
+#endif /* WOLFHSM_CFG_KEYWRAP */
 
 static int whTest_CertNonExportable(whClientContext* client)
 {

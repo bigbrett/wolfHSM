@@ -30,6 +30,7 @@
 
 #include "wolfhsm/wh_server.h"
 #include "wolfhsm/wh_nvm.h"
+#include "wolfhsm/wh_keyid.h"
 
 /**
  * @brief Initialize the certificate manager
@@ -61,9 +62,12 @@ int wh_Server_CertAddTrusted(whServerContext* server, whNvmId id,
 int wh_Server_CertEraseTrusted(whServerContext* server, whNvmId id);
 
 /**
- * @brief Get a trusted certificate from NVM storage
+ * @brief Get a trusted certificate from NVM storage or keystore cache
  * @param server The server context
- * @param id The NVM ID of the certificate to read
+ * @param id The key ID of the certificate to read. If the key type is
+ * WH_KEYTYPE_NVM, the certificate is read from NVM. Otherwise, the certificate
+ * is read from the keystore cache (e.g. for wrapped certs cached via
+ * wh_Client_KeyUnwrapAndCache).
  * @param cert Buffer to store the certificate data
  * @param inout_cert_len On input, size of cert buffer. On output, actual cert
  * size
@@ -71,7 +75,7 @@ int wh_Server_CertEraseTrusted(whServerContext* server, whNvmId id);
  * large for the buffer, WH_ERROR_BUFFER_SIZE will be returned and
  * inout_cert_len will be updated to the actual certificate size.
  */
-int wh_Server_CertReadTrusted(whServerContext* server, whNvmId id,
+int wh_Server_CertReadTrusted(whServerContext* server, whKeyId id,
                               uint8_t* cert, uint32_t* inout_cert_len);
 
 /**
@@ -79,7 +83,9 @@ int wh_Server_CertReadTrusted(whServerContext* server, whNvmId id,
  * @param server The server context
  * @param cert The certificate data to verify
  * @param cert_len Length of the certificate data
- * @param trustedRootNvmId NVM ID of the trusted root certificate
+ * @param trustedRootId Key ID of the trusted root certificate. Can be an NVM ID
+ * (WH_KEYTYPE_NVM) or a cached key ID (e.g. WH_KEYTYPE_WRAPPED from
+ * wh_Client_KeyUnwrapAndCache).
  * @param flags Flags for the certificate verification (see WH_CERT_FLAGS_* in
  * wh_common.h)
  * @param cachedKeyFlags NVM usage flags to apply when caching the leaf public
@@ -91,7 +97,7 @@ int wh_Server_CertReadTrusted(whServerContext* server, whNvmId id,
  * @return WH_ERROR_OK on success, error code on failure
  */
 int wh_Server_CertVerify(whServerContext* server, const uint8_t* cert,
-                         uint32_t cert_len, whNvmId trustedRootNvmId,
+                         uint32_t cert_len, whKeyId trustedRootId,
                          whCertFlags flags, whNvmFlags cachedKeyFlags,
                          whKeyId* inout_keyId);
 
@@ -105,12 +111,12 @@ int wh_Server_CertVerify(whServerContext* server, const uint8_t* cert,
  * @param[in] server Pointer to the server context
  * @param[in] cert Pointer to the attribute certificate data to verify
  * @param[in] cert_len Length of the certificate data in bytes
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
- * against
+ * @param[in] trustedRootId Key ID of the trusted root certificate to verify
+ * against. Can be an NVM ID or a cached key ID.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int wh_Server_CertVerifyAcert(whServerContext* server, const uint8_t* cert,
-                              uint32_t cert_len, whNvmId trustedRootNvmId);
+                              uint32_t cert_len, whKeyId trustedRootId);
 #endif
 
 /**

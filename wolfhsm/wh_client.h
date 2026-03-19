@@ -2557,6 +2557,201 @@ int wh_Client_CertVerifyAcertDma(whClientContext* c, const void* cert,
 
 #endif /* WOLFHSM_CFG_DMA */
 
+#ifdef WOLFHSM_CFG_KEYWRAP
+
+/**
+ * @brief Wrap a certificate for client-side storage
+ *
+ * Convenience wrapper around wh_Client_KeyWrap that sets up the appropriate
+ * metadata for wrapping a certificate. The wrapped blob can be stored
+ * client-side and later unwrapped/cached on the server for verification.
+ * This function will block until the entire operation completes or an error
+ * occurs.
+ *
+ * @param[in] ctx Pointer to the client context.
+ * @param[in] cipherType Cipher used to wrap the certificate.
+ * @param[in] serverKeyId Key ID of the wrapping key (KEK) on the server.
+ * @param[in] cert Pointer to the certificate data to wrap.
+ * @param[in] certSz Size of the certificate data in bytes.
+ * @param[in] meta Pointer to caller-populated NVM metadata. Caller must set
+ *  id (use WH_CLIENT_KEYID_MAKE_WRAPPED_META), flags, access, and optionally
+ *  label. The len field is set internally from certSz.
+ * @param[out] wrappedOut Buffer to store the wrapped certificate blob.
+ * @param[in,out] inout_wrappedSz IN: size of wrappedOut buffer.
+ *  OUT: actual size of the wrapped blob.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int wh_Client_CertWrap(whClientContext* ctx, enum wc_CipherType cipherType,
+                       whKeyId serverKeyId, const uint8_t* cert,
+                       uint32_t certSz, whNvmMetadata* meta,
+                       uint8_t* wrappedOut, uint16_t* inout_wrappedSz);
+
+/**
+ * @brief Sends a certificate wrap request to the server
+ *
+ * This function prepares and sends a certificate wrap request to the server.
+ * This function does not block; it returns immediately after sending the
+ * request.
+ *
+ * @param[in] ctx Pointer to the client context.
+ * @param[in] cipherType Cipher used to wrap the certificate.
+ * @param[in] serverKeyId Key ID of the wrapping key (KEK) on the server.
+ * @param[in] cert Pointer to the certificate data to wrap.
+ * @param[in] certSz Size of the certificate data in bytes.
+ * @param[in] meta Pointer to caller-populated NVM metadata. Caller must set
+ *  id (use WH_CLIENT_KEYID_MAKE_WRAPPED_META), flags, access, and optionally
+ *  label. The len field is set internally from certSz.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int wh_Client_CertWrapRequest(whClientContext*   ctx,
+                              enum wc_CipherType cipherType,
+                              whKeyId serverKeyId, const uint8_t* cert,
+                              uint32_t certSz, whNvmMetadata* meta);
+
+/**
+ * @brief Receives a certificate wrap response from the server
+ *
+ * This function attempts to process a certificate wrap response message from
+ * the server. This function does not block; it returns WH_ERROR_NOTREADY if a
+ * response has not been received.
+ *
+ * @param[in] ctx Pointer to the client context.
+ * @param[in] cipherType Cipher used to wrap the certificate.
+ * @param[out] wrappedOut Buffer to store the wrapped certificate blob.
+ * @param[in,out] inout_wrappedSz IN: size of wrappedOut buffer.
+ *  OUT: actual size of the wrapped blob.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int wh_Client_CertWrapResponse(whClientContext*   ctx,
+                               enum wc_CipherType cipherType,
+                               uint8_t* wrappedOut, uint16_t* inout_wrappedSz);
+
+/**
+ * @brief Unwrap a wrapped certificate and export it to the client
+ *
+ * Convenience wrapper around wh_Client_KeyUnwrapAndExport. This function will
+ * block until the entire operation completes or an error occurs.
+ *
+ * @param[in] ctx Pointer to the client context.
+ * @param[in] cipherType Cipher used when unwrapping the certificate.
+ * @param[in] serverKeyId Key ID of the wrapping key (KEK) on the server.
+ * @param[in] wrappedCert Pointer to the wrapped certificate blob.
+ * @param[in] wrappedCertSz Size of the wrapped certificate blob in bytes.
+ * @param[out] metadataOut Pointer to store the unwrapped certificate metadata.
+ * @param[out] certOut Pointer to store the unwrapped certificate.
+ * @param[in,out] inout_certSz IN: size of certOut buffer.
+ *  OUT: actual size of the unwrapped certificate.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int wh_Client_CertUnwrapAndExport(
+    whClientContext* ctx, enum wc_CipherType cipherType, whKeyId serverKeyId,
+    const uint8_t* wrappedCert, uint16_t wrappedCertSz,
+    whNvmMetadata* metadataOut, uint8_t* certOut, uint16_t* inout_certSz);
+
+/**
+ * @brief Sends a certificate unwrap-and-export request to the server
+ *
+ * This function prepares and sends a certificate unwrap-and-export request to
+ * the server. This function does not block; it returns immediately after
+ * sending the request.
+ *
+ * @param[in] ctx Pointer to the client context.
+ * @param[in] cipherType Cipher used when unwrapping the certificate.
+ * @param[in] serverKeyId Key ID of the wrapping key (KEK) on the server.
+ * @param[in] wrappedCert Pointer to the wrapped certificate blob.
+ * @param[in] wrappedCertSz Size of the wrapped certificate blob in bytes.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int wh_Client_CertUnwrapAndExportRequest(whClientContext*   ctx,
+                                         enum wc_CipherType cipherType,
+                                         whKeyId            serverKeyId,
+                                         const uint8_t*     wrappedCert,
+                                         uint16_t           wrappedCertSz);
+
+/**
+ * @brief Receives a certificate unwrap-and-export response from the server
+ *
+ * This function attempts to process a certificate unwrap-and-export response
+ * message from the server. This function does not block; it returns
+ * WH_ERROR_NOTREADY if a response has not been received.
+ *
+ * @param[in] ctx Pointer to the client context.
+ * @param[in] cipherType Cipher used when unwrapping the certificate.
+ * @param[out] metadataOut Pointer to store the unwrapped certificate metadata.
+ * @param[out] certOut Pointer to store the unwrapped certificate.
+ * @param[in,out] inout_certSz IN: size of certOut buffer.
+ *  OUT: actual size of the unwrapped certificate.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int wh_Client_CertUnwrapAndExportResponse(whClientContext*   ctx,
+                                          enum wc_CipherType cipherType,
+                                          whNvmMetadata*     metadataOut,
+                                          uint8_t*           certOut,
+                                          uint16_t*          inout_certSz);
+
+/**
+ * @brief Unwrap a wrapped certificate and cache it on the server
+ *
+ * Convenience wrapper around wh_Client_KeyUnwrapAndCache. After this call,
+ * the certificate is cached on the server and can be used as the trusted root
+ * in wh_Client_CertVerify by passing WH_CLIENT_KEYID_MAKE_WRAPPED(*out_certId)
+ * as the trustedRootNvmId parameter. This function will block until the entire
+ * operation completes or an error occurs.
+ *
+ * @param[in] ctx Pointer to the client context.
+ * @param[in] cipherType Cipher used when unwrapping the certificate.
+ * @param[in] serverKeyId Key ID of the wrapping key (KEK) on the server.
+ * @param[in] wrappedCert Pointer to the wrapped certificate blob.
+ * @param[in] wrappedCertSz Size of the wrapped certificate blob in bytes.
+ * @param[out] out_certId Pointer to store the cached cert's key ID. Use
+ *  WH_CLIENT_KEYID_MAKE_WRAPPED(*out_certId) when passing to cert verify.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int wh_Client_CertUnwrapAndCache(whClientContext*   ctx,
+                                 enum wc_CipherType cipherType,
+                                 whKeyId            serverKeyId,
+                                 const uint8_t*     wrappedCert,
+                                 uint16_t wrappedCertSz, whKeyId* out_certId);
+
+/**
+ * @brief Sends a certificate unwrap-and-cache request to the server
+ *
+ * This function prepares and sends a certificate unwrap-and-cache request to
+ * the server. This function does not block; it returns immediately after
+ * sending the request.
+ *
+ * @param[in] ctx Pointer to the client context.
+ * @param[in] cipherType Cipher used when unwrapping the certificate.
+ * @param[in] serverKeyId Key ID of the wrapping key (KEK) on the server.
+ * @param[in] wrappedCert Pointer to the wrapped certificate blob.
+ * @param[in] wrappedCertSz Size of the wrapped certificate blob in bytes.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int wh_Client_CertUnwrapAndCacheRequest(whClientContext*   ctx,
+                                        enum wc_CipherType cipherType,
+                                        whKeyId            serverKeyId,
+                                        const uint8_t*     wrappedCert,
+                                        uint16_t           wrappedCertSz);
+
+/**
+ * @brief Receives a certificate unwrap-and-cache response from the server
+ *
+ * This function attempts to process a certificate unwrap-and-cache response
+ * message from the server. This function does not block; it returns
+ * WH_ERROR_NOTREADY if a response has not been received.
+ *
+ * @param[in] ctx Pointer to the client context.
+ * @param[in] cipherType Cipher used when unwrapping the certificate.
+ * @param[out] out_certId Pointer to store the cached cert's key ID. Use
+ *  WH_CLIENT_KEYID_MAKE_WRAPPED(*out_certId) when passing to cert verify.
+ * @return int Returns 0 on success, or a negative error code on failure.
+ */
+int wh_Client_CertUnwrapAndCacheResponse(whClientContext*   ctx,
+                                         enum wc_CipherType cipherType,
+                                         whKeyId*           out_certId);
+
+#endif /* WOLFHSM_CFG_KEYWRAP */
+
 
 /**
  * @brief Mark a key ID as global (shared across all clients)
