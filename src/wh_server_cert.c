@@ -491,16 +491,18 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
             rc = WH_SERVER_NVM_LOCK(server);
             if (rc == WH_ERROR_OK) {
                 if (req.id & WH_KEYID_CLIENT_WRAPPED_FLAG) {
-                    /* Cache path: translate and read cert + metadata */
+                    /* Cache path: check metadata before reading cert data */
                     whKeyId certId = wh_KeyId_TranslateFromClient(
                         WH_KEYTYPE_WRAPPED, server->comm->client_id, req.id);
-                    rc = wh_Server_KeystoreReadKey(server, certId, &meta,
-                                                   cert_data, &cert_len);
+                    rc = wh_Server_KeystoreReadKey(server, certId, &meta, NULL,
+                                                   &cert_len);
                     if (rc == WH_ERROR_OK) {
                         if (meta.flags & WH_NVM_FLAGS_NONEXPORTABLE) {
                             rc = WH_ERROR_ACCESS;
                         }
                         else {
+                            rc = wh_Server_KeystoreReadKey(
+                                server, certId, NULL, cert_data, &cert_len);
                             resp.cert_len = cert_len;
                         }
                     }
@@ -661,17 +663,23 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 resp.rc = WH_SERVER_NVM_LOCK(server);
                 if (resp.rc == WH_ERROR_OK) {
                     if (req.id & WH_KEYID_CLIENT_WRAPPED_FLAG) {
-                        /* Cache path: translate and read cert + metadata */
+                        /* Cache path: translate and check metadata before
+                         * reading cert data into client DMA buffer */
                         whKeyId certId = wh_KeyId_TranslateFromClient(
                             WH_KEYTYPE_WRAPPED, server->comm->client_id,
                             req.id);
                         cert_len = req.cert_len;
                         resp.rc  = wh_Server_KeystoreReadKey(
-                            server, certId, &meta, cert_data, &cert_len);
+                            server, certId, &meta, NULL, &cert_len);
                         if (resp.rc == WH_ERROR_OK) {
                             if ((meta.flags & WH_NVM_FLAGS_NONEXPORTABLE) !=
                                 0) {
                                 resp.rc = WH_ERROR_ACCESS;
+                            }
+                            else {
+                                cert_len = req.cert_len;
+                                resp.rc  = wh_Server_KeystoreReadKey(
+                                    server, certId, NULL, cert_data, &cert_len);
                             }
                         }
                     }
