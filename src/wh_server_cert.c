@@ -503,7 +503,13 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                         else {
                             rc = wh_Server_KeystoreReadKey(
                                 server, certId, NULL, cert_data, &cert_len);
-                            resp.cert_len = cert_len;
+                            if (rc == WH_ERROR_OK) {
+                                resp.cert_len = cert_len;
+                            }
+                            else if (rc == WH_ERROR_NOSPACE) {
+                                resp.cert_len = cert_len;
+                                rc = WH_ERROR_BUFFER_SIZE;
+                            }
                         }
                     }
                 }
@@ -680,6 +686,9 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                                 cert_len = req.cert_len;
                                 resp.rc  = wh_Server_KeystoreReadKey(
                                     server, certId, NULL, cert_data, &cert_len);
+                                if (resp.rc == WH_ERROR_NOSPACE) {
+                                    resp.rc = WH_ERROR_BUFFER_SIZE;
+                                }
                             }
                         }
                     }

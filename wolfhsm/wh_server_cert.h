@@ -67,7 +67,7 @@ int wh_Server_CertEraseTrusted(whServerContext* server, whNvmId id);
  * @param id The key ID of the certificate to read. If the key type is
  * WH_KEYTYPE_NVM, the certificate is read from NVM. Otherwise, the certificate
  * is read from the keystore cache (e.g. for wrapped certs cached via
- * wh_Client_KeyUnwrapAndCache).
+ * wh_Client_CertUnwrapAndCache).
  * @param cert Buffer to store the certificate data
  * @param inout_cert_len On input, size of cert buffer. On output, actual cert
  * size
@@ -85,7 +85,7 @@ int wh_Server_CertReadTrusted(whServerContext* server, whKeyId id,
  * @param cert_len Length of the certificate data
  * @param trustedRootId Key ID of the trusted root certificate. Can be an NVM ID
  * (WH_KEYTYPE_NVM) or a cached key ID (e.g. WH_KEYTYPE_WRAPPED from
- * wh_Client_KeyUnwrapAndCache).
+ * wh_Client_CertUnwrapAndCache).
  * @param flags Flags for the certificate verification (see WH_CERT_FLAGS_* in
  * wh_common.h)
  * @param cachedKeyFlags NVM usage flags to apply when caching the leaf public

@@ -647,12 +647,15 @@ int wh_Server_KeystoreReadKey(whServerContext* server, whKeyId keyId,
     /* Check the cache using unified function */
     ret = _FindInCache(server, keyId, NULL, NULL, &cacheBuffer, &cacheMeta);
     if (ret == WH_ERROR_OK) {
-        /* Found in cache */
-        if (cacheMeta->len > *outSz)
-            return WH_ERROR_NOSPACE;
+        /* Found in cache - always populate metadata if requested */
         if (outMeta != NULL) {
             memcpy((uint8_t*)outMeta, (uint8_t*)cacheMeta,
                    sizeof(whNvmMetadata));
+        }
+        /* Check buffer size only when data output is requested */
+        if (out != NULL && cacheMeta->len > *outSz) {
+            *outSz = cacheMeta->len;
+            return WH_ERROR_NOSPACE;
         }
         if (out != NULL) {
             memcpy(out, cacheBuffer, cacheMeta->len);
