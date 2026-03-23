@@ -1035,7 +1035,8 @@ int wh_Client_CertUnwrapAndExportResponse(whClientContext*   ctx,
                                           uint8_t*           certOut,
                                           uint16_t*          inout_certSz)
 {
-    if ((ctx == NULL) || (certOut == NULL) || (inout_certSz == NULL)) {
+    if ((ctx == NULL) || (metadataOut == NULL) || (certOut == NULL) ||
+        (inout_certSz == NULL)) {
         return WH_ERROR_BADARGS;
     }
 
@@ -1051,7 +1052,7 @@ int wh_Client_CertUnwrapAndExport(
     int rc;
 
     if ((ctx == NULL) || (wrappedCert == NULL) || (wrappedCertSz == 0) ||
-        (certOut == NULL) || (inout_certSz == NULL)) {
+        (metadataOut == NULL) || (certOut == NULL) || (inout_certSz == NULL)) {
         return WH_ERROR_BADARGS;
     }
 

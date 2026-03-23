@@ -4,7 +4,7 @@
 
 This documents the "wrapped certificate" use case, showing how to leverage the
 certificate manager to use trusted root certificates that live in the server's
-**keystore cache** (RAM) after being unwrapped via keywrap funcitonality,
+**keystore cache** (RAM) after being unwrapped via keywrap functionality,
 rather than exclusively in **NVM** (flash). A root certificate is wrapped
 (AES-GCM encrypted) by the server, handed back to the client as an opaque blob,
 and later unwrapped into the server's key cache on demand. Once cached, it can
@@ -196,7 +196,7 @@ updated with the same pattern:
 
 1. **Translate the client ID**: If the incoming `req.id` (or
    `req.trustedRootNvmId`) has `WH_KEYID_CLIENT_WRAPPED_FLAG` set, call
-   `wh_KeyId_TranslateFromClient(WH_KEYTYPE_NVM, server->comm->client_id, req.id)`
+   `wh_KeyId_TranslateFromClient(WH_KEYTYPE_WRAPPED, server->comm->client_id, req.id)`
    to produce a full server-internal key ID with `TYPE=WH_KEYTYPE_WRAPPED`,
    `USER=client_id`, and the bare key `ID` in the low byte.
 

@@ -245,6 +245,12 @@ int wh_Server_CertReadTrusted(whServerContext* server, whKeyId id,
         if (rc == WH_ERROR_OK) {
             *inout_cert_len = sz;
         }
+        else if (rc == WH_ERROR_NOSPACE) {
+            /* Map keystore error to cert API's documented error and report the
+             * required size so the caller can retry with a larger buffer */
+            *inout_cert_len = meta.len;
+            rc              = WH_ERROR_BUFFER_SIZE;
+        }
         return rc;
     }
 
@@ -256,11 +262,11 @@ int wh_Server_CertReadTrusted(whServerContext* server, whKeyId id,
 
     /* Check if the provided buffer is large enough */
     if (meta.len > *inout_cert_len) {
+        *inout_cert_len = meta.len;
         return WH_ERROR_BUFFER_SIZE;
     }
 
-    /* Clamp the input length to the actual length of the certificate. This will
-     * be reflected back to the user on length mismatch failure */
+    /* Clamp the input length to the actual length of the certificate */
     *inout_cert_len = meta.len;
 
     return wh_Nvm_Read(server->nvm, id, 0, meta.len, cert);
