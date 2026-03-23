@@ -494,6 +494,7 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                     /* Cache path: check metadata before reading cert data */
                     whKeyId certId = wh_KeyId_TranslateFromClient(
                         WH_KEYTYPE_WRAPPED, server->comm->client_id, req.id);
+                    uint32_t buf_capacity = cert_len;
                     rc = wh_Server_KeystoreReadKey(server, certId, &meta, NULL,
                                                    &cert_len);
                     if (rc == WH_ERROR_OK) {
@@ -501,6 +502,7 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                             rc = WH_ERROR_ACCESS;
                         }
                         else {
+                            cert_len = buf_capacity;
                             rc = wh_Server_KeystoreReadKey(
                                 server, certId, NULL, cert_data, &cert_len);
                             if (rc == WH_ERROR_OK) {
