@@ -35,6 +35,10 @@ wh_Client_KeyCache(client,
                    kek, sizeof(kek), &kekId);
 ```
 
+> **Note:** This is an example only. In production, the KEK is normally
+> provisioned and protected by target-specific hardware and should never be
+> hardcoded.
+
 The KEK is now sitting in the server's `localCache` (or `globalCache` if marked
 global), indexed by `kekId`.
 

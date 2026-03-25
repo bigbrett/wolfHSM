@@ -966,7 +966,7 @@ int wh_Client_CertWrapRequest(whClientContext*   ctx,
                               uint32_t certSz, whNvmMetadata* meta)
 {
     if ((ctx == NULL) || (cert == NULL) || (certSz == 0) || (meta == NULL) ||
-        (certSz > UINT16_MAX)) {
+        (certSz > WOLFHSM_CFG_MAX_CERT_SIZE)) {
         return WH_ERROR_BADARGS;
     }
 
@@ -997,7 +997,7 @@ int wh_Client_CertWrap(whClientContext* ctx, enum wc_CipherType cipherType,
 
     if ((ctx == NULL) || (cert == NULL) || (certSz == 0) || (meta == NULL) ||
         (wrappedOut == NULL) || (inout_wrappedSz == NULL) ||
-        (certSz > UINT16_MAX)) {
+        (certSz > WOLFHSM_CFG_MAX_CERT_SIZE)) {
         return WH_ERROR_BADARGS;
     }
 
