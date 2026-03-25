@@ -1993,18 +1993,20 @@ int wh_Client_CertEraseTrustedResponse(whClientContext* c, int32_t* out_rc);
 int wh_Client_CertEraseTrusted(whClientContext* c, whNvmId id, int32_t* out_rc);
 
 /**
- * @brief Sends a request to read a trusted certificate from NVM storage.
+ * @brief Sends a request to read a trusted certificate.
  *
- * This function prepares and sends a request to read a trusted certificate
- * from NVM storage. This function does not block; it returns immediately after
- * sending the request.
+ * This function prepares and sends a request to read a trusted certificate.
+ * The id parameter accepts either an NVM ID for certificates stored in NVM,
+ * or a wrapped/cached key ID (via WH_CLIENT_KEYID_MAKE_WRAPPED()) for
+ * certificates cached through wh_Client_CertUnwrapAndCache(). This function
+ * does not block; it returns immediately after sending the request.
  *
  * @param[in] c Pointer to the client context.
- * @param[in] id The NVM ID of the certificate to retrieve.
+ * @param[in] id The key ID of the certificate to retrieve (NVM or wrapped).
  * @param[in] cert_len Maximum length of the certificate buffer.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
-int wh_Client_CertReadTrustedRequest(whClientContext* c, whNvmId id,
+int wh_Client_CertReadTrustedRequest(whClientContext* c, whKeyId id,
                                      uint32_t cert_len);
 
 /**
@@ -2031,17 +2033,20 @@ int wh_Client_CertReadTrustedResponse(whClientContext* c, uint8_t* cert,
  *
  * This function handles the complete process of sending a request to read a
  * trusted certificate and receiving the response. It blocks until the entire
- * operation is complete or an error occurs.
+ * operation is complete or an error occurs. The id parameter accepts either an
+ * NVM ID for certificates stored in NVM, or a wrapped/cached key ID (via
+ * WH_CLIENT_KEYID_MAKE_WRAPPED()) for certificates cached through
+ * wh_Client_CertUnwrapAndCache().
  *
  * @param[in] c Pointer to the client context.
- * @param[in] id The NVM ID of the certificate to retrieve.
+ * @param[in] id The key ID of the certificate to retrieve (NVM or wrapped).
  * @param[out] cert Pointer to store the certificate data.
  * @param[in,out] cert_len Pointer to the maximum length of the certificate
  * buffer. On output, contains the actual length of the certificate.
  * @param[out] out_rc Pointer to store the response code from the server.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
-int wh_Client_CertReadTrusted(whClientContext* c, whNvmId id, uint8_t* cert,
+int wh_Client_CertReadTrusted(whClientContext* c, whKeyId id, uint8_t* cert,
                               uint32_t* cert_len, int32_t* out_rc);
 
 /**
@@ -2219,20 +2224,21 @@ int wh_Client_CertAddTrustedDma(whClientContext* c, whNvmId id,
                                 int32_t* out_rc);
 
 /**
- * @brief Sends a request to read a trusted certificate from NVM storage using
- * DMA.
+ * @brief Sends a request to read a trusted certificate using DMA.
  *
- * This function prepares and sends a request to read a trusted certificate from
- * NVM storage using DMA. This function does not block; it returns immediately
- * after sending the request.
+ * This function prepares and sends a request to read a trusted certificate
+ * using DMA. The id parameter accepts either an NVM ID for certificates stored
+ * in NVM, or a wrapped/cached key ID (via WH_CLIENT_KEYID_MAKE_WRAPPED()) for
+ * certificates cached through wh_Client_CertUnwrapAndCache(). This function
+ * does not block; it returns immediately after sending the request.
  *
  * @param[in] c Pointer to the client context.
- * @param[in] id NVM ID of the trusted certificate to get.
+ * @param[in] id The key ID of the trusted certificate to get (NVM or wrapped).
  * @param[in] cert Pointer to buffer to store the certificate data.
  * @param[in] cert_len Length of the certificate buffer.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
-int wh_Client_CertReadTrustedDmaRequest(whClientContext* c, whNvmId id,
+int wh_Client_CertReadTrustedDmaRequest(whClientContext* c, whKeyId id,
                                         void* cert, uint32_t cert_len);
 
 /**
@@ -2256,16 +2262,19 @@ int wh_Client_CertReadTrustedDmaResponse(whClientContext* c, int32_t* out_rc);
  *
  * This function handles the complete process of sending a request to read a
  * trusted certificate using DMA and receiving the response. It blocks until the
- * entire operation is complete or an error occurs.
+ * entire operation is complete or an error occurs. The id parameter accepts
+ * either an NVM ID for certificates stored in NVM, or a wrapped/cached key ID
+ * (via WH_CLIENT_KEYID_MAKE_WRAPPED()) for certificates cached through
+ * wh_Client_CertUnwrapAndCache().
  *
  * @param[in] c Pointer to the client context.
- * @param[in] id NVM ID of the trusted certificate to get.
+ * @param[in] id The key ID of the trusted certificate to get (NVM or wrapped).
  * @param[in] cert Pointer to buffer to store the certificate data.
  * @param[in] cert_len Length of the certificate buffer.
  * @param[out] out_rc Pointer to store the response code from the server.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
-int wh_Client_CertReadTrustedDma(whClientContext* c, whNvmId id, void* cert,
+int wh_Client_CertReadTrustedDma(whClientContext* c, whKeyId id, void* cert,
                                  uint32_t cert_len, int32_t* out_rc);
 
 /**

@@ -276,7 +276,7 @@ int wh_Client_CertEraseTrusted(whClientContext* c, whNvmId id, int32_t* out_rc)
 }
 
 /* Get a trusted certificate */
-int wh_Client_CertReadTrustedRequest(whClientContext* c, whNvmId id,
+int wh_Client_CertReadTrustedRequest(whClientContext* c, whKeyId id,
                                      uint32_t cert_len)
 {
     (void)cert_len;
@@ -339,7 +339,7 @@ int wh_Client_CertReadTrustedResponse(whClientContext* c, uint8_t* cert,
     return rc;
 }
 
-int wh_Client_CertReadTrusted(whClientContext* c, whNvmId id, uint8_t* cert,
+int wh_Client_CertReadTrusted(whClientContext* c, whKeyId id, uint8_t* cert,
                               uint32_t* cert_len, int32_t* out_rc)
 {
     int rc = 0;
@@ -593,7 +593,7 @@ int wh_Client_CertAddTrustedDma(whClientContext* c, whNvmId id,
     return rc;
 }
 
-int wh_Client_CertReadTrustedDmaRequest(whClientContext* c, whNvmId id,
+int wh_Client_CertReadTrustedDmaRequest(whClientContext* c, whKeyId id,
                                         void* cert, uint32_t cert_len)
 {
     whMessageCert_ReadTrustedDmaRequest req = {0};
@@ -641,7 +641,7 @@ int wh_Client_CertReadTrustedDmaResponse(whClientContext* c, int32_t* out_rc)
     return rc;
 }
 
-int wh_Client_CertReadTrustedDma(whClientContext* c, whNvmId id, void* cert,
+int wh_Client_CertReadTrustedDma(whClientContext* c, whKeyId id, void* cert,
                                  uint32_t cert_len, int32_t* out_rc)
 {
     int rc = 0;

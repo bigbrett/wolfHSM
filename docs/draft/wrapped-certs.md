@@ -123,7 +123,9 @@ cache, not in NVM."
 
 The same pattern works for:
 - `wh_Client_CertVerifyDma` (DMA path)
-- `wh_Client_CertReadTrusted` / `wh_Client_CertReadTrustedDma` (read-back)
+- `wh_Client_CertReadTrusted` / `wh_Client_CertReadTrustedDma` (read-back a
+  cached cert by passing `WH_CLIENT_KEYID_MAKE_WRAPPED(cachedCertId)` as the
+  `id` parameter)
 - `wh_Client_CertVerifyAcert` / `wh_Client_CertVerifyAcertDma` (attribute certs)
 
 ### 5. Cleanup
