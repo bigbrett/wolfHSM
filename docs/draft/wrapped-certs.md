@@ -188,7 +188,7 @@ both the metadata and the raw data into the caller's buffers.
 
 #### `wh_Server_CertVerify` / `wh_Server_CertVerifyAcert`
 
-Signature changed from `whNvmId trustedRootNvmId` to `whKeyId trustedRootId`.
+Signature changed from `whNvmId trustedRootId` to `whKeyId trustedRootId`.
 Internally they just call `wh_Server_CertReadTrusted`, which now handles the
 routing.
 
@@ -199,7 +199,7 @@ Every handler that accepts a trusted root ID (`READTRUSTED`, `VERIFY`,
 updated with the same pattern:
 
 1. **Translate the client ID**: If the incoming `req.id` (or
-   `req.trustedRootNvmId`) has `WH_KEYID_CLIENT_WRAPPED_FLAG` set, call
+   `req.trustedRootId`) has `WH_KEYID_CLIENT_WRAPPED_FLAG` set, call
    `wh_KeyId_TranslateFromClient(WH_KEYTYPE_WRAPPED, server->comm->client_id, req.id)`
    to produce a full server-internal key ID with `TYPE=WH_KEYTYPE_WRAPPED`,
    `USER=client_id`, and the bare key `ID` in the low byte.

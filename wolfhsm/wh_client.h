@@ -2054,12 +2054,12 @@ int wh_Client_CertReadTrusted(whClientContext* c, whNvmId id, uint8_t* cert,
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the certificate data to verify.
  * @param[in] cert_len Length of the certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int wh_Client_CertVerifyRequest(whClientContext* c, const uint8_t* cert,
-                                uint32_t cert_len, whNvmId trustedRootNvmId);
+                                uint32_t cert_len, whKeyId trustedRootId);
 
 /**
  * @brief Receives a response from the server after verifying a certificate.
@@ -2085,13 +2085,13 @@ int wh_Client_CertVerifyResponse(whClientContext* c, int32_t* out_rc);
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the certificate data to verify.
  * @param[in] cert_len Length of the certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @param[out] out_rc Pointer to store the response code from the server.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int wh_Client_CertVerify(whClientContext* c, const uint8_t* cert,
-                         uint32_t cert_len, whNvmId trustedRootNvmId,
+                         uint32_t cert_len, whKeyId trustedRootId,
                          int32_t* out_rc);
 
 /**
@@ -2104,7 +2104,7 @@ int wh_Client_CertVerify(whClientContext* c, const uint8_t* cert,
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the certificate data to verify.
  * @param[in] cert_len Length of the certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @param[in] cachedKeyFlags NVM usage flags to apply when caching the leaf
  * public key (e.g., WH_NVM_FLAGS_USAGE_VERIFY, WH_NVM_FLAGS_USAGE_SIGN).
@@ -2114,7 +2114,7 @@ int wh_Client_CertVerify(whClientContext* c, const uint8_t* cert,
  */
 int wh_Client_CertVerifyAndCacheLeafPubKeyRequest(
     whClientContext* c, const uint8_t* cert, uint32_t cert_len,
-    whNvmId trustedRootNvmId, whNvmFlags cachedKeyFlags, whKeyId keyId);
+    whKeyId trustedRootId, whNvmFlags cachedKeyFlags, whKeyId keyId);
 
 /**
  * @brief Receives a response from the server after verifying a certificate and
@@ -2146,7 +2146,7 @@ int wh_Client_CertVerifyAndCacheLeafPubKeyResponse(whClientContext* c,
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the certificate data to verify.
  * @param[in] cert_len Length of the certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @param[in] cachedKeyFlags NVM usage flags to apply when caching the leaf
  * public key (e.g., WH_NVM_FLAGS_USAGE_VERIFY, WH_NVM_FLAGS_USAGE_SIGN).
@@ -2158,7 +2158,7 @@ int wh_Client_CertVerifyAndCacheLeafPubKeyResponse(whClientContext* c,
  */
 int wh_Client_CertVerifyAndCacheLeafPubKey(
     whClientContext* c, const uint8_t* cert, uint32_t cert_len,
-    whNvmId trustedRootNvmId, whNvmFlags cachedKeyFlags, whKeyId* inout_keyId,
+    whKeyId trustedRootId, whNvmFlags cachedKeyFlags, whKeyId* inout_keyId,
     int32_t* out_rc);
 
 
@@ -2272,17 +2272,18 @@ int wh_Client_CertReadTrustedDma(whClientContext* c, whNvmId id, void* cert,
  * @brief Sends a request to verify a certificate using DMA.
  *
  * This function prepares and sends a request to verify a certificate using DMA.
- * This function does not block; it returns immediately after sending the request.
+ * This function does not block; it returns immediately after sending the
+ * request.
  *
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the certificate data to verify.
  * @param[in] cert_len Length of the certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int wh_Client_CertVerifyDmaRequest(whClientContext* c, const void* cert,
-                                   uint32_t cert_len, whNvmId trustedRootNvmId);
+                                   uint32_t cert_len, whKeyId trustedRootId);
 
 /**
  * @brief Receives a response from the server after verifying a certificate
@@ -2310,13 +2311,13 @@ int wh_Client_CertVerifyDmaResponse(whClientContext* c, int32_t* out_rc);
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the certificate data to verify.
  * @param[in] cert_len Length of the certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @param[out] out_rc Pointer to store the response code from the server.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int wh_Client_CertVerifyDma(whClientContext* c, const void* cert,
-                            uint32_t cert_len, whNvmId trustedRootNvmId,
+                            uint32_t cert_len, whKeyId trustedRootId,
                             int32_t* out_rc);
 
 
@@ -2332,7 +2333,7 @@ int wh_Client_CertVerifyDma(whClientContext* c, const void* cert,
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the certificate data to verify.
  * @param[in] cert_len Length of the certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @param[in] cachedKeyFlags NVM usage flags to apply when caching the leaf
  * public key (e.g., WH_NVM_FLAGS_USAGE_VERIFY, WH_NVM_FLAGS_USAGE_SIGN).
@@ -2342,7 +2343,7 @@ int wh_Client_CertVerifyDma(whClientContext* c, const void* cert,
  */
 int wh_Client_CertVerifyDmaAndCacheLeafPubKeyRequest(
     whClientContext* c, const void* cert, uint32_t cert_len,
-    whNvmId trustedRootNvmId, whNvmFlags cachedKeyFlags, whKeyId keyId);
+    whKeyId trustedRootId, whNvmFlags cachedKeyFlags, whKeyId keyId);
 
 /**
  * @brief Receives a response from the server after verifying a certificate
@@ -2376,7 +2377,7 @@ int wh_Client_CertVerifyDmaAndCacheLeafPubKeyResponse(whClientContext* c,
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the certificate data to verify.
  * @param[in] cert_len Length of the certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @param[in] cachedKeyFlags NVM usage flags to apply when caching the leaf
  * public key (e.g., WH_NVM_FLAGS_USAGE_VERIFY, WH_NVM_FLAGS_USAGE_SIGN).
@@ -2388,7 +2389,7 @@ int wh_Client_CertVerifyDmaAndCacheLeafPubKeyResponse(whClientContext* c,
  */
 int wh_Client_CertVerifyDmaAndCacheLeafPubKey(
     whClientContext* c, const void* cert, uint32_t cert_len,
-    whNvmId trustedRootNvmId, whNvmFlags cachedKeyFlags, whKeyId* inout_keyId,
+    whKeyId trustedRootId, whNvmFlags cachedKeyFlags, whKeyId* inout_keyId,
     int32_t* out_rc);
 
 
@@ -2404,13 +2405,12 @@ int wh_Client_CertVerifyDmaAndCacheLeafPubKey(
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the attribute certificate data to verify.
  * @param[in] cert_len Length of the attribute certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int wh_Client_CertVerifyAcertRequest(whClientContext* c, const void* cert,
-                                     uint32_t cert_len,
-                                     whNvmId  trustedRootNvmId);
+                                     uint32_t cert_len, whKeyId trustedRootId);
 
 /**
  * @brief Receives a response from the server after verifying an attribute
@@ -2438,13 +2438,13 @@ int wh_Client_CertVerifyAcertResponse(whClientContext* c, int32_t* out_rc);
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the attribute certificate data to verify.
  * @param[in] cert_len Length of the attribute certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @param[out] out_rc Pointer to store the response code from the server.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int wh_Client_CertVerifyAcert(whClientContext* c, const void* cert,
-                              uint32_t cert_len, whNvmId trustedRootNvmId,
+                              uint32_t cert_len, whKeyId trustedRootId,
                               int32_t* out_rc);
 
 /**
@@ -2457,13 +2457,13 @@ int wh_Client_CertVerifyAcert(whClientContext* c, const void* cert,
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the attribute certificate data to verify.
  * @param[in] cert_len Length of the attribute certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int wh_Client_CertVerifyAcertDmaRequest(whClientContext* c, const void* cert,
                                         uint32_t cert_len,
-                                        whNvmId  trustedRootNvmId);
+                                        whKeyId  trustedRootId);
 
 /**
  * @brief Receives a response from the server after verifying an attribute
@@ -2546,13 +2546,13 @@ int wh_Client_DmaProcessClientAddress(struct whClientContext_t* client,
  * @param[in] c Pointer to the client context.
  * @param[in] cert Pointer to the attribute certificate data to verify.
  * @param[in] cert_len Length of the attribute certificate data.
- * @param[in] trustedRootNvmId NVM ID of the trusted root certificate to verify
+ * @param[in] trustedRootId ID of the trusted root certificate to verify
  * against.
  * @param[out] out_rc Pointer to store the response code from the server.
  * @return int Returns 0 on success, or a negative error code on failure.
  */
 int wh_Client_CertVerifyAcertDma(whClientContext* c, const void* cert,
-                                 uint32_t cert_len, whNvmId trustedRootNvmId,
+                                 uint32_t cert_len, whKeyId trustedRootId,
                                  int32_t* out_rc);
 
 #endif /* WOLFHSM_CFG_DMA */
@@ -2695,7 +2695,7 @@ int wh_Client_CertUnwrapAndExportResponse(whClientContext*   ctx,
  * Convenience wrapper around wh_Client_KeyUnwrapAndCache. After this call,
  * the certificate is cached on the server and can be used as the trusted root
  * in wh_Client_CertVerify by passing WH_CLIENT_KEYID_MAKE_WRAPPED(*out_certId)
- * as the trustedRootNvmId parameter. This function will block until the entire
+ * as the trustedRootId parameter. This function will block until the entire
  * operation completes or an error occurs.
  *
  * @param[in] ctx Pointer to the client context.

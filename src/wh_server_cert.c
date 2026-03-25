@@ -571,12 +571,12 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 whKeyId keyId = wh_KeyId_TranslateFromClient(
                     WH_KEYTYPE_CRYPTO, server->comm->client_id, req.keyId);
 
-                /* Translate trustedRootNvmId if client set wrapped flag */
-                whKeyId trustedRootId = req.trustedRootNvmId;
-                if (req.trustedRootNvmId & WH_KEYID_CLIENT_WRAPPED_FLAG) {
+                /* Translate trustedRootId if client set wrapped flag */
+                whKeyId trustedRootId = req.trustedRootId;
+                if (req.trustedRootId & WH_KEYID_CLIENT_WRAPPED_FLAG) {
                     trustedRootId = wh_KeyId_TranslateFromClient(
                         WH_KEYTYPE_WRAPPED, server->comm->client_id,
-                        req.trustedRootNvmId);
+                        req.trustedRootId);
                 }
 
                 rc = WH_SERVER_NVM_LOCK(server);
@@ -747,12 +747,12 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 keyId = wh_KeyId_TranslateFromClient(
                     WH_KEYTYPE_CRYPTO, server->comm->client_id, req.keyId);
 
-                /* Translate trustedRootNvmId if client set wrapped flag */
-                trustedRootId = req.trustedRootNvmId;
-                if (req.trustedRootNvmId & WH_KEYID_CLIENT_WRAPPED_FLAG) {
+                /* Translate trustedRootId if client set wrapped flag */
+                trustedRootId = req.trustedRootId;
+                if (req.trustedRootId & WH_KEYID_CLIENT_WRAPPED_FLAG) {
                     trustedRootId = wh_KeyId_TranslateFromClient(
                         WH_KEYTYPE_WRAPPED, server->comm->client_id,
-                        req.trustedRootNvmId);
+                        req.trustedRootId);
                 }
 
                 /* Process client address */
@@ -819,12 +819,12 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
 
             cert_data = (const uint8_t*)req_packet + sizeof(req);
 
-            /* Translate trustedRootNvmId if client set wrapped flag */
-            whKeyId trustedRootId = req.trustedRootNvmId;
-            if (req.trustedRootNvmId & WH_KEYID_CLIENT_WRAPPED_FLAG) {
+            /* Translate trustedRootId if client set wrapped flag */
+            whKeyId trustedRootId = req.trustedRootId;
+            if (req.trustedRootId & WH_KEYID_CLIENT_WRAPPED_FLAG) {
                 trustedRootId = wh_KeyId_TranslateFromClient(
                     WH_KEYTYPE_WRAPPED, server->comm->client_id,
-                    req.trustedRootNvmId);
+                    req.trustedRootId);
             }
 
             rc = WH_SERVER_NVM_LOCK(server);
@@ -869,12 +869,12 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 wh_MessageCert_TranslateVerifyDmaRequest(
                     magic, (whMessageCert_VerifyDmaRequest*)req_packet, &req);
 
-                /* Translate trustedRootNvmId if client set wrapped flag */
-                trustedRootId = req.trustedRootNvmId;
-                if (req.trustedRootNvmId & WH_KEYID_CLIENT_WRAPPED_FLAG) {
+                /* Translate trustedRootId if client set wrapped flag */
+                trustedRootId = req.trustedRootId;
+                if (req.trustedRootId & WH_KEYID_CLIENT_WRAPPED_FLAG) {
                     trustedRootId = wh_KeyId_TranslateFromClient(
                         WH_KEYTYPE_WRAPPED, server->comm->client_id,
-                        req.trustedRootNvmId);
+                        req.trustedRootId);
                 }
 
                 /* Process client address */

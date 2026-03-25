@@ -103,7 +103,7 @@ int wh_MessageCert_TranslateVerifyRequest(
         return WH_ERROR_BADARGS;
     }
     WH_T32(magic, dest, src, cert_len);
-    WH_T16(magic, dest, src, trustedRootNvmId);
+    WH_T16(magic, dest, src, trustedRootId);
     WH_T16(magic, dest, src, flags);
     WH_T16(magic, dest, src, cachedKeyFlags);
     WH_T16(magic, dest, src, keyId);
@@ -163,7 +163,7 @@ int wh_MessageCert_TranslateVerifyDmaRequest(
     }
     WH_T64(magic, dest, src, cert_addr);
     WH_T32(magic, dest, src, cert_len);
-    WH_T16(magic, dest, src, trustedRootNvmId);
+    WH_T16(magic, dest, src, trustedRootId);
     WH_T16(magic, dest, src, flags);
     WH_T16(magic, dest, src, cachedKeyFlags);
     WH_T16(magic, dest, src, keyId);
@@ -192,7 +192,7 @@ int wh_MessageCert_TranslateVerifyAcertRequest(
         return WH_ERROR_BADARGS;
     }
     WH_T32(magic, dest, src, cert_len);
-    WH_T16(magic, dest, src, trustedRootNvmId);
+    WH_T16(magic, dest, src, trustedRootId);
     return 0;
 }
 #endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER_ACERT */
