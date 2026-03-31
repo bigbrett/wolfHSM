@@ -56,6 +56,7 @@
 #include "wolfhsm/wh_comm.h"
 #include "wolfhsm/wh_transport_mem.h"
 #include "wolfhsm/wh_client.h"
+#include "wolfhsm/wh_client_object.h"
 #include "wolfhsm/wh_server.h"
 #include "wolfhsm/wh_nvm.h"
 #include "wolfhsm/wh_nvm_flash.h"
@@ -917,16 +918,17 @@ static int doKeyCache(whClientContext* client, whKeyId keyId, int iteration)
     snprintf((char*)label, sizeof(label), "Key%04X", keyId);
 
     /* Send request */
-    rc = wh_Client_KeyCacheRequest_ex(client, WH_NVM_FLAGS_USAGE_ANY, label,
-                                      sizeof(label), keyData, sizeof(keyData),
-                                      keyId);
+    rc = wh_Client_ObjectCacheAddRequest(client, WH_KEYTYPE_CRYPTO, keyId,
+                                        WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_ANY,
+                                        keyData, sizeof(keyData),
+                                        label, sizeof(label));
     if (rc != WH_ERROR_OK) {
         return rc;
     }
 
     /* Wait for response from server thread */
     do {
-        rc = wh_Client_KeyCacheResponse(client, &outKeyId);
+        rc = wh_Client_ObjectCacheAddResponse(client, &outKeyId);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
         }
@@ -944,14 +946,14 @@ static int doKeyExport(whClientContext* client, whKeyId keyId)
     int      rc;
 
     /* Send request */
-    rc = wh_Client_KeyExportRequest(client, keyId);
+    rc = wh_Client_ObjectCacheExportRequest(client, WH_KEYTYPE_CRYPTO, keyId);
     if (rc != WH_ERROR_OK) {
         return rc;
     }
 
     /* Wait for response from server thread */
     do {
-        rc = wh_Client_KeyExportResponse(client, label, labelSz, keyData,
+        rc = wh_Client_ObjectCacheExportResponse(client, NULL, label, labelSz, keyData,
                                          &keySz);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
@@ -966,14 +968,14 @@ static int doKeyEvict(whClientContext* client, whKeyId keyId)
     int rc;
 
     /* Send request */
-    rc = wh_Client_KeyEvictRequest(client, keyId);
+    rc = wh_Client_ObjectCacheEvictRequest(client, WH_KEYTYPE_CRYPTO, keyId);
     if (rc != WH_ERROR_OK) {
         return rc;
     }
 
     /* Wait for response from server thread */
     do {
-        rc = wh_Client_KeyEvictResponse(client);
+        rc = wh_Client_ObjectCacheEvictResponse(client, NULL);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
         }
@@ -987,14 +989,14 @@ static int doKeyCommit(whClientContext* client, whKeyId keyId)
     int rc;
 
     /* Send request */
-    rc = wh_Client_KeyCommitRequest(client, keyId);
+    rc = wh_Client_ObjectCacheCommitRequest(client, WH_KEYTYPE_CRYPTO, keyId);
     if (rc != WH_ERROR_OK) {
         return rc;
     }
 
     /* Wait for response from server thread */
     do {
-        rc = wh_Client_KeyCommitResponse(client);
+        rc = wh_Client_ObjectCacheCommitResponse(client, NULL);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
         }
@@ -1006,20 +1008,41 @@ static int doKeyCommit(whClientContext* client, whKeyId keyId)
 static int doKeyErase(whClientContext* client, whKeyId keyId)
 {
     int rc;
+    int32_t destroy_rc;
 
-    /* Send request */
-    rc = wh_Client_KeyEraseRequest(client, keyId);
+    /* Evict from cache first */
+    rc = wh_Client_ObjectCacheEvictRequest(client, WH_KEYTYPE_CRYPTO, keyId);
     if (rc != WH_ERROR_OK) {
         return rc;
     }
 
-    /* Wait for response from server thread */
     do {
-        rc = wh_Client_KeyEraseResponse(client);
+        rc = wh_Client_ObjectCacheEvictResponse(client, NULL);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
         }
     } while (rc == WH_ERROR_NOTREADY);
+
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
+
+    /* Destroy from NVM */
+    rc = wh_Client_ObjectNvmDestroyRequest(client, WH_KEYTYPE_CRYPTO, keyId);
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
+
+    do {
+        rc = wh_Client_ObjectNvmDestroyResponse(client, &destroy_rc);
+        if (rc == WH_ERROR_NOTREADY) {
+            sched_yield();
+        }
+    } while (rc == WH_ERROR_NOTREADY);
+
+    if (rc == WH_ERROR_OK) {
+        rc = destroy_rc;
+    }
 
     return rc;
 }
@@ -1029,14 +1052,14 @@ static int doKeyRevoke(whClientContext* client, whKeyId keyId)
     int rc;
 
     /* Send request */
-    rc = wh_Client_KeyRevokeRequest(client, keyId);
+    rc = wh_Client_ObjectCacheRevokeRequest(client, WH_KEYTYPE_CRYPTO, keyId);
     if (rc != WH_ERROR_OK) {
         return rc;
     }
 
     /* Wait for response from server thread */
     do {
-        rc = wh_Client_KeyRevokeResponse(client);
+        rc = wh_Client_ObjectCacheRevokeResponse(client, NULL);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
         }

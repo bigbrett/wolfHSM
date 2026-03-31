@@ -44,7 +44,7 @@
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/cmac.h"
 #include "wolfssl/wolfcrypt/misc.h"
-#include "wolfhsm/wh_server_keystore.h"
+#include "wolfhsm/wh_server_object.h"
 #endif /* !WOLFHSM_CFG_NO_CRYPTO */
 
 #ifdef WOLFHSM_CFG_SHE_EXTENSION
@@ -250,7 +250,7 @@ static int _SecureBootInit(whServerContext* server, uint16_t magic,
         server->she->blSize = req.sz;
         /* check if the boot mac key is empty */
         keySz = sizeof(macKey);
-        ret   = wh_Server_KeystoreReadKey(server,
+        ret   = wh_Server_ObjectCacheExport(server,
                                           WH_MAKE_KEYID(WH_KEYTYPE_SHE,
                                                         server->comm->client_id,
                                                         WH_SHE_BOOT_MAC_KEY_ID),
@@ -394,7 +394,7 @@ static int _SecureBootFinish(whServerContext* server, uint16_t magic,
     /* load the cmac to check */
     if (ret == 0) {
         keySz = sizeof(macDigest);
-        ret   = wh_Server_KeystoreReadKey(server,
+        ret   = wh_Server_ObjectCacheExport(server,
                                           WH_MAKE_KEYID(WH_KEYTYPE_SHE,
                                                         server->comm->client_id,
                                                         WH_SHE_BOOT_MAC),
@@ -503,7 +503,7 @@ static int _LoadKey(whServerContext* server, uint16_t magic, uint16_t req_size,
     /* read the auth key by AuthID */
     if (ret == 0) {
         keySz = sizeof(kdfInput);
-        ret = wh_Server_KeystoreReadKey(server,
+        ret = wh_Server_ObjectCacheExport(server,
                                         WH_MAKE_KEYID(WH_KEYTYPE_SHE,
                                                       server->comm->client_id,
                                                       _PopAuthId(req.messageOne)),
@@ -564,7 +564,7 @@ static int _LoadKey(whServerContext* server, uint16_t magic, uint16_t req_size,
     wc_AesFree(server->she->sheAes);
     /* load the target key */
     if (ret == 0) {
-        ret = wh_Server_KeystoreReadKey(server,
+        ret = wh_Server_ObjectCacheExport(server,
                                         WH_MAKE_KEYID(WH_KEYTYPE_SHE,
                                                       server->comm->client_id,
                                                       _PopId(req.messageOne)),
@@ -610,16 +610,19 @@ static int _LoadKey(whServerContext* server, uint16_t magic, uint16_t req_size,
         meta->len = WH_SHE_KEY_SZ;
         /* cache if ram key, overwrite otherwise */
         if (WH_KEYID_ID(meta->id) == WH_SHE_RAM_KEY_ID) {
-            ret = wh_Server_KeystoreCacheKey(server, meta,
+            ret = wh_Server_ObjectCacheAdd(server, meta,
                                              req.messageTwo + WH_SHE_KEY_SZ);
         }
         else {
-            ret = wh_Nvm_AddObject(server->nvm, meta, meta->len,
-                                   req.messageTwo + WH_SHE_KEY_SZ);
+            ret = wh_Server_ObjectCacheAdd(server, meta,
+                                          req.messageTwo + WH_SHE_KEY_SZ);
+            if (ret == 0) {
+                ret = wh_Server_ObjectCacheCommit(server, meta->id);
+            }
             /* read the evicted back from nvm */
             if (ret == 0) {
                 keySz = WH_SHE_KEY_SZ;
-                ret   = wh_Server_KeystoreReadKey(server, meta->id, meta,
+                ret   = wh_Server_ObjectCacheExport(server, meta->id, meta,
                                                   req.messageTwo + WH_SHE_KEY_SZ,
                                                   &keySz);
                 /* Extract count and flags from the label, even if it failed */
@@ -728,7 +731,7 @@ static int _LoadPlainKey(whServerContext* server, uint16_t magic,
 
     /* cache if ram key, overwrite otherwise */
     if (ret == 0) {
-        ret = wh_Server_KeystoreCacheKey(server, meta, req.key);
+        ret = wh_Server_ObjectCacheAdd(server, meta, req.key);
     }
     if (ret == 0) {
         server->she->ramKeyPlain = 1;
@@ -770,7 +773,7 @@ static int _ExportRamKey(whServerContext* server, uint16_t magic,
     /* read the auth key by AuthID */
     if (ret == 0) {
         keySz = WH_SHE_KEY_SZ;
-        ret   = wh_Server_KeystoreReadKey(server,
+        ret   = wh_Server_ObjectCacheExport(server,
                                           WH_MAKE_KEYID(WH_KEYTYPE_SHE,
                                                         server->comm->client_id,
                                                         WH_SHE_SECRET_KEY_ID),
@@ -799,7 +802,7 @@ static int _ExportRamKey(whServerContext* server, uint16_t magic,
         counter_val = wh_Utils_htonl(1 << 4);
         memcpy(resp.messageTwo, &counter_val, sizeof(uint32_t));
         keySz    = WH_SHE_KEY_SZ;
-        ret      = wh_Server_KeystoreReadKey(
+        ret      = wh_Server_ObjectCacheExport(
                  server,
                  WH_MAKE_KEYID(WH_KEYTYPE_SHE, server->comm->client_id,
                                WH_SHE_RAM_KEY_ID),
@@ -935,7 +938,7 @@ static int _InitRnd(whServerContext* server, uint16_t magic, uint16_t req_size,
     /* read secret key */
     if (ret == 0) {
         keySz = WH_SHE_KEY_SZ;
-        ret   = wh_Server_KeystoreReadKey(server,
+        ret   = wh_Server_ObjectCacheExport(server,
                                           WH_MAKE_KEYID(WH_KEYTYPE_SHE,
                                                         server->comm->client_id,
                                                         WH_SHE_SECRET_KEY_ID),
@@ -955,7 +958,7 @@ static int _InitRnd(whServerContext* server, uint16_t magic, uint16_t req_size,
     /* read the current PRNG_SEED, i - 1, to cmacOutput */
     if (ret == 0) {
         keySz = WH_SHE_KEY_SZ;
-        ret   = wh_Server_KeystoreReadKey(server,
+        ret   = wh_Server_ObjectCacheExport(server,
                                           WH_MAKE_KEYID(WH_KEYTYPE_SHE,
                                                         server->comm->client_id,
                                                         WH_SHE_PRNG_SEED_ID),
@@ -984,7 +987,10 @@ static int _InitRnd(whServerContext* server, uint16_t magic, uint16_t req_size,
         meta->id  = WH_MAKE_KEYID(WH_KEYTYPE_SHE, server->comm->client_id,
                                   WH_SHE_PRNG_SEED_ID);
         meta->len = WH_SHE_KEY_SZ;
-        ret       = wh_Nvm_AddObject(server->nvm, meta, meta->len, cmacOutput);
+        ret = wh_Server_ObjectCacheAdd(server, meta, cmacOutput);
+        if (ret == 0) {
+            ret = wh_Server_ObjectCacheCommit(server, meta->id);
+        }
         if (ret != 0) {
             ret = WH_SHE_ERC_KEY_UPDATE_ERROR;
         }
@@ -1102,7 +1108,7 @@ static int _ExtendSeed(whServerContext* server, uint16_t magic,
     /* read the PRNG_SEED into kdfInput */
     if (ret == 0) {
         keySz = WH_SHE_KEY_SZ;
-        ret   = wh_Server_KeystoreReadKey(server,
+        ret   = wh_Server_ObjectCacheExport(server,
                                           WH_MAKE_KEYID(WH_KEYTYPE_SHE,
                                                         server->comm->client_id,
                                                         WH_SHE_PRNG_SEED_ID),
@@ -1121,7 +1127,10 @@ static int _ExtendSeed(whServerContext* server, uint16_t magic,
         meta->id  = WH_MAKE_KEYID(WH_KEYTYPE_SHE, server->comm->client_id,
                                   WH_SHE_PRNG_SEED_ID);
         meta->len = WH_SHE_KEY_SZ;
-        ret       = wh_Nvm_AddObject(server->nvm, meta, meta->len, kdfInput);
+        ret = wh_Server_ObjectCacheAdd(server, meta, kdfInput);
+        if (ret == 0) {
+            ret = wh_Server_ObjectCacheCommit(server, meta->id);
+        }
         if (ret != 0) {
             ret = WH_SHE_ERC_KEY_UPDATE_ERROR;
         }
@@ -1177,7 +1186,7 @@ static int _EncEcb(whServerContext* server, uint16_t magic, uint16_t req_size,
     }
     if (ret == 0) {
         /* load the key */
-        ret = wh_Server_KeystoreReadKey(
+        ret = wh_Server_ObjectCacheExport(
             server, WH_MAKE_KEYID(WH_KEYTYPE_SHE, server->comm->client_id,
                                   req.keyId),
             NULL, tmpKey, &keySz);
@@ -1255,7 +1264,7 @@ static int _EncCbc(whServerContext* server, uint16_t magic, uint16_t req_size,
 
     if (ret == 0) {
         /* load the key */
-        ret = wh_Server_KeystoreReadKey(
+        ret = wh_Server_ObjectCacheExport(
             server, WH_MAKE_KEYID(WH_KEYTYPE_SHE, server->comm->client_id,
                                   req.keyId),
             NULL, tmpKey, &keySz);
@@ -1339,7 +1348,7 @@ static int _DecEcb(whServerContext* server, uint16_t magic, uint16_t req_size,
 
     if (ret == 0) {
         /* load the key */
-        ret = wh_Server_KeystoreReadKey(
+        ret = wh_Server_ObjectCacheExport(
             server, WH_MAKE_KEYID(WH_KEYTYPE_SHE, server->comm->client_id,
                                   req.keyId),
             NULL, tmpKey, &keySz);
@@ -1421,7 +1430,7 @@ static int _DecCbc(whServerContext* server, uint16_t magic, uint16_t req_size,
 
     if (ret == 0) {
         /* load the key */
-        ret = wh_Server_KeystoreReadKey(
+        ret = wh_Server_ObjectCacheExport(
             server, WH_MAKE_KEYID(WH_KEYTYPE_SHE, server->comm->client_id,
                                   req.keyId),
             NULL, tmpKey, &keySz);
@@ -1494,7 +1503,7 @@ static int _GenerateMac(whServerContext* server, uint16_t magic,
     if (ret == 0) {
         /* load the key */
         keySz = WH_SHE_KEY_SZ;
-        ret   = wh_Server_KeystoreReadKey(
+        ret   = wh_Server_ObjectCacheExport(
               server,
               WH_MAKE_KEYID(WH_KEYTYPE_SHE, server->comm->client_id,
                             req.keyId),
@@ -1559,7 +1568,7 @@ static int _VerifyMac(whServerContext* server, uint16_t magic,
     /* load the key */
     if (ret == 0) {
         keySz = WH_SHE_KEY_SZ;
-        ret   = wh_Server_KeystoreReadKey(
+        ret   = wh_Server_ObjectCacheExport(
               server,
               WH_MAKE_KEYID(WH_KEYTYPE_SHE, server->comm->client_id,
                             req.keyId),

@@ -45,6 +45,7 @@
 #include "wh_test_crypto_affinity.h"
 #include "wh_test_timeout.h"
 #include "wh_test_dma.h"
+#include "wh_test_object.h"
 
 #if defined(WOLFHSM_CFG_CERTIFICATE_MANAGER)
 #include "wh_test_cert.h"
@@ -113,6 +114,9 @@ int whTest_Unit(void)
 #endif
 
 #endif /* WOLFHSM_CFG_SERVER_IMG_MGR && !WOLFHSM_CFG_NO_CRYPTO */
+
+    /* Object Store Tests */
+    WH_TEST_ASSERT(0 == whTest_Object());
 
     /* Multi-Client Tests (includes Global Keys when enabled) */
     WH_TEST_ASSERT(0 == whTest_MultiClient());

@@ -35,7 +35,7 @@
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_server.h"
 #include "wolfhsm/wh_server_img_mgr.h"
-#include "wolfhsm/wh_server_keystore.h"
+#include "wolfhsm/wh_server_object.h"
 #include "wolfhsm/wh_nvm.h"
 
 #ifndef WOLFHSM_CFG_NO_CRYPTO
@@ -107,7 +107,7 @@ int wh_Server_ImgMgrVerifyImg(whServerImgMgrContext*      context,
     }
 
     /* Load the key into the cache */
-    ret = wh_Server_KeystoreFreshenKey(server, img->keyId, &keyBuf, &keyMeta);
+    ret = wh_Server_ObjectCacheLoad(server, img->keyId, &keyBuf, &keyMeta);
     if (ret != WH_ERROR_OK) {
         return ret;
     }

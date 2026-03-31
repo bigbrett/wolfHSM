@@ -38,7 +38,8 @@ whKeyId wh_KeyId_TranslateFromClient(uint16_t type, uint16_t clientId,
 #endif
 
 #ifdef WOLFHSM_CFG_KEYWRAP
-    /* Convert wrapped flag to TYPE=WH_KETYPE_WRAPPED */
+    /* Deprecated: Convert wrapped flag to TYPE=WH_KEYTYPE_WRAPPED.
+     * Needed while legacy keywrap API (WH_MESSAGE_GROUP_KEY) is still active */
     if ((reqId & WH_KEYID_CLIENT_WRAPPED_FLAG) != 0) {
         type = WH_KEYTYPE_WRAPPED;
     }
@@ -59,7 +60,8 @@ whKeyId wh_KeyId_TranslateToClient(whKeyId serverId)
 #endif
 
 #ifdef WOLFHSM_CFG_KEYWRAP
-    /* Convert TYPE=WRAPPED to wrapped flag */
+    /* Deprecated: Convert TYPE=WRAPPED to wrapped flag.
+     * Needed while legacy keywrap API (WH_MESSAGE_GROUP_KEY) is still active */
     if (WH_KEYID_TYPE(serverId) == WH_KEYTYPE_WRAPPED) {
         clientId |= WH_KEYID_CLIENT_WRAPPED_FLAG;
     }

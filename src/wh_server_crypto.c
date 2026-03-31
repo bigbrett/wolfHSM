@@ -50,7 +50,7 @@
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_crypto.h"
 #include "wolfhsm/wh_utils.h"
-#include "wolfhsm/wh_server_keystore.h"
+#include "wolfhsm/wh_server_object.h"
 #include "wolfhsm/wh_server_crypto.h"
 
 #include "wolfhsm/wh_server.h"
@@ -223,7 +223,7 @@ int wh_Server_CacheImportRsaKey(whServerContext* ctx, RsaKey* key,
     }
 
     /* get a free slot */
-    ret = wh_Server_KeystoreGetCacheSlotChecked(ctx, keyId, max_size, &cacheBuf,
+    ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, max_size, &cacheBuf,
                                                 &cacheMeta);
     if (ret == 0) {
         ret = wh_Crypto_RsaSerializeKeyDer(key, max_size, cacheBuf, &der_size);
@@ -257,7 +257,7 @@ int wh_Server_CacheExportRsaKey(whServerContext* ctx, whKeyId keyId,
         return WH_ERROR_BADARGS;
     }
     /* Load key from NVM into a cache slot if necessary */
-    ret = wh_Server_KeystoreFreshenKey(ctx, keyId, &cacheBuf, &cacheMeta);
+    ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cacheBuf, &cacheMeta);
 
     if (ret == 0) {
         ret = wh_Crypto_RsaDeserializeKeyDer(cacheMeta->len, cacheBuf, key);
@@ -325,7 +325,7 @@ static int _HandleRsaKeyGen(whServerContext* ctx, uint16_t magic, int devId,
                 /* Must import the key into the cache and return keyid */
                 if (WH_KEYID_ISERASED(key_id)) {
                     /* Generate a new id */
-                    ret = wh_Server_KeystoreGetUniqueId(ctx, &key_id);
+                    ret = wh_Server_ObjectGetUniqueId(ctx, &key_id);
                     WH_DEBUG_SERVER_VERBOSE("RsaKeyGen UniqueId: keyId:%u, ret:%d\n", key_id, ret);
                     if (ret != WH_ERROR_OK) {
                         /* Early return on unique ID generation failure */
@@ -428,7 +428,7 @@ static int _HandleRsaFunction(whServerContext* ctx, uint16_t magic, int devId,
                 requiredUsage = WH_NVM_FLAGS_USAGE_DECRYPT;
                 break;
         }
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, key_id, requiredUsage);
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id, requiredUsage);
         if (ret != WH_ERROR_OK) {
             /* Currently wolfCrypt doesn't have a way for crypto callbacks to
             distinguish if a low level RSA operation (like encrypt/decrypt) is
@@ -439,13 +439,13 @@ static int _HandleRsaFunction(whServerContext* ctx, uint16_t magic, int devId,
                 if (op_type == RSA_PUBLIC_DECRYPT) {
                     /* Decrypt usage flag wasn't set so this might be a verify
                      * operation. Attempt to enforce against the verify flag */
-                    ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                    ret = wh_Server_ObjectFindEnforceUsage(
                         ctx, key_id, WH_NVM_FLAGS_USAGE_VERIFY);
                 }
                 else if (op_type == RSA_PRIVATE_ENCRYPT) {
                     /* Encrypt usage flag wasn't set so this might be a sign
                      * operation. Attempt to enforce against the sign flag */
-                    ret = wh_Server_KeystoreFindEnforceKeyUsage(
+                    ret = wh_Server_ObjectFindEnforceUsage(
                         ctx, key_id, WH_NVM_FLAGS_USAGE_SIGN);
                 }
             }
@@ -474,7 +474,7 @@ static int _HandleRsaFunction(whServerContext* ctx, uint16_t magic, int devId,
 cleanup:
     if (evict != 0) {
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
     if (ret == 0) {
         whMessageCrypto_RsaResponse res;
@@ -533,7 +533,7 @@ static int _HandleRsaGetSize(whServerContext* ctx, uint16_t magic, int devId,
         WH_DEBUG_SERVER_VERBOSE("evicting temp key:%x options:%u evict:%u\n",
                key_id, options, evict);
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
     if (ret == 0) {
         res.keySize = key_size;
@@ -567,7 +567,7 @@ int wh_Server_EccKeyCacheImport(whServerContext* ctx, ecc_key* key,
         return WH_ERROR_BADARGS;
     }
     /* get a free slot */
-    ret = wh_Server_KeystoreGetCacheSlotChecked(ctx, keyId, max_size, &cacheBuf,
+    ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, max_size, &cacheBuf,
                                                 &cacheMeta);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_EccSerializeKeyDer(key, max_size, cacheBuf, &der_size);
@@ -601,7 +601,7 @@ int wh_Server_EccKeyCacheExport(whServerContext* ctx, whKeyId keyId,
         return WH_ERROR_BADARGS;
     }
     /* Load key from NVM into a cache slot if necessary */
-    ret = wh_Server_KeystoreFreshenKey(ctx, keyId, &cacheBuf, &cacheMeta);
+    ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cacheBuf, &cacheMeta);
 
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_EccDeserializeKeyDer(cacheBuf, cacheMeta->len, key);
@@ -627,7 +627,7 @@ int wh_Server_CacheImportEd25519Key(whServerContext* ctx, ed25519_key* key,
         return WH_ERROR_BADARGS;
     }
 
-    ret = wh_Server_KeystoreGetCacheSlotChecked(ctx, keyId, max_size, &cacheBuf,
+    ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, max_size, &cacheBuf,
                                                 &cacheMeta);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_Ed25519SerializeKeyDer(key, max_size, cacheBuf,
@@ -659,7 +659,7 @@ int wh_Server_CacheExportEd25519Key(whServerContext* ctx, whKeyId keyId,
         return WH_ERROR_BADARGS;
     }
 
-    ret = wh_Server_KeystoreFreshenKey(ctx, keyId, &cacheBuf, &cacheMeta);
+    ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cacheBuf, &cacheMeta);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_Ed25519DeserializeKeyDer(cacheBuf, cacheMeta->len, key);
     }
@@ -689,7 +689,7 @@ int wh_Server_CacheImportCurve25519Key(whServerContext* server,
 
     /* if successful, find a free cache slot and copy in the key data */
     if (ret == 0) {
-        ret = wh_Server_KeystoreGetCacheSlotChecked(server, keyId, keySz,
+        ret = wh_Server_ObjectGetCacheSlotChecked(server, keyId, keySz,
                                                     &cacheBuf, &cacheMeta);
         if (ret == 0) {
             memcpy(cacheBuf, der_buf, keySz);
@@ -719,7 +719,7 @@ int wh_Server_CacheExportCurve25519Key(whServerContext* server, whKeyId keyId,
         return WH_ERROR_BADARGS;
     }
     /* Load key from NVM into a cache slot if necessary */
-    ret = wh_Server_KeystoreFreshenKey(server, keyId, &cacheBuf, &cacheMeta);
+    ret = wh_Server_ObjectCacheLoad(server, keyId, &cacheBuf, &cacheMeta);
 
     if (ret == 0) {
         ret = wh_Crypto_Curve25519DeserializeKey(cacheBuf, cacheMeta->len, key);
@@ -755,7 +755,7 @@ int wh_Server_MlDsaKeyCacheImport(whServerContext* ctx, MlDsaKey* key,
         return WH_ERROR_BADARGS;
     }
 
-    ret = wh_Server_KeystoreGetCacheSlotChecked(ctx, keyId, MAX_MLDSA_DER_SIZE,
+    ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, MAX_MLDSA_DER_SIZE,
                                                 &cacheBuf, &cacheMeta);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_MlDsaSerializeKeyDer(key, MAX_MLDSA_DER_SIZE, cacheBuf,
@@ -788,7 +788,7 @@ int wh_Server_MlDsaKeyCacheExport(whServerContext* ctx, whKeyId keyId,
         return WH_ERROR_BADARGS;
     }
 
-    ret = wh_Server_KeystoreFreshenKey(ctx, keyId, &cacheBuf, &cacheMeta);
+    ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cacheBuf, &cacheMeta);
 
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_MlDsaDeserializeKeyDer(cacheBuf, cacheMeta->len, key);
@@ -862,7 +862,7 @@ static int _HandleEccKeyGen(whServerContext* ctx, uint16_t magic, int devId,
                 res_size = 0;
                 if (WH_KEYID_ISERASED(key_id)) {
                     /* Generate a new id */
-                    ret = wh_Server_KeystoreGetUniqueId(ctx, &key_id);
+                    ret = wh_Server_ObjectGetUniqueId(ctx, &key_id);
                     WH_DEBUG_SERVER("UniqueId: keyId:%u, ret:%d\n", key_id, ret);
                     if (ret != WH_ERROR_OK) {
                         /* Early return on unique ID generation failure */
@@ -928,7 +928,7 @@ static int _HandleEccSharedSecret(whServerContext* ctx, uint16_t magic,
 
     /* Validate key usage policy for key derivation (private key) */
     if (!WH_KEYID_ISERASED(prv_key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, prv_key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, prv_key_id,
                                                     WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -969,11 +969,11 @@ static int _HandleEccSharedSecret(whServerContext* ctx, uint16_t magic,
 cleanup:
     if (evict_pub) {
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, pub_key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, pub_key_id);
     }
     if (evict_prv) {
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, prv_key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, prv_key_id);
     }
     if (ret == 0) {
         whMessageCrypto_EcdhResponse res;
@@ -1025,7 +1025,7 @@ static int _HandleEccSign(whServerContext* ctx, uint16_t magic, int devId,
 
     /* Validate key usage policy for signing */
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
                                                     WH_NVM_FLAGS_USAGE_SIGN);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -1058,7 +1058,7 @@ static int _HandleEccSign(whServerContext* ctx, uint16_t magic, int devId,
 cleanup:
     if (evict != 0) {
         /* typecasting to void so that not overwrite ret */
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
     if (ret == 0) {
         whMessageCrypto_EccSignResponse res;
@@ -1120,7 +1120,7 @@ static int _HandleEccVerify(whServerContext* ctx, uint16_t magic, int devId,
 
     /* Validate key usage policy for verification */
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
                                                     WH_NVM_FLAGS_USAGE_VERIFY);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -1169,7 +1169,7 @@ static int _HandleEccVerify(whServerContext* ctx, uint16_t magic, int devId,
 cleanup:
     if (evict != 0) {
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
     if (ret == 0) {
         res.pubSz = pub_size;
@@ -1256,7 +1256,7 @@ int wh_Server_HkdfKeyCacheImport(whServerContext* ctx, const uint8_t* keyData,
     }
 
     /* Get a free slot */
-    ret = wh_Server_KeystoreGetCacheSlotChecked(ctx, keyId, keySize, &cacheBuf,
+    ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, keySize, &cacheBuf,
                                                 &cacheMeta);
     if (ret == WH_ERROR_OK) {
         /* Copy the key data to cache buffer */
@@ -1295,7 +1295,7 @@ int wh_Server_CmacKdfKeyCacheImport(whServerContext* ctx,
         return WH_ERROR_BADARGS;
     }
 
-    ret = wh_Server_KeystoreGetCacheSlotChecked(ctx, keyId, keySize, &cacheBuf,
+    ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, keySize, &cacheBuf,
                                                 &cacheMeta);
     if (ret == WH_ERROR_OK) {
         memcpy(cacheBuf, keyData, keySize);
@@ -1377,13 +1377,13 @@ static int _HandleHkdf(whServerContext* ctx, uint16_t magic, int devId,
     /* Check if we should use cached key as input */
     if (inKeySz == 0 && !WH_KEYID_ISERASED(keyIdIn)) {
         /* Grab references to key in the cache */
-        ret = wh_Server_KeystoreFreshenKey(ctx, keyIdIn, &cachedKeyBuf,
+        ret = wh_Server_ObjectCacheLoad(ctx, keyIdIn, &cachedKeyBuf,
                                            &cachedKeyMeta);
         if (ret != WH_ERROR_OK) {
             return ret;
         }
         /* Validate key usage policy for key derivation (input key) */
-        ret = wh_Server_KeystoreEnforceKeyUsage(cachedKeyMeta,
+        ret = wh_Server_ObjectEnforceUsage(cachedKeyMeta,
                                                 WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             return ret;
@@ -1420,7 +1420,7 @@ static int _HandleHkdf(whServerContext* ctx, uint16_t magic, int devId,
             /* Must import the key into the cache and return keyid */
             if (WH_KEYID_ISERASED(key_id)) {
                 /* Generate a new id */
-                ret = wh_Server_KeystoreGetUniqueId(ctx, &key_id);
+                ret = wh_Server_ObjectGetUniqueId(ctx, &key_id);
                 WH_DEBUG_SERVER_VERBOSE("HkdfKeyGen UniqueId: keyId:%u, ret:%d\n", key_id, ret);
                 if (ret != WH_ERROR_OK) {
                     /* Early return on unique ID generation failure */
@@ -1518,13 +1518,13 @@ static int _HandleCmacKdf(whServerContext* ctx, uint16_t magic, int devId,
         if (WH_KEYID_ISERASED(saltKeyId)) {
             return WH_ERROR_BADARGS;
         }
-        ret = wh_Server_KeystoreFreshenKey(ctx, saltKeyId, &cachedSaltBuf,
+        ret = wh_Server_ObjectCacheLoad(ctx, saltKeyId, &cachedSaltBuf,
                                            &cachedSaltMeta);
         if (ret != WH_ERROR_OK) {
             return ret;
         }
         /* Validate key usage policy for cached salt */
-        ret = wh_Server_KeystoreEnforceKeyUsage(cachedSaltMeta,
+        ret = wh_Server_ObjectEnforceUsage(cachedSaltMeta,
                                                 WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             return ret;
@@ -1537,13 +1537,13 @@ static int _HandleCmacKdf(whServerContext* ctx, uint16_t magic, int devId,
         if (WH_KEYID_ISERASED(zKeyId)) {
             return WH_ERROR_BADARGS;
         }
-        ret = wh_Server_KeystoreFreshenKey(ctx, zKeyId, &cachedZBuf,
+        ret = wh_Server_ObjectCacheLoad(ctx, zKeyId, &cachedZBuf,
                                            &cachedZMeta);
         if (ret != WH_ERROR_OK) {
             return ret;
         }
         /* Validate key usage policy for key derivation (Z key) */
-        ret = wh_Server_KeystoreEnforceKeyUsage(cachedZMeta,
+        ret = wh_Server_ObjectEnforceUsage(cachedZMeta,
                                                 WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             return ret;
@@ -1576,7 +1576,7 @@ static int _HandleCmacKdf(whServerContext* ctx, uint16_t magic, int devId,
         }
         else {
             if (WH_KEYID_ISERASED(keyIdOut)) {
-                ret = wh_Server_KeystoreGetUniqueId(ctx, &keyIdOut);
+                ret = wh_Server_ObjectGetUniqueId(ctx, &keyIdOut);
                 if (ret != WH_ERROR_OK) {
                     return ret;
                 }
@@ -1657,7 +1657,7 @@ static int _HandleCurve25519KeyGen(whServerContext* ctx, uint16_t magic,
                 /* Must import the key into the cache and return keyid */
                 if (WH_KEYID_ISERASED(key_id)) {
                     /* Generate a new id */
-                    ret = wh_Server_KeystoreGetUniqueId(ctx, &key_id);
+                    ret = wh_Server_ObjectGetUniqueId(ctx, &key_id);
                     WH_DEBUG_SERVER("UniqueId: keyId:%u, ret:%d\n",
                            key_id, ret);
                     if (ret != WH_ERROR_OK) {
@@ -1725,7 +1725,7 @@ static int _HandleCurve25519SharedSecret(whServerContext* ctx, uint16_t magic,
 
     /* Validate key usage policy for key derivation (private key) */
     if (!WH_KEYID_ISERASED(prv_key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, prv_key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, prv_key_id,
                                                     WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -1768,11 +1768,11 @@ static int _HandleCurve25519SharedSecret(whServerContext* ctx, uint16_t magic,
 cleanup:
     if (evict_pub) {
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, pub_key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, pub_key_id);
     }
     if (evict_prv) {
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, prv_key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, prv_key_id);
     }
     if (ret == 0) {
         res.sz = res_len;
@@ -1829,7 +1829,7 @@ static int _HandleEd25519KeyGen(whServerContext* ctx, uint16_t magic, int devId,
             else {
                 ser_size = 0;
                 if (WH_KEYID_ISERASED(key_id)) {
-                    ret = wh_Server_KeystoreGetUniqueId(ctx, &key_id);
+                    ret = wh_Server_ObjectGetUniqueId(ctx, &key_id);
                     if (ret != WH_ERROR_OK) {
                         wc_ed25519_free(key);
                         return ret;
@@ -1910,7 +1910,7 @@ static int _HandleEd25519Sign(whServerContext* ctx, uint16_t magic, int devId,
     int evict = !!(req.options & WH_MESSAGE_CRYPTO_ED25519_SIGN_OPTIONS_EVICT);
 
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
                                                     WH_NVM_FLAGS_USAGE_SIGN);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -1943,7 +1943,7 @@ static int _HandleEd25519Sign(whServerContext* ctx, uint16_t magic, int devId,
 cleanup:
     if (evict) {
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
 
     if (ret == 0) {
@@ -2011,7 +2011,7 @@ static int _HandleEd25519Verify(whServerContext* ctx, uint16_t magic, int devId,
         !!(req.options & WH_MESSAGE_CRYPTO_ED25519_VERIFY_OPTIONS_EVICT);
 
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
                                                     WH_NVM_FLAGS_USAGE_VERIFY);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -2033,7 +2033,7 @@ static int _HandleEd25519Verify(whServerContext* ctx, uint16_t magic, int devId,
 
 cleanup:
     if (evict != 0) {
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
 
     if (ret == 0) {
@@ -2091,7 +2091,7 @@ static int _HandleEd25519SignDma(whServerContext* ctx, uint16_t magic,
     int evict = !!(req.options & WH_MESSAGE_CRYPTO_ED25519_SIGN_OPTIONS_EVICT);
 
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
                                                     WH_NVM_FLAGS_USAGE_SIGN);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -2143,7 +2143,7 @@ static int _HandleEd25519SignDma(whServerContext* ctx, uint16_t magic,
 
 cleanup:
     if (evict != 0) {
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
 
     if (ret == WH_ERROR_OK) {
@@ -2199,7 +2199,7 @@ static int _HandleEd25519VerifyDma(whServerContext* ctx, uint16_t magic,
         !!(req.options & WH_MESSAGE_CRYPTO_ED25519_VERIFY_OPTIONS_EVICT);
 
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
                                                     WH_NVM_FLAGS_USAGE_VERIFY);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -2249,7 +2249,7 @@ static int _HandleEd25519VerifyDma(whServerContext* ctx, uint16_t magic,
 
 cleanup:
     if (evict != 0) {
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
 
     if (ret == WH_ERROR_OK) {
@@ -2316,10 +2316,10 @@ static int _HandleAesCtr(whServerContext* ctx, uint16_t magic, int devId,
     WH_DEBUG_VERBOSE_HEXDUMP("[AesCtr] tmp ", tmp, AES_BLOCK_SIZE);
     /* Freshen key and validate usage policy if key is not erased */
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFreshenKey(ctx, key_id, &cachedKey, &keyMeta);
+        ret = wh_Server_ObjectCacheLoad(ctx, key_id, &cachedKey, &keyMeta);
         if (ret == WH_ERROR_OK) {
             /* Validate key usage policy */
-            ret = wh_Server_KeystoreEnforceKeyUsage(
+            ret = wh_Server_ObjectEnforceUsage(
                 keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
                                   : WH_NVM_FLAGS_USAGE_DECRYPT);
         }
@@ -2456,11 +2456,11 @@ static int _HandleAesCtrDma(whServerContext* ctx, uint16_t magic, int devId,
 
         /* Freshen key and validate usage policy if key is not erased */
         if (!WH_KEYID_ISERASED(keyId)) {
-            ret = wh_Server_KeystoreFreshenKey(ctx, keyId, &cachedKey,
+            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey,
                                                &keyMeta);
             if (ret == WH_ERROR_OK) {
                 /* Validate key usage policy */
-                ret = wh_Server_KeystoreEnforceKeyUsage(
+                ret = wh_Server_ObjectEnforceUsage(
                     keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
                                     : WH_NVM_FLAGS_USAGE_DECRYPT);
             }
@@ -2624,10 +2624,10 @@ static int _HandleAesEcb(whServerContext* ctx, uint16_t magic, int devId,
 
     /* Freshen key and validate usage policy if key is not erased */
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFreshenKey(ctx, key_id, &cachedKey, &keyMeta);
+        ret = wh_Server_ObjectCacheLoad(ctx, key_id, &cachedKey, &keyMeta);
         if (ret == WH_ERROR_OK) {
             /* Validate key usage policy */
-            ret = wh_Server_KeystoreEnforceKeyUsage(
+            ret = wh_Server_ObjectEnforceUsage(
                 keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
                                   : WH_NVM_FLAGS_USAGE_DECRYPT);
         }
@@ -2745,11 +2745,11 @@ static int _HandleAesEcbDma(whServerContext* ctx, uint16_t magic, int devId,
 
         /* Freshen key and validate usage policy if key is not erased */
         if (!WH_KEYID_ISERASED(keyId)) {
-            ret = wh_Server_KeystoreFreshenKey(ctx, keyId, &cachedKey,
+            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey,
                                                &keyMeta);
             if (ret == WH_ERROR_OK) {
                 /* Validate key usage policy */
-                ret = wh_Server_KeystoreEnforceKeyUsage(
+                ret = wh_Server_ObjectEnforceUsage(
                     keyMeta, req.enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
                                         : WH_NVM_FLAGS_USAGE_DECRYPT);
             }
@@ -2908,10 +2908,10 @@ static int _HandleAesCbc(whServerContext* ctx, uint16_t magic, int devId,
     WH_DEBUG_VERBOSE_HEXDUMP("[AesCbc] IV", iv, AES_BLOCK_SIZE);
     /* Freshen key and validate usage policy if key is not erased */
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFreshenKey(ctx, key_id, &cachedKey, &keyMeta);
+        ret = wh_Server_ObjectCacheLoad(ctx, key_id, &cachedKey, &keyMeta);
         if (ret == WH_ERROR_OK) {
             /* Validate key usage policy */
-            ret = wh_Server_KeystoreEnforceKeyUsage(
+            ret = wh_Server_ObjectEnforceUsage(
                 keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
                                   : WH_NVM_FLAGS_USAGE_DECRYPT);
         }
@@ -3037,11 +3037,11 @@ static int _HandleAesCbcDma(whServerContext* ctx, uint16_t magic, int devId,
 
         /* Freshen key and validate usage policy if key is not erased */
         if (!WH_KEYID_ISERASED(keyId)) {
-            ret = wh_Server_KeystoreFreshenKey(ctx, keyId, &cachedKey,
+            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey,
                                                &keyMeta);
             if (ret == WH_ERROR_OK) {
                 /* Validate key usage policy */
-                ret = wh_Server_KeystoreEnforceKeyUsage(
+                ret = wh_Server_ObjectEnforceUsage(
                     keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
                                     : WH_NVM_FLAGS_USAGE_DECRYPT);
             }
@@ -3217,11 +3217,11 @@ static int _HandleAesGcm(whServerContext* ctx, uint16_t magic, int devId,
 
     /* Freshen key and validate usage policy if key is not erased */
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFreshenKey(ctx, key_id, &cachedKey, &keyMeta);
+        ret = wh_Server_ObjectCacheLoad(ctx, key_id, &cachedKey, &keyMeta);
         WH_DEBUG_SERVER_VERBOSE("AesGcm FreshenKey key_id:%u ret:%d\n", key_id, ret);
         if (ret == WH_ERROR_OK) {
             /* Validate key usage policy */
-            ret = wh_Server_KeystoreEnforceKeyUsage(
+            ret = wh_Server_ObjectEnforceUsage(
                 keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
                                   : WH_NVM_FLAGS_USAGE_DECRYPT);
         }
@@ -3365,11 +3365,11 @@ static int _HandleAesGcmDma(whServerContext* ctx, uint16_t magic, int devId,
 
         /* Freshen key and validate usage policy if key is not erased */
         if (!WH_KEYID_ISERASED(keyId)) {
-            ret = wh_Server_KeystoreFreshenKey(ctx, keyId, &cachedKey,
+            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey,
                                                &keyMeta);
             if (ret == WH_ERROR_OK) {
                 /* Validate key usage policy */
-                ret = wh_Server_KeystoreEnforceKeyUsage(
+                ret = wh_Server_ObjectEnforceUsage(
                     keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
                                     : WH_NVM_FLAGS_USAGE_DECRYPT);
             }
@@ -3515,16 +3515,16 @@ static int _CmacResolveKey(whServerContext* ctx, const uint8_t* requestKey,
             WH_KEYTYPE_CRYPTO, ctx->comm->client_id, clientKeyId);
 
         /* Validate key usage policy - CMAC accepts sign or verify */
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, keyId,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, keyId,
                                                     WH_NVM_FLAGS_USAGE_SIGN);
         if (ret == WH_ERROR_USAGE) {
-            ret = wh_Server_KeystoreFindEnforceKeyUsage(
+            ret = wh_Server_ObjectFindEnforceUsage(
                 ctx, keyId, WH_NVM_FLAGS_USAGE_VERIFY);
         }
 
         if (ret == WH_ERROR_OK) {
             ret =
-                wh_Server_KeystoreReadKey(ctx, keyId, NULL, outKey, outKeyLen);
+                wh_Server_ObjectCacheExport(ctx, keyId, NULL, outKey, outKeyLen);
         }
 
         if (ret == WH_ERROR_OK) {
@@ -4095,7 +4095,7 @@ static int _HandleMlDsaKeyGen(whServerContext* ctx, uint16_t magic, int devId,
                         res_size = 0;
                         if (WH_KEYID_ISERASED(key_id)) {
                             /* Generate a new id */
-                            ret = wh_Server_KeystoreGetUniqueId(ctx, &key_id);
+                            ret = wh_Server_ObjectGetUniqueId(ctx, &key_id);
                             WH_DEBUG_SERVER("UniqueId: keyId:%u, ret:%d\n",
                                    key_id, ret);
                             if (ret != WH_ERROR_OK) {
@@ -4170,7 +4170,7 @@ static int _HandleMlDsaSign(whServerContext* ctx, uint16_t magic, int devId,
 
     /* Validate key usage policy for signing */
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
                                                     WH_NVM_FLAGS_USAGE_SIGN);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -4224,7 +4224,7 @@ static int _HandleMlDsaSign(whServerContext* ctx, uint16_t magic, int devId,
 cleanup:
     if (evict != 0) {
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
     if (ret == 0) {
         res.sz   = res_len;
@@ -4277,7 +4277,7 @@ static int _HandleMlDsaVerify(whServerContext* ctx, uint16_t magic, int devId,
 
     /* Validate key usage policy for verification */
     if (!WH_KEYID_ISERASED(key_id)) {
-        ret = wh_Server_KeystoreFindEnforceKeyUsage(ctx, key_id,
+        ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
                                                     WH_NVM_FLAGS_USAGE_VERIFY);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
@@ -4329,7 +4329,7 @@ static int _HandleMlDsaVerify(whServerContext* ctx, uint16_t magic, int devId,
 cleanup:
     if (evict != 0) {
         /* User requested to evict from cache, even if the call failed */
-        (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+        (void)wh_Server_ObjectCacheEvict(ctx, key_id);
     }
     if (ret == 0) {
         res.res  = result;
@@ -5358,7 +5358,7 @@ static int _HandleMlDsaKeyGenDma(whServerContext* ctx, uint16_t magic,
 
                         if (WH_KEYID_ISERASED(keyId)) {
                             /* Generate a new id */
-                            ret = wh_Server_KeystoreGetUniqueId(ctx, &keyId);
+                            ret = wh_Server_ObjectGetUniqueId(ctx, &keyId);
                             WH_DEBUG_SERVER("UniqueId: keyId:%u, ret:%d\n",
                                    keyId, ret);
                             if (ret != WH_ERROR_OK) {
@@ -5514,7 +5514,7 @@ static int _HandleMlDsaSignDma(whServerContext* ctx, uint16_t magic, int devId,
             if (evict) {
                 /* User requested to evict from cache, even if the call failed
                  */
-                (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+                (void)wh_Server_ObjectCacheEvict(ctx, key_id);
             }
         }
         wc_MlDsaKey_Free(key);
@@ -5645,7 +5645,7 @@ static int _HandleMlDsaVerifyDma(whServerContext* ctx, uint16_t magic,
         /* Evict key if requested */
         if (evict) {
             /* User requested to evict from cache, even if the call failed */
-            (void)wh_Server_KeystoreEvictKey(ctx, key_id);
+            (void)wh_Server_ObjectCacheEvict(ctx, key_id);
         }
     }
 

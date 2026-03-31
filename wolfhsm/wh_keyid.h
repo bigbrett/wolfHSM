@@ -49,22 +49,19 @@ typedef uint16_t whKeyId;
 /*
  * Client-facing key flags (temporary, stripped by server during translation)
  *
- * Clients use simple numeric IDs (0-255) with optional flags to indicate
- * global or wrapped keys. The server translates these to full internal
- * representations with TYPE/USER/ID fields.
-
+ * Clients use simple numeric IDs (0-255) with an optional flag to indicate
+ * global keys. The server translates these to full internal representations
+ * with TYPE/USER/ID fields.
+ *
  * Client keyId usage:
  * - Regular keys: Simple numeric ID (e.g., 5)
  * - Global keys: ID with WH_KEYID_CLIENT_GLOBAL_FLAG set
- * - Wrapped keys: ID with WH_KEYID_CLIENT_WRAPPED_FLAG set
- * - Wrapped metadata: Must use full WH_MAKE_KEYID() construction including type
- *    and metadata when populating the ID field in metadata to be wrapped
  *
  */
 /* Bit 8: Client-to-server signal for global key (shared across all clients) */
 #define WH_KEYID_CLIENT_GLOBAL_FLAG ((whKeyId)0x0100)
 
-/* Bit 9: Client-to-server signal for wrapped key */
+/* Deprecated: Client-to-server signal for wrapped key */
 #define WH_KEYID_CLIENT_WRAPPED_FLAG ((whKeyId)0x0200)
 
 /* Combined mask of all client-facing flags */
@@ -81,6 +78,7 @@ typedef uint16_t whKeyId;
 #define WH_KEYID_ID(_kid) (((_kid)&WH_KEYID_MASK) >> WH_KEYID_SHIFT)
 
 #define WH_KEYID_ISERASED(_kid) (WH_KEYID_ID(_kid) == WH_KEYID_ERASED)
+/* Deprecated: Check if key type is wrapped */
 #define WH_KEYID_ISWRAPPED(_kid) (WH_KEYID_TYPE(_kid) == WH_KEYTYPE_WRAPPED)
 
 /* Reserve USER=0 for global keys in the internal keyId encoding.
@@ -93,7 +91,7 @@ typedef uint16_t whKeyId;
 #define WH_KEYTYPE_CRYPTO 0x1  /* Key for Crypto operations */
 #define WH_KEYTYPE_SHE 0x2     /* SKE keys are AES or CMAC binary arrays */
 #define WH_KEYTYPE_COUNTER 0x3 /* Monotonic counter */
-#define WH_KEYTYPE_WRAPPED 0x4 /* Wrapped key metadata */
+#define WH_KEYTYPE_WRAPPED 0x4 /* Deprecated: Wrapped key metadata */
 
 /* Convert a keyId to a pointer to be stored in wolfcrypt devctx */
 #define WH_KEYID_TO_DEVCTX(_k) ((void*)((intptr_t)(_k)))
@@ -104,12 +102,9 @@ typedef uint16_t whKeyId;
  *
  * Translates client-facing keyId format (ID + flags) to server-internal format
  * (TYPE + USER + ID). Client flags are:
- * - 0x0100 (bit 8): WH_KEYID_CLIENT_GLOBAL_FLAG  → USER = 0
- * - 0x0200 (bit 9): WH_KEYID_CLIENT_WRAPPED_FLAG → TYPE = WH_KEYTYPE_WRAPPED
+ * - 0x0100 (bit 8): WH_KEYID_CLIENT_GLOBAL_FLAG  -> USER = 0
  *
- * @param type Key type to use as the TYPE field. Input value is ignored and
- *  WH_KEYTYPE_WRAPPED is used if the input clientId has the
- *  WH_CLIENT_KEYID_WRAPPED flag set.
+ * @param type Key type to use as the TYPE field.
  * @param clientId Client identifier to use as USER field
  * @param reqId Requested keyId from client (may include flags)
  * @return Server-internal keyId with TYPE, USER, and ID fields properly set.
@@ -122,10 +117,9 @@ whKeyId wh_KeyId_TranslateFromClient(uint16_t type, uint16_t clientId,
  *
  * Translates server-internal keyId format (TYPE + USER + ID) back to
  * client-facing format (ID + flags). Server encoding is converted to flags:
- * - USER = 0 (WH_KEYUSER_GLOBAL)  → 0x0100 (WH_KEYID_CLIENT_GLOBAL_FLAG)
- * - TYPE = WH_KEYTYPE_WRAPPED     → 0x0200 (WH_KEYID_CLIENT_WRAPPED_FLAG)
+ * - USER = 0 (WH_KEYUSER_GLOBAL)  -> 0x0100 (WH_KEYID_CLIENT_GLOBAL_FLAG)
  *
- * This ensures clients can identify global and wrapped keys after they are
+ * This ensures clients can identify global keys after they are
  * returned from server operations (cache, key generation, etc.).
  *
  * @param serverId Server-internal keyId with TYPE, USER, and ID fields

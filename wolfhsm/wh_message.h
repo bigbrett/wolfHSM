@@ -47,6 +47,7 @@ enum WH_MESSAGE_ENUM {
     WH_MESSAGE_GROUP_CUSTOM     = 0x0A00, /* User-specified features */
     WH_MESSAGE_GROUP_CRYPTO_DMA = 0x0B00, /* DMA crypto operations */
     WH_MESSAGE_GROUP_CERT       = 0x0C00, /* Certificate operations */
+    WH_MESSAGE_GROUP_OBJECT     = 0x0D00, /* Unified object operations */
 
     WH_MESSAGE_ACTION_MASK = 0x00FF, /* 255 subtypes per group*/
     WH_MESSAGE_ACTION_NONE = 0x0000, /* No action. Invalid. */
@@ -96,6 +97,32 @@ enum {
     WH_COUNTER_INCREMENT,
     WH_COUNTER_READ,
     WH_COUNTER_DESTROY,
+};
+
+/* object actions */
+enum WH_OBJECT_ENUM {
+    /* NVM backing store operations */
+    WH_OBJECT_NVM_ADD           = 0x01,
+    WH_OBJECT_NVM_DESTROY       = 0x02,
+    WH_OBJECT_NVM_READ          = 0x03,
+    WH_OBJECT_NVM_GETAVAIL      = 0x04,
+    WH_OBJECT_NVM_ITERATE       = 0x05,
+    /* Cache lifecycle operations */
+    WH_OBJECT_CACHE_ADD         = 0x10,
+    WH_OBJECT_CACHE_LOAD        = 0x11,
+    WH_OBJECT_CACHE_EVICT       = 0x12,
+    WH_OBJECT_CACHE_COMMIT      = 0x13,
+    WH_OBJECT_CACHE_EXPORT      = 0x14,
+    WH_OBJECT_CACHE_REVOKE      = 0x15,
+    /* Wrap operations */
+    WH_OBJECT_WRAP              = 0x20,
+    WH_OBJECT_UNWRAP_CACHE      = 0x21,
+    WH_OBJECT_UNWRAP_EXPORT     = 0x22,
+    /* DMA variants */
+    WH_OBJECT_NVM_ADD_DMA       = 0x30,
+    WH_OBJECT_NVM_READ_DMA      = 0x31,
+    WH_OBJECT_CACHE_ADD_DMA     = 0x32,
+    WH_OBJECT_CACHE_EXPORT_DMA  = 0x33,
 };
 
 /* Construct the message kind based on group and action */

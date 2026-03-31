@@ -34,7 +34,7 @@
 #include "wolfhsm/wh_server.h"
 #include "wolfhsm/wh_server_cert.h"
 #include "wolfhsm/wh_server_nvm.h"
-#include "wolfhsm/wh_server_keystore.h"
+#include "wolfhsm/wh_server_object.h"
 #include "wolfhsm/wh_message.h"
 #include "wolfhsm/wh_message_cert.h"
 
@@ -110,7 +110,7 @@ static int _verifyChainAgainstCmStore(whServerContext*      server,
                 /* If the keyId is erased, get a unique key id for the public
                  * key. Otherwise cache the key using the provided keyId */
                 if (WH_KEYID_ISERASED(*inout_keyId)) {
-                    rc = wh_Server_KeystoreGetUniqueId(server, inout_keyId);
+                    rc = wh_Server_ObjectGetUniqueId(server, inout_keyId);
                     if (rc != WH_ERROR_OK) {
                         return rc;
                     }
@@ -124,7 +124,7 @@ static int _verifyChainAgainstCmStore(whServerContext*      server,
 
                     /* Grab the cache slot and dump the public key from the cert
                      * into it */
-                    rc = wh_Server_KeystoreGetCacheSlotChecked(
+                    rc = wh_Server_ObjectGetCacheSlotChecked(
                         server, *inout_keyId, cacheBufSize, &cacheBuf,
                         &cacheMeta);
                     if (rc == WH_ERROR_OK) {

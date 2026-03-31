@@ -38,6 +38,7 @@
 
 #ifdef WOLFHSM_CFG_ENABLE_CLIENT
 #include "wolfhsm/wh_client.h"
+#include "wolfhsm/wh_client_object.h"
 #endif
 
 #include "wolfhsm/wh_transport_mem.h"
@@ -232,12 +233,14 @@ int whTest_CertClient(whClientContext* client)
     /* Export the cached public key so we can verify it matches the expected
      * leaf public key. Don't assert on the result as we must evict the key
      * first */
-    rc = wh_Client_KeyExport(client, out_keyId, NULL, 0, exportedPubKey,
-                             &exportedPubKeyLen);
+    rc = wh_Client_ObjectCacheExport(client, WH_KEYTYPE_CRYPTO, out_keyId,
+                                      NULL, 0, exportedPubKey,
+                                      &exportedPubKeyLen);
 
     /* Evict the cached key before any further assertions so it doesn't leak
      * cache slots */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyEvict(client, out_keyId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, out_keyId));
 
     /* Now that we have ecicted the key, check that the export and leaf key
      * caching worked as expected */
@@ -423,7 +426,8 @@ int whTest_CertClientDma_ClientServerTestInternal(whClientContext* client)
 
     /* Evict the cached key before any further assertions so it doesn't leak
      * cache slots */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyEvict(client, out_keyId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, out_keyId));
 
     /* Now that we have ecicted the key, check that the export and leaf key
      * caching worked as expected */
