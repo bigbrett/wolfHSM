@@ -761,4 +761,332 @@ int wh_Client_ObjectCacheRevoke(whClientContext* c, uint16_t type, uint16_t id)
     return ret;
 }
 
+/*
+ * Object Wrap
+ */
+
+int wh_Client_ObjectWrapRequest(whClientContext* c, uint16_t type,
+                                 uint16_t serverKekId, uint16_t cipherType,
+                                 const uint8_t* in, uint16_t inSz,
+                                 whNvmAccess access, whNvmFlags flags,
+                                 const uint8_t* label, uint16_t labelSz)
+{
+    whMessageObject_WrapRequest* req = NULL;
+    uint8_t* packIn;
+    uint16_t capSz;
+
+    if (c == NULL || in == NULL || inSz == 0 ||
+        sizeof(*req) + inSz > WOLFHSM_CFG_COMM_DATA_LEN) {
+        return WH_ERROR_BADARGS;
+    }
+
+    req = (whMessageObject_WrapRequest*)wh_CommClient_GetDataPtr(c->comm);
+    if (req == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    memset(req, 0, sizeof(*req));
+    packIn = (uint8_t*)(req + 1);
+
+    req->type        = type;
+    req->serverKekId = serverKekId;
+    req->cipherType  = cipherType;
+    req->keySz       = inSz;
+    req->access      = access;
+    req->flags       = flags;
+    if (label != NULL) {
+        capSz = (labelSz > WH_NVM_LABEL_LEN) ? WH_NVM_LABEL_LEN : labelSz;
+        memcpy(req->label, label, capSz);
+    }
+    memcpy(packIn, in, inSz);
+
+    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
+                                 WH_OBJECT_WRAP,
+                                 sizeof(*req) + inSz, (uint8_t*)req);
+}
+
+int wh_Client_ObjectWrapResponse(whClientContext* c, int32_t* out_rc,
+                                  uint8_t* wrappedOut, uint16_t* wrappedOutSz)
+{
+    uint16_t group;
+    uint16_t action;
+    uint16_t size;
+    int ret;
+    whMessageObject_WrapResponse* resp = NULL;
+    uint8_t* packOut;
+
+    if (c == NULL || wrappedOutSz == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    resp = (whMessageObject_WrapResponse*)wh_CommClient_GetDataPtr(c->comm);
+    if (resp == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    packOut = (uint8_t*)(resp + 1);
+
+    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
+    if (ret == WH_ERROR_OK) {
+        if (resp->rc != 0) {
+            ret = resp->rc;
+        }
+        else {
+            if (wrappedOut == NULL) {
+                *wrappedOutSz = resp->wrappedSz;
+            }
+            else if (*wrappedOutSz < resp->wrappedSz) {
+                ret = WH_ERROR_BUFFER_SIZE;
+            }
+            else {
+                memcpy(wrappedOut, packOut, resp->wrappedSz);
+                *wrappedOutSz = resp->wrappedSz;
+            }
+        }
+    }
+
+    if (out_rc != NULL) {
+        *out_rc = (ret == WH_ERROR_OK) ? 0 : ret;
+    }
+
+    return ret;
+}
+
+int wh_Client_ObjectWrap(whClientContext* c, uint16_t type,
+                          uint16_t serverKekId, uint16_t cipherType,
+                          const uint8_t* in, uint16_t inSz,
+                          whNvmAccess access, whNvmFlags flags,
+                          const uint8_t* label, uint16_t labelSz,
+                          uint8_t* wrappedOut, uint16_t* wrappedOutSz)
+{
+    int ret;
+
+    ret = wh_Client_ObjectWrapRequest(c, type, serverKekId, cipherType,
+                                       in, inSz, access, flags,
+                                       label, labelSz);
+    if (ret == WH_ERROR_OK) {
+        do {
+            ret = wh_Client_ObjectWrapResponse(c, NULL, wrappedOut,
+                                                wrappedOutSz);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+
+    return ret;
+}
+
+
+/*
+ * Object Unwrap and Cache
+ */
+
+int wh_Client_ObjectUnwrapCacheRequest(whClientContext* c, uint16_t type,
+                                        uint16_t serverKekId,
+                                        uint16_t cipherType,
+                                        const uint8_t* wrappedIn,
+                                        uint16_t wrappedInSz,
+                                        uint16_t requestedId)
+{
+    whMessageObject_UnwrapCacheRequest* req = NULL;
+    uint8_t* packIn;
+
+    if (c == NULL || wrappedIn == NULL || wrappedInSz == 0 ||
+        sizeof(*req) + wrappedInSz > WOLFHSM_CFG_COMM_DATA_LEN) {
+        return WH_ERROR_BADARGS;
+    }
+
+    req = (whMessageObject_UnwrapCacheRequest*)
+        wh_CommClient_GetDataPtr(c->comm);
+    if (req == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    memset(req, 0, sizeof(*req));
+    packIn = (uint8_t*)(req + 1);
+
+    req->type        = type;
+    req->serverKekId = serverKekId;
+    req->cipherType  = cipherType;
+    req->wrappedSz   = wrappedInSz;
+    req->requestedId = requestedId;
+    memcpy(packIn, wrappedIn, wrappedInSz);
+
+    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
+                                 WH_OBJECT_UNWRAP_CACHE,
+                                 sizeof(*req) + wrappedInSz, (uint8_t*)req);
+}
+
+int wh_Client_ObjectUnwrapCacheResponse(whClientContext* c, int32_t* out_rc,
+                                         uint16_t* out_id)
+{
+    uint16_t group;
+    uint16_t action;
+    uint16_t size;
+    int ret;
+    whMessageObject_UnwrapCacheResponse resp;
+
+    if (c == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)&resp);
+    if (ret == WH_ERROR_OK) {
+        if (resp.rc != 0) {
+            ret = resp.rc;
+        }
+        else {
+            if (out_id != NULL) {
+                *out_id = resp.id;
+            }
+        }
+    }
+
+    if (out_rc != NULL) {
+        *out_rc = (ret == WH_ERROR_OK) ? 0 : ret;
+    }
+
+    return ret;
+}
+
+int wh_Client_ObjectUnwrapCache(whClientContext* c, uint16_t type,
+                                 uint16_t serverKekId, uint16_t cipherType,
+                                 const uint8_t* wrappedIn,
+                                 uint16_t wrappedInSz,
+                                 uint16_t requestedId, uint16_t* out_id)
+{
+    int ret;
+
+    ret = wh_Client_ObjectUnwrapCacheRequest(c, type, serverKekId, cipherType,
+                                              wrappedIn, wrappedInSz,
+                                              requestedId);
+    if (ret == WH_ERROR_OK) {
+        do {
+            ret = wh_Client_ObjectUnwrapCacheResponse(c, NULL, out_id);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+
+    return ret;
+}
+
+
+/*
+ * Object Unwrap and Export
+ */
+
+int wh_Client_ObjectUnwrapExportRequest(whClientContext* c, uint16_t type,
+                                         uint16_t serverKekId,
+                                         uint16_t cipherType,
+                                         const uint8_t* wrappedIn,
+                                         uint16_t wrappedInSz)
+{
+    whMessageObject_UnwrapExportRequest* req = NULL;
+    uint8_t* packIn;
+
+    if (c == NULL || wrappedIn == NULL || wrappedInSz == 0 ||
+        sizeof(*req) + wrappedInSz > WOLFHSM_CFG_COMM_DATA_LEN) {
+        return WH_ERROR_BADARGS;
+    }
+
+    req = (whMessageObject_UnwrapExportRequest*)
+        wh_CommClient_GetDataPtr(c->comm);
+    if (req == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    memset(req, 0, sizeof(*req));
+    packIn = (uint8_t*)(req + 1);
+
+    req->type        = type;
+    req->serverKekId = serverKekId;
+    req->cipherType  = cipherType;
+    req->wrappedSz   = wrappedInSz;
+    memcpy(packIn, wrappedIn, wrappedInSz);
+
+    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
+                                 WH_OBJECT_UNWRAP_EXPORT,
+                                 sizeof(*req) + wrappedInSz, (uint8_t*)req);
+}
+
+int wh_Client_ObjectUnwrapExportResponse(whClientContext* c, int32_t* out_rc,
+                                          uint8_t* out, uint16_t* outSz,
+                                          whNvmAccess* outAccess,
+                                          whNvmFlags* outFlags,
+                                          uint8_t* outLabel,
+                                          uint16_t outLabelSz)
+{
+    uint16_t group;
+    uint16_t action;
+    uint16_t size;
+    int ret;
+    whMessageObject_UnwrapExportResponse* resp = NULL;
+    uint8_t* packOut;
+    uint16_t capSz;
+
+    if (c == NULL || outSz == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    resp = (whMessageObject_UnwrapExportResponse*)
+        wh_CommClient_GetDataPtr(c->comm);
+    if (resp == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    packOut = (uint8_t*)(resp + 1);
+
+    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
+    if (ret == WH_ERROR_OK) {
+        if (resp->rc != 0) {
+            ret = resp->rc;
+        }
+        else {
+            if (out == NULL) {
+                *outSz = resp->keySz;
+            }
+            else if (*outSz < resp->keySz) {
+                ret = WH_ERROR_BUFFER_SIZE;
+            }
+            else {
+                memcpy(out, packOut, resp->keySz);
+                *outSz = resp->keySz;
+            }
+            if (outAccess != NULL) {
+                *outAccess = resp->access;
+            }
+            if (outFlags != NULL) {
+                *outFlags = resp->flags;
+            }
+            if (outLabel != NULL) {
+                capSz = (outLabelSz > sizeof(resp->label))
+                    ? sizeof(resp->label) : outLabelSz;
+                memcpy(outLabel, resp->label, capSz);
+            }
+        }
+    }
+
+    if (out_rc != NULL) {
+        *out_rc = (ret == WH_ERROR_OK) ? 0 : ret;
+    }
+
+    return ret;
+}
+
+int wh_Client_ObjectUnwrapExport(whClientContext* c, uint16_t type,
+                                  uint16_t serverKekId, uint16_t cipherType,
+                                  const uint8_t* wrappedIn,
+                                  uint16_t wrappedInSz,
+                                  uint8_t* out, uint16_t* outSz,
+                                  whNvmAccess* outAccess,
+                                  whNvmFlags* outFlags,
+                                  uint8_t* outLabel, uint16_t outLabelSz)
+{
+    int ret;
+
+    ret = wh_Client_ObjectUnwrapExportRequest(c, type, serverKekId, cipherType,
+                                               wrappedIn, wrappedInSz);
+    if (ret == WH_ERROR_OK) {
+        do {
+            ret = wh_Client_ObjectUnwrapExportResponse(c, NULL, out, outSz,
+                                                        outAccess, outFlags,
+                                                        outLabel, outLabelSz);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+
+    return ret;
+}
+
 #endif /* WOLFHSM_CFG_ENABLE_CLIENT */

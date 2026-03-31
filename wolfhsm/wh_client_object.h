@@ -103,4 +103,46 @@ int wh_Client_ObjectCacheRevokeRequest(whClientContext* c, uint16_t type,
 int wh_Client_ObjectCacheRevokeResponse(whClientContext* c, int32_t* out_rc);
 int wh_Client_ObjectCacheRevoke(whClientContext* c, uint16_t type, uint16_t id);
 
+/* Object Wrap */
+int wh_Client_ObjectWrapRequest(whClientContext* c, uint16_t type,
+    uint16_t serverKekId, uint16_t cipherType,
+    const uint8_t* in, uint16_t inSz,
+    whNvmAccess access, whNvmFlags flags,
+    const uint8_t* label, uint16_t labelSz);
+int wh_Client_ObjectWrapResponse(whClientContext* c, int32_t* out_rc,
+    uint8_t* wrappedOut, uint16_t* wrappedOutSz);
+int wh_Client_ObjectWrap(whClientContext* c, uint16_t type,
+    uint16_t serverKekId, uint16_t cipherType,
+    const uint8_t* in, uint16_t inSz,
+    whNvmAccess access, whNvmFlags flags,
+    const uint8_t* label, uint16_t labelSz,
+    uint8_t* wrappedOut, uint16_t* wrappedOutSz);
+
+/* Object Unwrap and Cache */
+int wh_Client_ObjectUnwrapCacheRequest(whClientContext* c, uint16_t type,
+    uint16_t serverKekId, uint16_t cipherType,
+    const uint8_t* wrappedIn, uint16_t wrappedInSz,
+    uint16_t requestedId);
+int wh_Client_ObjectUnwrapCacheResponse(whClientContext* c, int32_t* out_rc,
+    uint16_t* out_id);
+int wh_Client_ObjectUnwrapCache(whClientContext* c, uint16_t type,
+    uint16_t serverKekId, uint16_t cipherType,
+    const uint8_t* wrappedIn, uint16_t wrappedInSz,
+    uint16_t requestedId, uint16_t* out_id);
+
+/* Object Unwrap and Export */
+int wh_Client_ObjectUnwrapExportRequest(whClientContext* c, uint16_t type,
+    uint16_t serverKekId, uint16_t cipherType,
+    const uint8_t* wrappedIn, uint16_t wrappedInSz);
+int wh_Client_ObjectUnwrapExportResponse(whClientContext* c, int32_t* out_rc,
+    uint8_t* out, uint16_t* outSz,
+    whNvmAccess* outAccess, whNvmFlags* outFlags,
+    uint8_t* outLabel, uint16_t outLabelSz);
+int wh_Client_ObjectUnwrapExport(whClientContext* c, uint16_t type,
+    uint16_t serverKekId, uint16_t cipherType,
+    const uint8_t* wrappedIn, uint16_t wrappedInSz,
+    uint8_t* out, uint16_t* outSz,
+    whNvmAccess* outAccess, whNvmFlags* outFlags,
+    uint8_t* outLabel, uint16_t outLabelSz);
+
 #endif /* !WOLFHSM_WH_CLIENT_OBJECT_H_ */

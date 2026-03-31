@@ -37,6 +37,10 @@
 #include "wolfssl/wolfcrypt/types.h"
 #include "wolfssl/wolfcrypt/error-crypt.h"
 
+#ifdef WOLFHSM_CFG_KEYWRAP
+#include "wolfssl/wolfcrypt/aes.h"
+#endif
+
 #include "wolfhsm/wh_common.h"
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_message.h"
@@ -1014,6 +1018,174 @@ int wh_Server_ObjectCacheExportDmaChecked(whServerContext* server,
 
 #endif /* WOLFHSM_CFG_DMA */
 
+#ifdef WOLFHSM_CFG_KEYWRAP
+#ifndef NO_AES
+#ifdef HAVE_AESGCM
+
+static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
+                              uint8_t* keyIn, uint16_t keySz,
+                              whNvmMetadata* metadataIn, uint8_t* wrappedKeyOut,
+                              uint16_t wrappedKeySz)
+{
+    int      ret = 0;
+    Aes      aes[1];
+    uint8_t  authTag[WH_KEYWRAP_AES_GCM_TAG_SIZE];
+    uint8_t  iv[WH_KEYWRAP_AES_GCM_IV_SIZE];
+    uint8_t* serverKey;
+    uint32_t serverKeySz;
+    whNvmMetadata* serverKeyMetadata;
+    uint8_t  plainBlob[sizeof(*metadataIn) + WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+    uint32_t plainBlobSz = sizeof(*metadataIn) + keySz;
+    uint8_t* encBlob;
+
+    if (server == NULL || keyIn == NULL || metadataIn == NULL ||
+        wrappedKeyOut == NULL || plainBlobSz > sizeof(plainBlob)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    /* Check if the buffer is big enough to hold the wrapped key */
+    if (wrappedKeySz <
+        sizeof(iv) + sizeof(authTag) + sizeof(*metadataIn) + keySz) {
+        return WH_ERROR_BUFFER_SIZE;
+    }
+
+    /* Get the server side key */
+    ret = wh_Server_ObjectCacheLoad(server, serverKeyId,
+                                     &serverKey, &serverKeyMetadata);
+    if (ret != WH_ERROR_OK) {
+        return ret;
+    }
+    serverKeySz = serverKeyMetadata->len;
+
+    /* Validate key usage policy for wrapping (KEK) */
+    ret = wh_Server_ObjectEnforceUsage(serverKeyMetadata,
+                                        WH_NVM_FLAGS_USAGE_WRAP);
+    if (ret != WH_ERROR_OK) {
+        return ret;
+    }
+
+    /* Initialize AES context and set it to use the server side key */
+    ret = wc_AesInit(aes, NULL, server->devId);
+    if (ret != 0) {
+        return ret;
+    }
+
+    ret = wc_AesGcmSetKey(aes, serverKey, serverKeySz);
+    if (ret != 0) {
+        wc_AesFree(aes);
+        return ret;
+    }
+
+    /* Generate the IV */
+    ret = wc_RNG_GenerateBlock(server->crypto->rng, iv, sizeof(iv));
+    if (ret != 0) {
+        wc_AesFree(aes);
+        return ret;
+    }
+
+    /* Combine key and metadata into one blob */
+    memcpy(plainBlob, metadataIn, sizeof(*metadataIn));
+    memcpy(plainBlob + sizeof(*metadataIn), keyIn, keySz);
+
+    /* Place the encrypted blob after the IV and Auth Tag */
+    encBlob = (uint8_t*)wrappedKeyOut + sizeof(iv) + sizeof(authTag);
+
+    /* Encrypt the blob */
+    ret = wc_AesGcmEncrypt(aes, encBlob, plainBlob, plainBlobSz, iv,
+                           sizeof(iv), authTag, sizeof(authTag), NULL, 0);
+    if (ret != 0) {
+        wc_AesFree(aes);
+        return ret;
+    }
+
+    /* Prepend IV + authTag to encrypted blob */
+    memcpy(wrappedKeyOut, iv, sizeof(iv));
+    memcpy(wrappedKeyOut + sizeof(iv), authTag, sizeof(authTag));
+
+    wc_AesFree(aes);
+
+    return WH_ERROR_OK;
+}
+
+static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
+                                void* wrappedKeyIn, uint16_t wrappedKeySz,
+                                whNvmMetadata* metadataOut, void* keyOut,
+                                uint16_t keySz)
+{
+    int      ret = 0;
+    Aes      aes[1];
+    uint8_t  authTag[WH_KEYWRAP_AES_GCM_TAG_SIZE];
+    uint8_t  iv[WH_KEYWRAP_AES_GCM_IV_SIZE];
+    uint8_t* serverKey;
+    uint32_t serverKeySz;
+    whNvmMetadata* serverKeyMetadata;
+    uint8_t* encBlob;
+    uint16_t encBlobSz;
+    uint8_t  plainBlob[sizeof(*metadataOut) + WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+
+    if (server == NULL || wrappedKeyIn == NULL || metadataOut == NULL ||
+        keyOut == NULL || keySz > WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE) {
+        return WH_ERROR_BADARGS;
+    }
+
+    if (wrappedKeySz < sizeof(iv) + sizeof(authTag)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    encBlob   = (uint8_t*)wrappedKeyIn + sizeof(iv) + sizeof(authTag);
+    encBlobSz = wrappedKeySz - sizeof(iv) - sizeof(authTag);
+
+    /* Get the server side key */
+    ret = wh_Server_ObjectCacheLoad(server, serverKeyId,
+                                     &serverKey, &serverKeyMetadata);
+    if (ret != WH_ERROR_OK) {
+        return ret;
+    }
+    serverKeySz = serverKeyMetadata->len;
+
+    /* Validate key usage policy for unwrapping (KEK) */
+    ret = wh_Server_ObjectEnforceUsage(serverKeyMetadata,
+                                        WH_NVM_FLAGS_USAGE_WRAP);
+    if (ret != WH_ERROR_OK) {
+        return ret;
+    }
+
+    /* Initialize AES context and set it to use the server side key */
+    ret = wc_AesInit(aes, NULL, server->devId);
+    if (ret != 0) {
+        return ret;
+    }
+
+    ret = wc_AesGcmSetKey(aes, serverKey, serverKeySz);
+    if (ret != 0) {
+        wc_AesFree(aes);
+        return ret;
+    }
+
+    /* Extract IV and authTag from wrappedKeyIn */
+    memcpy(iv, wrappedKeyIn, sizeof(iv));
+    memcpy(authTag, (uint8_t*)wrappedKeyIn + sizeof(iv), sizeof(authTag));
+
+    /* Decrypt the encrypted blob */
+    ret = wc_AesGcmDecrypt(aes, plainBlob, encBlob, encBlobSz, iv, sizeof(iv),
+                           authTag, sizeof(authTag), NULL, 0);
+    if (ret != 0) {
+        wc_AesFree(aes);
+        return ret;
+    }
+
+    /* Extract metadata and key from the decrypted blob */
+    memcpy(metadataOut, plainBlob, sizeof(*metadataOut));
+    memcpy(keyOut, plainBlob + sizeof(*metadataOut), keySz);
+
+    wc_AesFree(aes);
+    return WH_ERROR_OK;
+}
+
+#endif /* HAVE_AESGCM */
+#endif /* !NO_AES */
+#endif /* WOLFHSM_CFG_KEYWRAP */
+
 /*
  * Request Handler
  */
@@ -1375,26 +1547,149 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
         } break;
 
         case WH_OBJECT_WRAP: {
-            /* TODO: implement wrap/unwrap */
+            whMessageObject_WrapRequest  req;
             whMessageObject_WrapResponse resp;
+            uint8_t*  keyData;
+            uint8_t*  wrappedOut;
+            whKeyId   kekId;
+            whNvmMetadata wrapMeta;
+            uint16_t  capSz;
 
             memset(&resp, 0, sizeof(resp));
-            resp.rc        = WH_ERROR_NOHANDLER;
+
+            (void)wh_MessageObject_TranslateWrapRequest(
+                magic, (whMessageObject_WrapRequest*)req_packet, &req);
+
+            keyData = (uint8_t*)req_packet + sizeof(req);
+            wrappedOut = (uint8_t*)resp_packet + sizeof(resp);
+
+            kekId = wh_KeyId_TranslateFromClient(
+                req.type, server->comm->client_id, req.serverKekId);
+
+            /* Build metadata from request fields */
+            memset(&wrapMeta, 0, sizeof(wrapMeta));
+            wrapMeta.access = req.access;
+            wrapMeta.flags  = req.flags;
+            wrapMeta.len    = req.keySz;
+            capSz = sizeof(wrapMeta.label);
+            memcpy(wrapMeta.label, req.label, capSz);
+
             resp.wrappedSz = 0;
+
+#ifndef NO_AES
+#ifdef HAVE_AESGCM
+            if (req.cipherType == WC_CIPHER_AES_GCM) {
+                uint16_t wrappedBufSz = WOLFHSM_CFG_COMM_DATA_LEN -
+                                        sizeof(resp);
+                uint16_t expectedSz = WH_KEYWRAP_AES_GCM_HEADER_SIZE +
+                                       sizeof(wrapMeta) + req.keySz;
+
+                if (wrappedBufSz < expectedSz) {
+                    resp.rc = WH_ERROR_BUFFER_SIZE;
+                }
+                else {
+                    ret = WH_SERVER_NVM_LOCK(server);
+                    if (ret == WH_ERROR_OK) {
+                        ret = _AesGcmObjectWrap(server, kekId, keyData,
+                                                 req.keySz, &wrapMeta,
+                                                 wrappedOut, expectedSz);
+                        (void)WH_SERVER_NVM_UNLOCK(server);
+                    }
+                    resp.rc = ret;
+                    if (ret == WH_ERROR_OK) {
+                        resp.wrappedSz = expectedSz;
+                    }
+                }
+            }
+            else
+#endif /* HAVE_AESGCM */
+#endif /* !NO_AES */
+            {
+                resp.rc = WH_ERROR_BADARGS;
+            }
 
             (void)wh_MessageObject_TranslateWrapResponse(
                 magic, &resp,
                 (whMessageObject_WrapResponse*)resp_packet);
-            *out_resp_size = sizeof(resp);
+            *out_resp_size = sizeof(resp) + resp.wrappedSz;
         } break;
 
         case WH_OBJECT_UNWRAP_CACHE: {
-            /* TODO: implement wrap/unwrap */
+            whMessageObject_UnwrapCacheRequest  req;
             whMessageObject_UnwrapCacheResponse resp;
+            uint8_t*      wrappedIn;
+            whKeyId       kekId;
+            whNvmMetadata unwrapMeta;
+            uint8_t       keyBuf[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+            uint16_t      keySz;
 
             memset(&resp, 0, sizeof(resp));
-            resp.rc = WH_ERROR_NOHANDLER;
             resp.id = WH_KEYID_ERASED;
+
+            (void)wh_MessageObject_TranslateUnwrapCacheRequest(
+                magic,
+                (whMessageObject_UnwrapCacheRequest*)req_packet, &req);
+
+            wrappedIn = (uint8_t*)req_packet + sizeof(req);
+
+            kekId = wh_KeyId_TranslateFromClient(
+                req.type, server->comm->client_id, req.serverKekId);
+
+#ifndef NO_AES
+#ifdef HAVE_AESGCM
+            if (req.cipherType == WC_CIPHER_AES_GCM) {
+                if (req.wrappedSz < WH_KEYWRAP_AES_GCM_HEADER_SIZE +
+                                    sizeof(unwrapMeta)) {
+                    resp.rc = WH_ERROR_BADARGS;
+                }
+                else {
+                    keySz = req.wrappedSz -
+                            WH_KEYWRAP_AES_GCM_HEADER_SIZE -
+                            sizeof(unwrapMeta);
+
+                    ret = WH_SERVER_NVM_LOCK(server);
+                    if (ret == WH_ERROR_OK) {
+                        ret = _AesGcmObjectUnwrap(server, kekId,
+                                                   wrappedIn, req.wrappedSz,
+                                                   &unwrapMeta, keyBuf,
+                                                   keySz);
+                        if (ret == WH_ERROR_OK) {
+                            /* Force NONPERSISTABLE */
+                            unwrapMeta.flags |=
+                                WH_NVM_FLAGS_NONPERSISTABLE;
+
+                            /* Build cache ID from request */
+                            unwrapMeta.id =
+                                wh_KeyId_TranslateFromClient(
+                                    req.type, server->comm->client_id,
+                                    req.requestedId);
+
+                            /* Auto-assign if erased */
+                            if (WH_KEYID_ISERASED(unwrapMeta.id)) {
+                                ret = wh_Server_ObjectGetUniqueId(
+                                    server, &unwrapMeta.id);
+                            }
+                        }
+                        if (ret == WH_ERROR_OK) {
+                            ret = wh_Server_ObjectCacheAdd(
+                                server, &unwrapMeta, keyBuf);
+                        }
+                        if (ret == WH_ERROR_OK) {
+                            resp.id = wh_KeyId_TranslateToClient(
+                                unwrapMeta.id);
+                        }
+
+                        (void)WH_SERVER_NVM_UNLOCK(server);
+                    }
+                    resp.rc = ret;
+                }
+            }
+            else
+#endif /* HAVE_AESGCM */
+#endif /* !NO_AES */
+            {
+                resp.rc = WH_ERROR_BADARGS;
+            }
 
             (void)wh_MessageObject_TranslateUnwrapCacheResponse(
                 magic, &resp,
@@ -1403,17 +1698,83 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
         } break;
 
         case WH_OBJECT_UNWRAP_EXPORT: {
-            /* TODO: implement wrap/unwrap */
+            whMessageObject_UnwrapExportRequest  req;
             whMessageObject_UnwrapExportResponse resp;
+            uint8_t*      wrappedIn;
+            uint8_t*      keyOut;
+            whKeyId       kekId;
+            whNvmMetadata unwrapMeta;
+            uint8_t       keyBuf[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+            uint16_t      keySz;
 
             memset(&resp, 0, sizeof(resp));
-            resp.rc    = WH_ERROR_NOHANDLER;
-            resp.keySz = 0;
+
+            (void)wh_MessageObject_TranslateUnwrapExportRequest(
+                magic,
+                (whMessageObject_UnwrapExportRequest*)req_packet, &req);
+
+            wrappedIn = (uint8_t*)req_packet + sizeof(req);
+            keyOut = (uint8_t*)resp_packet + sizeof(resp);
+
+            kekId = wh_KeyId_TranslateFromClient(
+                req.type, server->comm->client_id, req.serverKekId);
+
+#ifndef NO_AES
+#ifdef HAVE_AESGCM
+            if (req.cipherType == WC_CIPHER_AES_GCM) {
+                if (req.wrappedSz < WH_KEYWRAP_AES_GCM_HEADER_SIZE +
+                                    sizeof(unwrapMeta)) {
+                    resp.rc = WH_ERROR_BADARGS;
+                }
+                else {
+                    keySz = req.wrappedSz -
+                            WH_KEYWRAP_AES_GCM_HEADER_SIZE -
+                            sizeof(unwrapMeta);
+
+                    if ((uint32_t)sizeof(resp) + keySz >
+                        WOLFHSM_CFG_COMM_DATA_LEN) {
+                        resp.rc = WH_ERROR_BUFFER_SIZE;
+                    }
+                    else {
+                        ret = WH_SERVER_NVM_LOCK(server);
+                        if (ret == WH_ERROR_OK) {
+                            ret = _AesGcmObjectUnwrap(
+                                server, kekId, wrappedIn,
+                                req.wrappedSz, &unwrapMeta,
+                                keyBuf, keySz);
+                            if (ret == WH_ERROR_OK) {
+                                /* Check exportable */
+                                if (unwrapMeta.flags &
+                                    WH_NVM_FLAGS_NONEXPORTABLE) {
+                                    ret = WH_ERROR_ACCESS;
+                                }
+                            }
+                            if (ret == WH_ERROR_OK) {
+                                resp.keySz  = keySz;
+                                resp.access = unwrapMeta.access;
+                                resp.flags  = unwrapMeta.flags;
+                                memcpy(resp.label, unwrapMeta.label,
+                                       sizeof(resp.label));
+                                memcpy(keyOut, keyBuf, keySz);
+                            }
+
+                            (void)WH_SERVER_NVM_UNLOCK(server);
+                        }
+                        resp.rc = ret;
+                    }
+                }
+            }
+            else
+#endif /* HAVE_AESGCM */
+#endif /* !NO_AES */
+            {
+                resp.rc = WH_ERROR_BADARGS;
+            }
 
             (void)wh_MessageObject_TranslateUnwrapExportResponse(
                 magic, &resp,
                 (whMessageObject_UnwrapExportResponse*)resp_packet);
-            *out_resp_size = sizeof(resp);
+            *out_resp_size = sizeof(resp) + resp.keySz;
         } break;
 
         default:
