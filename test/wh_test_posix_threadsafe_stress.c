@@ -1169,16 +1169,18 @@ static int doKeyCacheDma(ClientServerPair* pair, whKeyId keyId, int iteration)
     snprintf((char*)label, sizeof(label), "DmaKey%04X", keyId);
 
     /* Send DMA request */
-    rc = wh_Client_KeyCacheDmaRequest(&pair->client, 0, label, sizeof(label),
+    rc = wh_Client_ObjectCacheAddDmaRequest(&pair->client, WH_KEYTYPE_CRYPTO,
+                                      keyId, WH_NVM_ACCESS_ANY, 0,
                                       pair->dmaKeyBuffer,
-                                      sizeof(pair->dmaKeyBuffer), keyId);
+                                      sizeof(pair->dmaKeyBuffer),
+                                      label, sizeof(label));
     if (rc != WH_ERROR_OK) {
         return rc;
     }
 
     /* Wait for response from server thread */
     do {
-        rc = wh_Client_KeyCacheDmaResponse(&pair->client, &outKeyId);
+        rc = wh_Client_ObjectCacheAddDmaResponse(&pair->client, &outKeyId);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
         }
@@ -1194,7 +1196,8 @@ static int doKeyExportDma(ClientServerPair* pair, whKeyId keyId)
     int      rc;
 
     /* Send DMA request - provide buffer for DMA export */
-    rc = wh_Client_KeyExportDmaRequest(&pair->client, keyId, pair->dmaKeyBuffer,
+    rc = wh_Client_ObjectCacheExportDmaRequest(&pair->client, WH_KEYTYPE_CRYPTO,
+                                       keyId, pair->dmaKeyBuffer,
                                        sizeof(pair->dmaKeyBuffer));
     if (rc != WH_ERROR_OK) {
         return rc;
@@ -1202,8 +1205,8 @@ static int doKeyExportDma(ClientServerPair* pair, whKeyId keyId)
 
     /* Wait for response from server thread */
     do {
-        rc = wh_Client_KeyExportDmaResponse(&pair->client, label, sizeof(label),
-                                            &outSz);
+        rc = wh_Client_ObjectCacheExportDmaResponse(&pair->client, label,
+                                            sizeof(label), &outSz);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
         }

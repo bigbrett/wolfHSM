@@ -1777,6 +1777,107 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             *out_resp_size = sizeof(resp) + resp.keySz;
         } break;
 
+#ifdef WOLFHSM_CFG_DMA
+        case WH_OBJECT_CACHE_ADD_DMA: {
+            whMessageObject_CacheAddDmaRequest  req;
+            whMessageObject_CacheAddDmaResponse resp;
+
+            memset(&resp, 0, sizeof(resp));
+
+            /* translate request */
+            (void)wh_MessageObject_TranslateCacheAddDmaRequest(
+                magic, (whMessageObject_CacheAddDmaRequest*)req_packet, &req);
+
+            /* set the metadata fields */
+            meta->id = wh_KeyId_TranslateFromClient(
+                req.type, server->comm->client_id, req.id);
+            meta->access = req.access;
+            meta->flags  = req.flags;
+            meta->len    = req.obj.sz;
+            /* truncate label if it's too large */
+            if (req.labelSz > WH_NVM_LABEL_LEN) {
+                req.labelSz = WH_NVM_LABEL_LEN;
+            }
+            memcpy(meta->label, req.label, req.labelSz);
+
+            ret = WH_SERVER_NVM_LOCK(server);
+            if (ret == WH_ERROR_OK) {
+                /* get a new id if one wasn't provided */
+                if (WH_KEYID_ISERASED(meta->id)) {
+                    ret = wh_Server_ObjectGetUniqueId(server, &meta->id);
+                }
+
+                /* write the object using DMA */
+                if (ret == WH_ERROR_OK) {
+                    ret = wh_Server_ObjectCacheAddDmaChecked(server, meta,
+                                                             req.obj.addr);
+                    /* propagate bad address to client if DMA operation failed
+                     */
+                    if (ret != WH_ERROR_OK) {
+                        resp.dmaAddrStatus.badAddr.addr = req.obj.addr;
+                        resp.dmaAddrStatus.badAddr.sz   = req.obj.sz;
+                    }
+                }
+
+                (void)WH_SERVER_NVM_UNLOCK(server);
+            } /* WH_SERVER_NVM_LOCK() */
+
+            if (ret == WH_ERROR_OK) {
+                /* Translate server keyId back to client format with flags */
+                resp.id = wh_KeyId_TranslateToClient(meta->id);
+            }
+            resp.rc = ret;
+
+            (void)wh_MessageObject_TranslateCacheAddDmaResponse(
+                magic, &resp,
+                (whMessageObject_CacheAddDmaResponse*)resp_packet);
+
+            *out_resp_size = sizeof(resp);
+        } break;
+
+        case WH_OBJECT_CACHE_EXPORT_DMA: {
+            whMessageObject_CacheExportDmaRequest  req;
+            whMessageObject_CacheExportDmaResponse resp;
+            whKeyId                                keyId;
+
+            memset(&resp, 0, sizeof(resp));
+
+            /* translate request */
+            (void)wh_MessageObject_TranslateCacheExportDmaRequest(
+                magic, (whMessageObject_CacheExportDmaRequest*)req_packet,
+                &req);
+
+            keyId = wh_KeyId_TranslateFromClient(
+                req.type, server->comm->client_id, req.id);
+
+            ret = WH_SERVER_NVM_LOCK(server);
+            if (ret == WH_ERROR_OK) {
+                ret = wh_Server_ObjectCacheExportDmaChecked(
+                    server, keyId, req.obj.addr, req.obj.sz, meta);
+
+                /* propagate bad address to client if DMA operation failed */
+                if (ret != WH_ERROR_OK) {
+                    resp.dmaAddrStatus.badAddr.addr = req.obj.addr;
+                    resp.dmaAddrStatus.badAddr.sz   = req.obj.sz;
+                }
+
+                if (ret == WH_ERROR_OK) {
+                    resp.len = req.obj.sz;
+                    memcpy(resp.label, meta->label, sizeof(meta->label));
+                }
+
+                (void)WH_SERVER_NVM_UNLOCK(server);
+            } /* WH_SERVER_NVM_LOCK() */
+            resp.rc = ret;
+
+            (void)wh_MessageObject_TranslateCacheExportDmaResponse(
+                magic, &resp,
+                (whMessageObject_CacheExportDmaResponse*)resp_packet);
+
+            *out_resp_size = sizeof(resp);
+        } break;
+#endif /* WOLFHSM_CFG_DMA */
+
         default:
             ret = WH_ERROR_BADARGS;
             break;

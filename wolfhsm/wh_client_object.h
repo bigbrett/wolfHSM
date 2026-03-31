@@ -145,4 +145,27 @@ int wh_Client_ObjectUnwrapExport(whClientContext* c, uint16_t type,
     whNvmAccess* outAccess, whNvmFlags* outFlags,
     uint8_t* outLabel, uint16_t outLabelSz);
 
+#ifdef WOLFHSM_CFG_DMA
+/* Cache Add DMA */
+int wh_Client_ObjectCacheAddDmaRequest(whClientContext* c, uint16_t type,
+    uint16_t id, whNvmAccess access, whNvmFlags flags,
+    const void* objAddr, uint16_t objSz,
+    const uint8_t* label, uint16_t labelSz);
+int wh_Client_ObjectCacheAddDmaResponse(whClientContext* c, uint16_t* out_id);
+int wh_Client_ObjectCacheAddDma(whClientContext* c, uint16_t type,
+    uint16_t id, whNvmAccess access, whNvmFlags flags,
+    const void* objAddr, uint16_t objSz,
+    const uint8_t* label, uint16_t labelSz,
+    uint16_t* out_id);
+
+/* Cache Export DMA */
+int wh_Client_ObjectCacheExportDmaRequest(whClientContext* c, uint16_t type,
+    uint16_t id, const void* objAddr, uint16_t objSz);
+int wh_Client_ObjectCacheExportDmaResponse(whClientContext* c,
+    uint8_t* label, uint16_t labelSz, uint16_t* outSz);
+int wh_Client_ObjectCacheExportDma(whClientContext* c, uint16_t type,
+    uint16_t id, const void* objAddr, uint16_t objSz,
+    uint8_t* label, uint16_t labelSz, uint16_t* outSz);
+#endif /* WOLFHSM_CFG_DMA */
+
 #endif /* !WOLFHSM_WH_CLIENT_OBJECT_H_ */

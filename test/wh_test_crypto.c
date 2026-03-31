@@ -2387,13 +2387,15 @@ static int whTest_CacheExportKeyDma(whClientContext* ctx, whKeyId* inout_key_id,
     uint16_t key_len_out   = key_len;
     whKeyId  key_id_out    = *inout_key_id;
 
-    ret = wh_Client_KeyCacheDma(ctx, 0, label_in, label_len, key_in, key_len,
-                                &key_id_out);
+    ret = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, key_id_out,
+                                WH_NVM_ACCESS_ANY, 0, key_in, key_len,
+                                label_in, label_len, &key_id_out);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to wh_Client_KeyCacheDma %d\n", ret);
     }
     else {
-        ret = wh_Client_KeyExportDma(ctx, key_id_out, key_out, key_len_out,
+        ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO,
+                                     key_id_out, key_out, key_len_out,
                                      label_out, label_len_out, &key_len_out);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyExportDma %d\n", ret);
@@ -2830,16 +2832,20 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
         /* Test 1: Cache small key with DMA first, then cache same keyId
          * with big key using DMA */
         keyId = WH_KEYID_ERASED;
-        ret   = wh_Client_KeyCacheDma(ctx, 0, labelSmall, sizeof(labelSmall),
-                                      smallKey, sizeof(smallKey), &keyId);
+        ret   = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
+                                      WH_NVM_ACCESS_ANY, 0,
+                                      smallKey, sizeof(smallKey),
+                                      labelSmall, sizeof(labelSmall), &keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to cache small key with DMA: %d\n", ret);
         }
         else {
             /* Now cache big key with same keyId using DMA - should succeed and
              * evict the small key */
-            ret = wh_Client_KeyCacheDma(ctx, 0, labelBig, sizeof(labelBig),
-                                        bigKey, sizeof(bigKey), &keyId);
+            ret = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
+                                        WH_NVM_ACCESS_ANY, 0,
+                                        bigKey, sizeof(bigKey),
+                                        labelBig, sizeof(labelBig), &keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT(
                     "Failed to cache big key with DMA (expected success): %d\n",
@@ -2848,9 +2854,10 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
             else {
                 /* Verify the cached key is the big key by exporting it */
                 exportedKeySize = bigKeySize;
-                ret             = wh_Client_KeyExportDma(
-                    ctx, keyId, exportedKey, exportedKeySize, exportedLabel,
-                    sizeof(exportedLabel), &exportedKeySize);
+                ret             = wh_Client_ObjectCacheExportDma(
+                    ctx, WH_KEYTYPE_CRYPTO, keyId, exportedKey,
+                    exportedKeySize, exportedLabel, sizeof(exportedLabel),
+                    &exportedKeySize);
                 if (ret != 0) {
                     WH_ERROR_PRINT("Failed to export key after cache: %d\n",
                                    ret);
@@ -2905,17 +2912,21 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
          * same keyId with small key using DMA */
         if (ret == 0) {
             keyId = WH_KEYID_ERASED;
-            ret   = wh_Client_KeyCacheDma(ctx, 0, labelBig, sizeof(labelBig),
-                                          bigKey, sizeof(bigKey), &keyId);
+            ret   = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
+                                          WH_NVM_ACCESS_ANY, 0,
+                                          bigKey, sizeof(bigKey),
+                                          labelBig, sizeof(labelBig), &keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to cache big key with DMA: %d\n", ret);
             }
             else {
                 /* Now cache small key with same keyId using DMA - should
                  * succeed and evict the big key */
-                ret = wh_Client_KeyCacheDma(ctx, 0, labelSmall,
-                                            sizeof(labelSmall), smallKey,
-                                            sizeof(smallKey), &keyId);
+                ret = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
+                                            WH_NVM_ACCESS_ANY, 0,
+                                            smallKey, sizeof(smallKey),
+                                            labelSmall, sizeof(labelSmall),
+                                            &keyId);
                 if (ret != 0) {
                     WH_ERROR_PRINT("Failed to cache small key with DMA "
                                    "(expected success): %d\n",
@@ -2924,9 +2935,10 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                 else {
                     /* Verify the cached key is the small key by exporting it */
                     exportedKeySize = smallKeySize;
-                    ret             = wh_Client_KeyExportDma(
-                        ctx, keyId, exportedKey, exportedKeySize, exportedLabel,
-                        sizeof(exportedLabel), &exportedKeySize);
+                    ret             = wh_Client_ObjectCacheExportDma(
+                        ctx, WH_KEYTYPE_CRYPTO, keyId, exportedKey,
+                        exportedKeySize, exportedLabel, sizeof(exportedLabel),
+                        &exportedKeySize);
                     if (ret != 0) {
                         WH_ERROR_PRINT(
                             "Failed to export key after cache: %d\n", ret);
@@ -3082,7 +3094,8 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
 
     /* Try to export the non-exportable key via DMA - should fail */
     exportedKeySize = sizeof(exportedKey);
-    ret = wh_Client_KeyExportDma(ctx, keyId, exportedKey, sizeof(exportedKey),
+    ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
+                                 exportedKey, sizeof(exportedKey),
                                  exportedLabel, sizeof(exportedLabel),
                                  &exportedKeySize);
     if (ret != WH_ERROR_ACCESS) {
@@ -3111,7 +3124,8 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
     memset(exportedKey, 0, sizeof(exportedKey));
     memset(exportedLabel, 0, sizeof(exportedLabel));
     exportedKeySize = sizeof(exportedKey);
-    ret = wh_Client_KeyExportDma(ctx, keyId, exportedKey, sizeof(exportedKey),
+    ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
+                                 exportedKey, sizeof(exportedKey),
                                  exportedLabel, sizeof(exportedLabel),
                                  &exportedKeySize);
     if (ret != 0) {
@@ -5534,8 +5548,6 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
         uint8_t       wrappedKey[256] = {0};
         uint16_t      wrappedKeySz    = sizeof(wrappedKey);
         whKeyId       kekId           = WH_KEYID_ERASED;
-        const whKeyId wrappedId       = 1;
-        whNvmMetadata meta            = {0};
 
         ret = wc_RNG_GenerateBlock(rng, kek, sizeof(kek));
         if (ret == 0) {
@@ -5549,15 +5561,11 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                 WH_NVM_FLAGS_NONE, kek, sizeof(kek),
                 (uint8_t*)"kek-no-wrap", strlen("kek-no-wrap"));
             if (ret == 0) {
-                /* Setup metadata for data key */
-                meta.id = WH_CLIENT_KEYID_MAKE_WRAPPED_META(
-                    client->comm->client_id, wrappedId);
-                meta.flags = WH_NVM_FLAGS_NONE;
-                meta.len   = sizeof(dataKey);
-
                 /* Try to wrap - should fail */
-                ret = wh_Client_KeyWrap(client, WC_CIPHER_AES_GCM, kekId,
-                                        dataKey, sizeof(dataKey), &meta,
+                ret = wh_Client_ObjectWrap(client, WH_KEYTYPE_CRYPTO, kekId,
+                                        WC_CIPHER_AES_GCM, dataKey,
+                                        sizeof(dataKey), WH_NVM_ACCESS_ANY,
+                                        WH_NVM_FLAGS_NONE, NULL, 0,
                                         wrappedKey, &wrappedKeySz);
                 if (ret == WH_ERROR_USAGE) {
                     WH_TEST_PRINT("    PASS: Correctly denied key wrapping\n");

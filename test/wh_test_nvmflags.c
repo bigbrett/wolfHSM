@@ -564,24 +564,32 @@ static int _testKeyNonmodifiableNoRecacheDma(whClientContext* client)
 
     WH_TEST_PRINT("Testing Key DMA NONMODIFIABLE: no re-cache...\n");
 
-    ret = wh_Client_KeyCacheDma(client, WH_NVM_FLAGS_NONMODIFIABLE, label,
-                                sizeof(label), key1, sizeof(key1), &keyId);
+    ret = wh_Client_ObjectCacheAddDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONMODIFIABLE,
+                                key1, sizeof(key1), label, sizeof(label),
+                                &keyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
 
-    ret = wh_Client_KeyCacheDma(client, WH_NVM_FLAGS_NONMODIFIABLE, label,
-                                sizeof(label), key2, sizeof(key2), &keyId);
+    ret = wh_Client_ObjectCacheAddDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONMODIFIABLE,
+                                key2, sizeof(key2), label, sizeof(label),
+                                &keyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_ACCESS);
 
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommit(client, WH_KEYTYPE_CRYPTO, keyId));
 
-    ret = wh_Client_KeyCacheDma(client, WH_NVM_FLAGS_NONMODIFIABLE, label,
-                                sizeof(label), key2, sizeof(key2), &keyId);
+    ret = wh_Client_ObjectCacheAddDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONMODIFIABLE,
+                                key2, sizeof(key2), label, sizeof(label),
+                                &keyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_ACCESS);
 
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId));
 
-    ret = wh_Client_KeyCacheDma(client, WH_NVM_FLAGS_NONMODIFIABLE, label,
-                                sizeof(label), key2, sizeof(key2), &keyId);
+    ret = wh_Client_ObjectCacheAddDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONMODIFIABLE,
+                                key2, sizeof(key2), label, sizeof(label),
+                                &keyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_ACCESS);
 
     WH_TEST_PRINT("  Key DMA NONMODIFIABLE no re-cache: PASS\n");
@@ -609,20 +617,26 @@ static int _testKeyNonmodifiableInNvmDma(whClientContext* client)
 
     WH_TEST_PRINT("Testing Key DMA NONMODIFIABLE: commit then enforce...\n");
 
-    ret = wh_Client_KeyCacheDma(client, WH_NVM_FLAGS_NONE, label, sizeof(label),
-                                key1, sizeof(key1), &keyId);
+    ret = wh_Client_ObjectCacheAddDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE,
+                                key1, sizeof(key1), label, sizeof(label),
+                                &keyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommit(client, WH_KEYTYPE_CRYPTO, keyId));
 
-    ret = wh_Client_KeyCacheDma(client, WH_NVM_FLAGS_NONMODIFIABLE, label,
-                                sizeof(label), key2, sizeof(key2), &keyId);
+    ret = wh_Client_ObjectCacheAddDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONMODIFIABLE,
+                                key2, sizeof(key2), label, sizeof(label),
+                                &keyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommit(client, WH_KEYTYPE_CRYPTO, keyId));
 
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId));
 
-    ret = wh_Client_KeyCacheDma(client, WH_NVM_FLAGS_NONE, label, sizeof(label),
-                                key1, sizeof(key1), &keyId);
+    ret = wh_Client_ObjectCacheAddDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE,
+                                key1, sizeof(key1), label, sizeof(label),
+                                &keyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_ACCESS);
 
     WH_TEST_PRINT("  Key DMA NONMODIFIABLE commit then enforce: PASS\n");
@@ -644,8 +658,10 @@ static int _testKeyNondestroyableNoEraseDma(whClientContext* client)
     WH_TEST_PRINT(
         "Testing Key DMA NONDESTROYABLE: erase denied, modify allowed...\n");
 
-    ret = wh_Client_KeyCacheDma(client, WH_NVM_FLAGS_NONDESTROYABLE, label,
-                                sizeof(label), key1, sizeof(key1), &keyId);
+    ret = wh_Client_ObjectCacheAddDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONDESTROYABLE,
+                                key1, sizeof(key1), label, sizeof(label),
+                                &keyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommit(client, WH_KEYTYPE_CRYPTO, keyId));
 
@@ -653,21 +669,25 @@ static int _testKeyNondestroyableNoEraseDma(whClientContext* client)
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_ACCESS);
 
     exportedLen = sizeof(exported);
-    ret = wh_Client_KeyExportDma(client, keyId, exported, sizeof(exported),
+    ret = wh_Client_ObjectCacheExportDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                 exported, sizeof(exported),
                                  label, sizeof(label), &exportedLen);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
     WH_TEST_ASSERT_RETURN(exportedLen == sizeof(key1));
     WH_TEST_ASSERT_RETURN(memcmp(exported, key1, sizeof(key1)) == 0);
 
-    ret = wh_Client_KeyCacheDma(client, WH_NVM_FLAGS_NONDESTROYABLE, label,
-                                sizeof(label), key2, sizeof(key2), &keyId);
+    ret = wh_Client_ObjectCacheAddDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONDESTROYABLE,
+                                key2, sizeof(key2), label, sizeof(label),
+                                &keyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommit(client, WH_KEYTYPE_CRYPTO, keyId));
 
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId));
 
     exportedLen = sizeof(exported);
-    ret = wh_Client_KeyExportDma(client, keyId, exported, sizeof(exported),
+    ret = wh_Client_ObjectCacheExportDma(client, WH_KEYTYPE_CRYPTO, keyId,
+                                 exported, sizeof(exported),
                                  label, sizeof(label), &exportedLen);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
     WH_TEST_ASSERT_RETURN(exportedLen == sizeof(key2));

@@ -1089,4 +1089,209 @@ int wh_Client_ObjectUnwrapExport(whClientContext* c, uint16_t type,
     return ret;
 }
 
+#ifdef WOLFHSM_CFG_DMA
+
+/*
+ * Cache Add DMA
+ */
+
+int wh_Client_ObjectCacheAddDmaRequest(whClientContext* c, uint16_t type,
+                                        uint16_t id, whNvmAccess access,
+                                        whNvmFlags flags,
+                                        const void* objAddr, uint16_t objSz,
+                                        const uint8_t* label, uint16_t labelSz)
+{
+    int ret;
+    whMessageObject_CacheAddDmaRequest* req = NULL;
+    uintptr_t objAddrPtr = 0;
+    uint16_t capSz = 0;
+
+    if (c == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    req = (whMessageObject_CacheAddDmaRequest*)
+        wh_CommClient_GetDataPtr(c->comm);
+    if (req == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    memset(req, 0, sizeof(*req));
+
+    req->type   = type;
+    req->id     = id;
+    req->access = access;
+    req->flags  = flags;
+
+    /* Set up DMA buffer info */
+    req->obj.sz = objSz;
+    ret = wh_Client_DmaProcessClientAddress(
+        c, (uintptr_t)objAddr, (void**)&objAddrPtr, objSz,
+        WH_DMA_OPER_CLIENT_READ_PRE, (whDmaFlags){0});
+    req->obj.addr = objAddrPtr;
+
+    /* Copy label if provided, truncate if necessary */
+    if (labelSz > 0 && label != NULL) {
+        capSz = (labelSz > WH_NVM_LABEL_LEN) ? WH_NVM_LABEL_LEN : labelSz;
+        req->labelSz = capSz;
+        memcpy(req->label, label, capSz);
+    }
+
+    if (ret == WH_ERROR_OK) {
+        ret = wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
+                                     WH_OBJECT_CACHE_ADD_DMA,
+                                     sizeof(*req), (uint8_t*)req);
+    }
+
+    (void)wh_Client_DmaProcessClientAddress(
+        c, (uintptr_t)objAddr, (void**)&objAddrPtr, objSz,
+        WH_DMA_OPER_CLIENT_READ_POST, (whDmaFlags){0});
+    return ret;
+}
+
+int wh_Client_ObjectCacheAddDmaResponse(whClientContext* c, uint16_t* out_id)
+{
+    uint16_t group;
+    uint16_t action;
+    uint16_t size;
+    int ret;
+    whMessageObject_CacheAddDmaResponse* resp = NULL;
+
+    if (c == NULL || out_id == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    resp = (whMessageObject_CacheAddDmaResponse*)
+        wh_CommClient_GetDataPtr(c->comm);
+    if (resp == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
+    if (ret == WH_ERROR_OK) {
+        if (resp->rc != 0) {
+            ret = resp->rc;
+        }
+        else {
+            *out_id = resp->id;
+        }
+    }
+
+    return ret;
+}
+
+int wh_Client_ObjectCacheAddDma(whClientContext* c, uint16_t type,
+                                 uint16_t id, whNvmAccess access,
+                                 whNvmFlags flags,
+                                 const void* objAddr, uint16_t objSz,
+                                 const uint8_t* label, uint16_t labelSz,
+                                 uint16_t* out_id)
+{
+    int ret;
+
+    if (out_id == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    ret = wh_Client_ObjectCacheAddDmaRequest(c, type, id, access, flags,
+                                              objAddr, objSz, label, labelSz);
+    if (ret == WH_ERROR_OK) {
+        do {
+            ret = wh_Client_ObjectCacheAddDmaResponse(c, out_id);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+
+    return ret;
+}
+
+
+/*
+ * Cache Export DMA
+ */
+
+int wh_Client_ObjectCacheExportDmaRequest(whClientContext* c, uint16_t type,
+                                           uint16_t id, const void* objAddr,
+                                           uint16_t objSz)
+{
+    whMessageObject_CacheExportDmaRequest* req = NULL;
+
+    if (c == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    req = (whMessageObject_CacheExportDmaRequest*)
+        wh_CommClient_GetDataPtr(c->comm);
+    if (req == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    memset(req, 0, sizeof(*req));
+
+    req->type     = type;
+    req->id       = id;
+    req->obj.addr = (uint64_t)((uintptr_t)objAddr);
+    req->obj.sz   = objSz;
+
+    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
+                                 WH_OBJECT_CACHE_EXPORT_DMA,
+                                 sizeof(*req), (uint8_t*)req);
+}
+
+int wh_Client_ObjectCacheExportDmaResponse(whClientContext* c,
+                                            uint8_t* label, uint16_t labelSz,
+                                            uint16_t* outSz)
+{
+    uint16_t group;
+    uint16_t action;
+    uint16_t size;
+    int ret;
+    whMessageObject_CacheExportDmaResponse* resp = NULL;
+
+    if (c == NULL || outSz == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    resp = (whMessageObject_CacheExportDmaResponse*)
+        wh_CommClient_GetDataPtr(c->comm);
+    if (resp == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
+    if (ret == WH_ERROR_OK) {
+        if (resp->rc != 0) {
+            ret = resp->rc;
+        }
+        else {
+            *outSz = resp->len;
+            if (label != NULL) {
+                if (labelSz > WH_NVM_LABEL_LEN) {
+                    labelSz = WH_NVM_LABEL_LEN;
+                }
+                memcpy(label, resp->label, labelSz);
+            }
+        }
+    }
+
+    return ret;
+}
+
+int wh_Client_ObjectCacheExportDma(whClientContext* c, uint16_t type,
+                                    uint16_t id, const void* objAddr,
+                                    uint16_t objSz, uint8_t* label,
+                                    uint16_t labelSz, uint16_t* outSz)
+{
+    int ret;
+
+    ret = wh_Client_ObjectCacheExportDmaRequest(c, type, id, objAddr, objSz);
+    if (ret == WH_ERROR_OK) {
+        do {
+            ret = wh_Client_ObjectCacheExportDmaResponse(c, label, labelSz,
+                                                          outSz);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+
+    return ret;
+}
+
+#endif /* WOLFHSM_CFG_DMA */
+
 #endif /* WOLFHSM_CFG_ENABLE_CLIENT */

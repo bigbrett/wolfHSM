@@ -359,12 +359,88 @@ int wh_MessageObject_TranslateUnwrapExportResponse(uint16_t magic,
 
 
 /*
- * DMA variants (TODO: add DMA-based object operations)
+ * DMA variants
  *
  * WH_OBJECT_NVM_ADD_DMA       = 0x30
  * WH_OBJECT_NVM_READ_DMA      = 0x31
  * WH_OBJECT_CACHE_ADD_DMA     = 0x32
  * WH_OBJECT_CACHE_EXPORT_DMA  = 0x33
  */
+
+#ifdef WOLFHSM_CFG_DMA
+
+/* DMA buffer structure */
+typedef struct {
+    uint64_t addr;
+    uint64_t sz;
+} whMessageObject_DmaBuffer;
+
+/* DMA address status structure */
+typedef struct {
+    /* If packet->rc == WH_ERROR_ACCESS, this field will contain the offending
+     * address/size pair. Invalid otherwise. */
+    whMessageObject_DmaBuffer badAddr;
+} whMessageObject_DmaAddrStatus;
+
+/*
+ * Cache Add DMA (WH_OBJECT_CACHE_ADD_DMA = 0x32)
+ */
+
+/* Cache Add DMA Request */
+typedef struct {
+    whMessageObject_DmaBuffer obj;   /* Client memory buffer containing data */
+    uint16_t type;
+    uint16_t id;
+    uint16_t access;
+    uint16_t flags;
+    uint32_t labelSz;
+    uint8_t  label[WH_NVM_LABEL_LEN];
+    uint8_t  WH_PAD[4];
+} whMessageObject_CacheAddDmaRequest;
+
+/* Cache Add DMA Response */
+typedef struct {
+    whMessageObject_DmaAddrStatus dmaAddrStatus;
+    int32_t  rc;
+    uint16_t id;
+    uint8_t  WH_PAD[2];
+} whMessageObject_CacheAddDmaResponse;
+
+int wh_MessageObject_TranslateCacheAddDmaRequest(uint16_t magic,
+        const whMessageObject_CacheAddDmaRequest* src,
+        whMessageObject_CacheAddDmaRequest* dest);
+int wh_MessageObject_TranslateCacheAddDmaResponse(uint16_t magic,
+        const whMessageObject_CacheAddDmaResponse* src,
+        whMessageObject_CacheAddDmaResponse* dest);
+
+
+/*
+ * Cache Export DMA (WH_OBJECT_CACHE_EXPORT_DMA = 0x33)
+ */
+
+/* Cache Export DMA Request */
+typedef struct {
+    whMessageObject_DmaBuffer obj;   /* Client memory buffer to receive data */
+    uint16_t type;
+    uint16_t id;
+    uint8_t  WH_PAD[4];
+} whMessageObject_CacheExportDmaRequest;
+
+/* Cache Export DMA Response */
+typedef struct {
+    whMessageObject_DmaAddrStatus dmaAddrStatus;
+    int32_t  rc;
+    uint32_t len;
+    uint8_t  label[WH_NVM_LABEL_LEN];
+} whMessageObject_CacheExportDmaResponse;
+
+int wh_MessageObject_TranslateCacheExportDmaRequest(uint16_t magic,
+        const whMessageObject_CacheExportDmaRequest* src,
+        whMessageObject_CacheExportDmaRequest* dest);
+int wh_MessageObject_TranslateCacheExportDmaResponse(uint16_t magic,
+        const whMessageObject_CacheExportDmaResponse* src,
+        whMessageObject_CacheExportDmaResponse* dest);
+
+#endif /* WOLFHSM_CFG_DMA */
 
 #endif /* !WOLFHSM_WH_MESSAGE_OBJECT_H_ */

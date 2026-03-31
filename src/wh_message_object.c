@@ -301,3 +301,78 @@ int wh_MessageObject_TranslateUnwrapExportResponse(uint16_t magic,
     }
     return 0;
 }
+
+#ifdef WOLFHSM_CFG_DMA
+
+/* Cache Add DMA Request translation */
+int wh_MessageObject_TranslateCacheAddDmaRequest(uint16_t magic,
+        const whMessageObject_CacheAddDmaRequest* src,
+        whMessageObject_CacheAddDmaRequest* dest)
+{
+    if ((src == NULL) || (dest == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+    WH_T64(magic, dest, src, obj.addr);
+    WH_T64(magic, dest, src, obj.sz);
+    WH_T16(magic, dest, src, type);
+    WH_T16(magic, dest, src, id);
+    WH_T16(magic, dest, src, access);
+    WH_T16(magic, dest, src, flags);
+    WH_T32(magic, dest, src, labelSz);
+    /* Label is just a byte array, no translation needed */
+    if (src != dest) {
+        memcpy(dest->label, src->label, WH_NVM_LABEL_LEN);
+    }
+    return 0;
+}
+
+/* Cache Add DMA Response translation */
+int wh_MessageObject_TranslateCacheAddDmaResponse(uint16_t magic,
+        const whMessageObject_CacheAddDmaResponse* src,
+        whMessageObject_CacheAddDmaResponse* dest)
+{
+    if ((src == NULL) || (dest == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+    WH_T64(magic, dest, src, dmaAddrStatus.badAddr.addr);
+    WH_T64(magic, dest, src, dmaAddrStatus.badAddr.sz);
+    WH_T32(magic, dest, src, rc);
+    WH_T16(magic, dest, src, id);
+    return 0;
+}
+
+/* Cache Export DMA Request translation */
+int wh_MessageObject_TranslateCacheExportDmaRequest(uint16_t magic,
+        const whMessageObject_CacheExportDmaRequest* src,
+        whMessageObject_CacheExportDmaRequest* dest)
+{
+    if ((src == NULL) || (dest == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+    WH_T64(magic, dest, src, obj.addr);
+    WH_T64(magic, dest, src, obj.sz);
+    WH_T16(magic, dest, src, type);
+    WH_T16(magic, dest, src, id);
+    return 0;
+}
+
+/* Cache Export DMA Response translation */
+int wh_MessageObject_TranslateCacheExportDmaResponse(uint16_t magic,
+        const whMessageObject_CacheExportDmaResponse* src,
+        whMessageObject_CacheExportDmaResponse* dest)
+{
+    if ((src == NULL) || (dest == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+    WH_T64(magic, dest, src, dmaAddrStatus.badAddr.addr);
+    WH_T64(magic, dest, src, dmaAddrStatus.badAddr.sz);
+    WH_T32(magic, dest, src, rc);
+    WH_T32(magic, dest, src, len);
+    /* Label is just a byte array, no translation needed */
+    if (src != dest) {
+        memcpy(dest->label, src->label, WH_NVM_LABEL_LEN);
+    }
+    return 0;
+}
+
+#endif /* WOLFHSM_CFG_DMA */
