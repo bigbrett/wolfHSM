@@ -379,14 +379,14 @@ int wh_Server_HandleRequestMessage(whServerContext* server)
 
 #ifndef WOLFHSM_CFG_NO_CRYPTO
         case WH_MESSAGE_GROUP_KEY:
-            rc = wh_Server_HandleKeyRequest(server, magic, action,
-                    size, data, &size, data);
-        break;
+            rc = wh_Server_HandleKeyRequest(server, magic, action, size, data,
+                                            &size, data);
+            break;
 
         case WH_MESSAGE_GROUP_OBJECT:
-            rc = wh_Server_HandleObjectRequest(server, magic, action, seq,
-                    size, data, &size, data);
-        break;
+            rc = wh_Server_HandleObjectRequest(server, magic, action, seq, size,
+                                               data, &size, data);
+            break;
 #endif /* !WOLFHSM_CFG_NO_CRYPTO */
 
         default:

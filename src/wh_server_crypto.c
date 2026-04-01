@@ -224,7 +224,7 @@ int wh_Server_CacheImportRsaKey(whServerContext* ctx, RsaKey* key,
 
     /* get a free slot */
     ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, max_size, &cacheBuf,
-                                                &cacheMeta);
+                                              &cacheMeta);
     if (ret == 0) {
         ret = wh_Crypto_RsaSerializeKeyDer(key, max_size, cacheBuf, &der_size);
     }
@@ -568,7 +568,7 @@ int wh_Server_EccKeyCacheImport(whServerContext* ctx, ecc_key* key,
     }
     /* get a free slot */
     ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, max_size, &cacheBuf,
-                                                &cacheMeta);
+                                              &cacheMeta);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_EccSerializeKeyDer(key, max_size, cacheBuf, &der_size);
     }
@@ -628,7 +628,7 @@ int wh_Server_CacheImportEd25519Key(whServerContext* ctx, ed25519_key* key,
     }
 
     ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, max_size, &cacheBuf,
-                                                &cacheMeta);
+                                              &cacheMeta);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_Ed25519SerializeKeyDer(key, max_size, cacheBuf,
                                                &der_size);
@@ -690,7 +690,7 @@ int wh_Server_CacheImportCurve25519Key(whServerContext* server,
     /* if successful, find a free cache slot and copy in the key data */
     if (ret == 0) {
         ret = wh_Server_ObjectGetCacheSlotChecked(server, keyId, keySz,
-                                                    &cacheBuf, &cacheMeta);
+                                                  &cacheBuf, &cacheMeta);
         if (ret == 0) {
             memcpy(cacheBuf, der_buf, keySz);
             /* Update metadata to cache the key */
@@ -756,7 +756,7 @@ int wh_Server_MlDsaKeyCacheImport(whServerContext* ctx, MlDsaKey* key,
     }
 
     ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, MAX_MLDSA_DER_SIZE,
-                                                &cacheBuf, &cacheMeta);
+                                              &cacheBuf, &cacheMeta);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_MlDsaSerializeKeyDer(key, MAX_MLDSA_DER_SIZE, cacheBuf,
                                              &der_size);
@@ -929,7 +929,7 @@ static int _HandleEccSharedSecret(whServerContext* ctx, uint16_t magic,
     /* Validate key usage policy for key derivation (private key) */
     if (!WH_KEYID_ISERASED(prv_key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, prv_key_id,
-                                                    WH_NVM_FLAGS_USAGE_DERIVE);
+                                               WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }
@@ -1026,7 +1026,7 @@ static int _HandleEccSign(whServerContext* ctx, uint16_t magic, int devId,
     /* Validate key usage policy for signing */
     if (!WH_KEYID_ISERASED(key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
-                                                    WH_NVM_FLAGS_USAGE_SIGN);
+                                               WH_NVM_FLAGS_USAGE_SIGN);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }
@@ -1121,7 +1121,7 @@ static int _HandleEccVerify(whServerContext* ctx, uint16_t magic, int devId,
     /* Validate key usage policy for verification */
     if (!WH_KEYID_ISERASED(key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
-                                                    WH_NVM_FLAGS_USAGE_VERIFY);
+                                               WH_NVM_FLAGS_USAGE_VERIFY);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }
@@ -1257,7 +1257,7 @@ int wh_Server_HkdfKeyCacheImport(whServerContext* ctx, const uint8_t* keyData,
 
     /* Get a free slot */
     ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, keySize, &cacheBuf,
-                                                &cacheMeta);
+                                              &cacheMeta);
     if (ret == WH_ERROR_OK) {
         /* Copy the key data to cache buffer */
         memcpy(cacheBuf, keyData, keySize);
@@ -1296,7 +1296,7 @@ int wh_Server_CmacKdfKeyCacheImport(whServerContext* ctx,
     }
 
     ret = wh_Server_ObjectGetCacheSlotChecked(ctx, keyId, keySize, &cacheBuf,
-                                                &cacheMeta);
+                                              &cacheMeta);
     if (ret == WH_ERROR_OK) {
         memcpy(cacheBuf, keyData, keySize);
     }
@@ -1378,13 +1378,13 @@ static int _HandleHkdf(whServerContext* ctx, uint16_t magic, int devId,
     if (inKeySz == 0 && !WH_KEYID_ISERASED(keyIdIn)) {
         /* Grab references to key in the cache */
         ret = wh_Server_ObjectCacheLoad(ctx, keyIdIn, &cachedKeyBuf,
-                                           &cachedKeyMeta);
+                                        &cachedKeyMeta);
         if (ret != WH_ERROR_OK) {
             return ret;
         }
         /* Validate key usage policy for key derivation (input key) */
         ret = wh_Server_ObjectEnforceUsage(cachedKeyMeta,
-                                                WH_NVM_FLAGS_USAGE_DERIVE);
+                                           WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             return ret;
         }
@@ -1519,13 +1519,13 @@ static int _HandleCmacKdf(whServerContext* ctx, uint16_t magic, int devId,
             return WH_ERROR_BADARGS;
         }
         ret = wh_Server_ObjectCacheLoad(ctx, saltKeyId, &cachedSaltBuf,
-                                           &cachedSaltMeta);
+                                        &cachedSaltMeta);
         if (ret != WH_ERROR_OK) {
             return ret;
         }
         /* Validate key usage policy for cached salt */
         ret = wh_Server_ObjectEnforceUsage(cachedSaltMeta,
-                                                WH_NVM_FLAGS_USAGE_DERIVE);
+                                           WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             return ret;
         }
@@ -1537,14 +1537,13 @@ static int _HandleCmacKdf(whServerContext* ctx, uint16_t magic, int devId,
         if (WH_KEYID_ISERASED(zKeyId)) {
             return WH_ERROR_BADARGS;
         }
-        ret = wh_Server_ObjectCacheLoad(ctx, zKeyId, &cachedZBuf,
-                                           &cachedZMeta);
+        ret = wh_Server_ObjectCacheLoad(ctx, zKeyId, &cachedZBuf, &cachedZMeta);
         if (ret != WH_ERROR_OK) {
             return ret;
         }
         /* Validate key usage policy for key derivation (Z key) */
         ret = wh_Server_ObjectEnforceUsage(cachedZMeta,
-                                                WH_NVM_FLAGS_USAGE_DERIVE);
+                                           WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             return ret;
         }
@@ -1726,7 +1725,7 @@ static int _HandleCurve25519SharedSecret(whServerContext* ctx, uint16_t magic,
     /* Validate key usage policy for key derivation (private key) */
     if (!WH_KEYID_ISERASED(prv_key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, prv_key_id,
-                                                    WH_NVM_FLAGS_USAGE_DERIVE);
+                                               WH_NVM_FLAGS_USAGE_DERIVE);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }
@@ -1911,7 +1910,7 @@ static int _HandleEd25519Sign(whServerContext* ctx, uint16_t magic, int devId,
 
     if (!WH_KEYID_ISERASED(key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
-                                                    WH_NVM_FLAGS_USAGE_SIGN);
+                                               WH_NVM_FLAGS_USAGE_SIGN);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }
@@ -2012,7 +2011,7 @@ static int _HandleEd25519Verify(whServerContext* ctx, uint16_t magic, int devId,
 
     if (!WH_KEYID_ISERASED(key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
-                                                    WH_NVM_FLAGS_USAGE_VERIFY);
+                                               WH_NVM_FLAGS_USAGE_VERIFY);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }
@@ -2092,7 +2091,7 @@ static int _HandleEd25519SignDma(whServerContext* ctx, uint16_t magic,
 
     if (!WH_KEYID_ISERASED(key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
-                                                    WH_NVM_FLAGS_USAGE_SIGN);
+                                               WH_NVM_FLAGS_USAGE_SIGN);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }
@@ -2200,7 +2199,7 @@ static int _HandleEd25519VerifyDma(whServerContext* ctx, uint16_t magic,
 
     if (!WH_KEYID_ISERASED(key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
-                                                    WH_NVM_FLAGS_USAGE_VERIFY);
+                                               WH_NVM_FLAGS_USAGE_VERIFY);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }
@@ -2456,13 +2455,12 @@ static int _HandleAesCtrDma(whServerContext* ctx, uint16_t magic, int devId,
 
         /* Freshen key and validate usage policy if key is not erased */
         if (!WH_KEYID_ISERASED(keyId)) {
-            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey,
-                                               &keyMeta);
+            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey, &keyMeta);
             if (ret == WH_ERROR_OK) {
                 /* Validate key usage policy */
                 ret = wh_Server_ObjectEnforceUsage(
                     keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
-                                    : WH_NVM_FLAGS_USAGE_DECRYPT);
+                                      : WH_NVM_FLAGS_USAGE_DECRYPT);
             }
             if (ret == WH_ERROR_OK) {
                 key    = cachedKey;
@@ -2745,13 +2743,12 @@ static int _HandleAesEcbDma(whServerContext* ctx, uint16_t magic, int devId,
 
         /* Freshen key and validate usage policy if key is not erased */
         if (!WH_KEYID_ISERASED(keyId)) {
-            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey,
-                                               &keyMeta);
+            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey, &keyMeta);
             if (ret == WH_ERROR_OK) {
                 /* Validate key usage policy */
                 ret = wh_Server_ObjectEnforceUsage(
                     keyMeta, req.enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
-                                        : WH_NVM_FLAGS_USAGE_DECRYPT);
+                                          : WH_NVM_FLAGS_USAGE_DECRYPT);
             }
             if (ret == WH_ERROR_OK) {
                 key    = cachedKey;
@@ -3037,13 +3034,12 @@ static int _HandleAesCbcDma(whServerContext* ctx, uint16_t magic, int devId,
 
         /* Freshen key and validate usage policy if key is not erased */
         if (!WH_KEYID_ISERASED(keyId)) {
-            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey,
-                                               &keyMeta);
+            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey, &keyMeta);
             if (ret == WH_ERROR_OK) {
                 /* Validate key usage policy */
                 ret = wh_Server_ObjectEnforceUsage(
                     keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
-                                    : WH_NVM_FLAGS_USAGE_DECRYPT);
+                                      : WH_NVM_FLAGS_USAGE_DECRYPT);
             }
             if (ret == WH_ERROR_OK) {
                 key    = cachedKey;
@@ -3365,13 +3361,12 @@ static int _HandleAesGcmDma(whServerContext* ctx, uint16_t magic, int devId,
 
         /* Freshen key and validate usage policy if key is not erased */
         if (!WH_KEYID_ISERASED(keyId)) {
-            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey,
-                                               &keyMeta);
+            ret = wh_Server_ObjectCacheLoad(ctx, keyId, &cachedKey, &keyMeta);
             if (ret == WH_ERROR_OK) {
                 /* Validate key usage policy */
                 ret = wh_Server_ObjectEnforceUsage(
                     keyMeta, enc != 0 ? WH_NVM_FLAGS_USAGE_ENCRYPT
-                                    : WH_NVM_FLAGS_USAGE_DECRYPT);
+                                      : WH_NVM_FLAGS_USAGE_DECRYPT);
             }
             if (ret == WH_ERROR_OK) {
                 key    = cachedKey;
@@ -3516,15 +3511,15 @@ static int _CmacResolveKey(whServerContext* ctx, const uint8_t* requestKey,
 
         /* Validate key usage policy - CMAC accepts sign or verify */
         ret = wh_Server_ObjectFindEnforceUsage(ctx, keyId,
-                                                    WH_NVM_FLAGS_USAGE_SIGN);
+                                               WH_NVM_FLAGS_USAGE_SIGN);
         if (ret == WH_ERROR_USAGE) {
-            ret = wh_Server_ObjectFindEnforceUsage(
-                ctx, keyId, WH_NVM_FLAGS_USAGE_VERIFY);
+            ret = wh_Server_ObjectFindEnforceUsage(ctx, keyId,
+                                                   WH_NVM_FLAGS_USAGE_VERIFY);
         }
 
         if (ret == WH_ERROR_OK) {
-            ret =
-                wh_Server_ObjectCacheExport(ctx, keyId, NULL, outKey, outKeyLen);
+            ret = wh_Server_ObjectCacheExport(ctx, keyId, NULL, outKey,
+                                              outKeyLen);
         }
 
         if (ret == WH_ERROR_OK) {
@@ -4171,7 +4166,7 @@ static int _HandleMlDsaSign(whServerContext* ctx, uint16_t magic, int devId,
     /* Validate key usage policy for signing */
     if (!WH_KEYID_ISERASED(key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
-                                                    WH_NVM_FLAGS_USAGE_SIGN);
+                                               WH_NVM_FLAGS_USAGE_SIGN);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }
@@ -4278,7 +4273,7 @@ static int _HandleMlDsaVerify(whServerContext* ctx, uint16_t magic, int devId,
     /* Validate key usage policy for verification */
     if (!WH_KEYID_ISERASED(key_id)) {
         ret = wh_Server_ObjectFindEnforceUsage(ctx, key_id,
-                                                    WH_NVM_FLAGS_USAGE_VERIFY);
+                                               WH_NVM_FLAGS_USAGE_VERIFY);
         if (ret != WH_ERROR_OK) {
             goto cleanup;
         }

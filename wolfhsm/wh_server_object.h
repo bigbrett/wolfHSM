@@ -62,9 +62,8 @@ int wh_Server_ObjectGetUniqueId(whServerContext* server, whNvmId* inout_id);
 int wh_Server_ObjectGetCacheSlot(whServerContext* server, whKeyId objId,
                                  uint16_t objSz, uint8_t** outBuf,
                                  whNvmMetadata** outMeta);
-int wh_Server_ObjectGetCacheSlotChecked(whServerContext* server,
-                                        whKeyId objId, uint16_t objSz,
-                                        uint8_t** outBuf,
+int wh_Server_ObjectGetCacheSlotChecked(whServerContext* server, whKeyId objId,
+                                        uint16_t objSz, uint8_t** outBuf,
                                         whNvmMetadata** outMeta);
 
 /**
@@ -212,8 +211,7 @@ int wh_Server_ObjectCacheRevoke(whServerContext* server, whKeyId objId);
 int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                                   uint16_t action, uint16_t seq,
                                   uint16_t req_size, const void* req_packet,
-                                  uint16_t* out_resp_size,
-                                  void* resp_packet);
+                                  uint16_t* out_resp_size, void* resp_packet);
 
 /**
  * @brief Cache an object using DMA transfer
@@ -259,7 +257,7 @@ int wh_Server_ObjectCacheExportDma(whServerContext* server, whKeyId objId,
  */
 int wh_Server_ObjectCacheExportDmaChecked(whServerContext* server,
                                           whKeyId objId, uint64_t objAddr,
-                                          uint64_t objSz,
+                                          uint64_t       objSz,
                                           whNvmMetadata* outMeta);
 
 /**
@@ -279,7 +277,7 @@ int wh_Server_ObjectCacheExportDmaChecked(whServerContext* server,
  * @return WH_ERROR_BADARGS if meta is NULL
  */
 int wh_Server_ObjectEnforceUsage(const whNvmMetadata* meta,
-                                 whNvmFlags requiredUsage);
+                                 whNvmFlags           requiredUsage);
 
 /**
  * Validates that an object has the required usage policy flags set

@@ -30,8 +30,8 @@
 
 /* System libraries */
 #include <stdint.h>
-#include <stddef.h>  /* For NULL */
-#include <string.h>  /* For memset, memcpy */
+#include <stddef.h> /* For NULL */
+#include <string.h> /* For memset, memcpy */
 
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/wolfcrypt/types.h"
@@ -130,7 +130,7 @@ static int _IsCommitted(whServerContext* server, whKeyId keyId)
 /* Centralized cache/NVM policy: enforce NONMODIFIABLE/NONEXPORTABLE at the
  * object layer. Usage enforcement remains separate. */
 static int _ObjectCheckPolicy(whServerContext* server, whObjOp op,
-                               whKeyId keyId)
+                              whKeyId keyId)
 {
     whNvmMetadata* cacheMeta = NULL;
     whNvmMetadata  nvmMeta;
@@ -214,7 +214,7 @@ static int _FindInKeyCache(whKeyCacheContext* ctx, whKeyId keyId,
                            int* out_index, int* out_big, uint8_t** out_buffer,
                            whNvmMetadata** out_meta)
 {
-    int            ret    = WH_ERROR_NOTFOUND;
+    int            ret = WH_ERROR_NOTFOUND;
     int            i;
     int            index  = -1;
     int            big    = -1;
@@ -274,8 +274,8 @@ static int _EvictSlot(uint8_t* buf, whNvmMetadata* meta)
 static int _GetKeyCacheSlot(whKeyCacheContext* ctx, uint16_t keySz,
                             uint8_t** outBuf, whNvmMetadata** outMeta)
 {
-    int foundIndex = -1;
-    int i;
+    int            foundIndex = -1;
+    int            i;
     int            evictRet = WH_ERROR_OK;
     uint8_t*       slotBuf  = NULL;
     whNvmMetadata* slotMeta = NULL;
@@ -382,8 +382,7 @@ static int _EvictFromCache(whKeyCacheContext* ctx, whKeyId keyId)
 /**
  * @brief Mark a cached object as committed
  */
-static int _MarkCommitted(whKeyCacheContext* ctx, whKeyId keyId,
-                           int committed)
+static int _MarkCommitted(whKeyCacheContext* ctx, whKeyId keyId, int committed)
 {
     int index = -1;
     int big   = -1;
@@ -515,9 +514,8 @@ int wh_Server_ObjectGetCacheSlot(whServerContext* server, whKeyId objId,
     return _GetKeyCacheSlot(ctx, objSz, outBuf, outMeta);
 }
 
-int wh_Server_ObjectGetCacheSlotChecked(whServerContext* server,
-                                        whKeyId objId, uint16_t objSz,
-                                        uint8_t**       outBuf,
+int wh_Server_ObjectGetCacheSlotChecked(whServerContext* server, whKeyId objId,
+                                        uint16_t objSz, uint8_t** outBuf,
                                         whNvmMetadata** outMeta)
 {
     int ret;
@@ -525,8 +523,7 @@ int wh_Server_ObjectGetCacheSlotChecked(whServerContext* server,
     if (ret != WH_ERROR_OK && ret != WH_ERROR_NOTFOUND) {
         return ret;
     }
-    return wh_Server_ObjectGetCacheSlot(server, objId, objSz, outBuf,
-                                        outMeta);
+    return wh_Server_ObjectGetCacheSlot(server, objId, objSz, outBuf, outMeta);
 }
 
 static int _ObjectCacheAdd(whServerContext* server, whNvmMetadata* meta,
@@ -647,7 +644,7 @@ int wh_Server_ObjectCacheExport(whServerContext* server, whKeyId objId,
 #ifdef WOLFHSM_CFG_SHE_EXTENSION
          && (WH_KEYID_TYPE(objId) != WH_KEYTYPE_SHE)
 #endif
-        )) {
+             )) {
         return WH_ERROR_BADARGS;
     }
 
@@ -758,7 +755,7 @@ int wh_Server_ObjectCacheCommit(whServerContext* server, whNvmId objId)
     whNvmMetadata*     slotMeta;
     whNvmSize          size;
     int                ret;
-    whKeyCacheContext*  ctx;
+    whKeyCacheContext* ctx;
 
     if ((server == NULL) || WH_KEYID_ISERASED(objId)) {
         return WH_ERROR_BADARGS;
@@ -893,7 +890,7 @@ int wh_Server_ObjectEnforceUsage(const whNvmMetadata* meta,
 }
 
 int wh_Server_ObjectFindEnforceUsage(whServerContext* server, whKeyId objId,
-                                     whNvmFlags       requiredUsage)
+                                     whNvmFlags requiredUsage)
 {
     int            ret;
     whNvmMetadata* meta = NULL;
@@ -918,10 +915,10 @@ int wh_Server_ObjectFindEnforceUsage(whServerContext* server, whKeyId objId,
 static int _ObjectCacheAddDma(whServerContext* server, whNvmMetadata* meta,
                               uint64_t objAddr, int checked)
 {
-    int                ret;
-    uint8_t*           buffer;
-    whNvmMetadata*     slotMeta;
-    whServerDmaFlags   dmaFlags;
+    int              ret;
+    uint8_t*         buffer;
+    whNvmMetadata*   slotMeta;
+    whServerDmaFlags dmaFlags;
 
     memset(&dmaFlags, 0, sizeof(dmaFlags));
 
@@ -931,8 +928,8 @@ static int _ObjectCacheAddDma(whServerContext* server, whNvmMetadata* meta,
                                                   &buffer, &slotMeta);
     }
     else {
-        ret = wh_Server_ObjectGetCacheSlot(server, meta->id, meta->len,
-                                           &buffer, &slotMeta);
+        ret = wh_Server_ObjectGetCacheSlot(server, meta->id, meta->len, &buffer,
+                                           &slotMeta);
     }
     if (ret != 0) {
         return ret;
@@ -972,10 +969,10 @@ int wh_Server_ObjectCacheExportDma(whServerContext* server, whKeyId objId,
                                    uint64_t objAddr, uint64_t objSz,
                                    whNvmMetadata* outMeta)
 {
-    int                ret;
-    uint8_t*           buffer;
-    whNvmMetadata*     cacheMeta;
-    whServerDmaFlags   dmaFlags;
+    int              ret;
+    uint8_t*         buffer;
+    whNvmMetadata*   cacheMeta;
+    whServerDmaFlags dmaFlags;
 
     memset(&dmaFlags, 0, sizeof(dmaFlags));
 
@@ -1020,16 +1017,16 @@ int wh_Server_ObjectCacheExportDmaChecked(whServerContext* server,
 #ifdef HAVE_AESGCM
 
 static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
-                              uint8_t* keyIn, uint16_t keySz,
-                              whNvmMetadata* metadataIn, uint8_t* wrappedKeyOut,
-                              uint16_t wrappedKeySz)
+                             uint8_t* keyIn, uint16_t keySz,
+                             whNvmMetadata* metadataIn, uint8_t* wrappedKeyOut,
+                             uint16_t wrappedKeySz)
 {
-    int      ret = 0;
-    Aes      aes[1];
-    uint8_t  authTag[WH_KEYWRAP_AES_GCM_TAG_SIZE];
-    uint8_t  iv[WH_KEYWRAP_AES_GCM_IV_SIZE];
-    uint8_t* serverKey;
-    uint32_t serverKeySz;
+    int            ret = 0;
+    Aes            aes[1];
+    uint8_t        authTag[WH_KEYWRAP_AES_GCM_TAG_SIZE];
+    uint8_t        iv[WH_KEYWRAP_AES_GCM_IV_SIZE];
+    uint8_t*       serverKey;
+    uint32_t       serverKeySz;
     whNvmMetadata* serverKeyMetadata;
     uint8_t  plainBlob[sizeof(*metadataIn) + WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
     uint32_t plainBlobSz = sizeof(*metadataIn) + keySz;
@@ -1047,8 +1044,8 @@ static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
     }
 
     /* Get the server side key */
-    ret = wh_Server_ObjectCacheLoad(server, serverKeyId,
-                                     &serverKey, &serverKeyMetadata);
+    ret = wh_Server_ObjectCacheLoad(server, serverKeyId, &serverKey,
+                                    &serverKeyMetadata);
     if (ret != WH_ERROR_OK) {
         return ret;
     }
@@ -1056,7 +1053,7 @@ static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
 
     /* Validate key usage policy for wrapping (KEK) */
     ret = wh_Server_ObjectEnforceUsage(serverKeyMetadata,
-                                        WH_NVM_FLAGS_USAGE_WRAP);
+                                       WH_NVM_FLAGS_USAGE_WRAP);
     if (ret != WH_ERROR_OK) {
         return ret;
     }
@@ -1088,8 +1085,8 @@ static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
     encBlob = (uint8_t*)wrappedKeyOut + sizeof(iv) + sizeof(authTag);
 
     /* Encrypt the blob */
-    ret = wc_AesGcmEncrypt(aes, encBlob, plainBlob, plainBlobSz, iv,
-                           sizeof(iv), authTag, sizeof(authTag), NULL, 0);
+    ret = wc_AesGcmEncrypt(aes, encBlob, plainBlob, plainBlobSz, iv, sizeof(iv),
+                           authTag, sizeof(authTag), NULL, 0);
     if (ret != 0) {
         wc_AesFree(aes);
         return ret;
@@ -1105,20 +1102,20 @@ static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
 }
 
 static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
-                                void* wrappedKeyIn, uint16_t wrappedKeySz,
-                                whNvmMetadata* metadataOut, void* keyOut,
-                                uint16_t keySz)
+                               void* wrappedKeyIn, uint16_t wrappedKeySz,
+                               whNvmMetadata* metadataOut, void* keyOut,
+                               uint16_t keySz)
 {
-    int      ret = 0;
-    Aes      aes[1];
-    uint8_t  authTag[WH_KEYWRAP_AES_GCM_TAG_SIZE];
-    uint8_t  iv[WH_KEYWRAP_AES_GCM_IV_SIZE];
-    uint8_t* serverKey;
-    uint32_t serverKeySz;
+    int            ret = 0;
+    Aes            aes[1];
+    uint8_t        authTag[WH_KEYWRAP_AES_GCM_TAG_SIZE];
+    uint8_t        iv[WH_KEYWRAP_AES_GCM_IV_SIZE];
+    uint8_t*       serverKey;
+    uint32_t       serverKeySz;
     whNvmMetadata* serverKeyMetadata;
-    uint8_t* encBlob;
-    uint16_t encBlobSz;
-    uint8_t  plainBlob[sizeof(*metadataOut) + WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+    uint8_t*       encBlob;
+    uint16_t       encBlobSz;
+    uint8_t plainBlob[sizeof(*metadataOut) + WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
 
     if (server == NULL || wrappedKeyIn == NULL || metadataOut == NULL ||
         keyOut == NULL || keySz > WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE) {
@@ -1133,8 +1130,8 @@ static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
     encBlobSz = wrappedKeySz - sizeof(iv) - sizeof(authTag);
 
     /* Get the server side key */
-    ret = wh_Server_ObjectCacheLoad(server, serverKeyId,
-                                     &serverKey, &serverKeyMetadata);
+    ret = wh_Server_ObjectCacheLoad(server, serverKeyId, &serverKey,
+                                    &serverKeyMetadata);
     if (ret != WH_ERROR_OK) {
         return ret;
     }
@@ -1142,7 +1139,7 @@ static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
 
     /* Validate key usage policy for unwrapping (KEK) */
     ret = wh_Server_ObjectEnforceUsage(serverKeyMetadata,
-                                        WH_NVM_FLAGS_USAGE_WRAP);
+                                       WH_NVM_FLAGS_USAGE_WRAP);
     if (ret != WH_ERROR_OK) {
         return ret;
     }
@@ -1190,12 +1187,11 @@ static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
 int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                                   uint16_t action, uint16_t seq,
                                   uint16_t req_size, const void* req_packet,
-                                  uint16_t* out_resp_size,
-                                  void* resp_packet)
+                                  uint16_t* out_resp_size, void* resp_packet)
 {
-    int ret = WH_ERROR_OK;
-    uint8_t* in;
-    uint8_t* out;
+    int           ret = WH_ERROR_OK;
+    uint8_t*      in;
+    uint8_t*      out;
     whNvmMetadata meta[1] = {{0}};
 
     (void)seq;
@@ -1250,16 +1246,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             resp.rc = ret;
 
             (void)wh_MessageObject_TranslateCacheAddResponse(
-                magic, &resp,
-                (whMessageObject_CacheAddResponse*)resp_packet);
+                magic, &resp, (whMessageObject_CacheAddResponse*)resp_packet);
 
             *out_resp_size = sizeof(resp);
         } break;
 
         case WH_OBJECT_CACHE_LOAD: {
-            whMessageObject_TypeIdRequest    req;
-            whMessageObject_SimpleResponse   resp;
-            whKeyId                          keyId;
+            whMessageObject_TypeIdRequest  req;
+            whMessageObject_SimpleResponse resp;
+            whKeyId                        keyId;
 
             memset(&resp, 0, sizeof(resp));
 
@@ -1278,15 +1273,14 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             resp.rc = ret;
 
             (void)wh_MessageObject_TranslateSimpleResponse(
-                magic, &resp,
-                (whMessageObject_SimpleResponse*)resp_packet);
+                magic, &resp, (whMessageObject_SimpleResponse*)resp_packet);
             *out_resp_size = sizeof(resp);
         } break;
 
         case WH_OBJECT_CACHE_EVICT: {
-            whMessageObject_TypeIdRequest    req;
-            whMessageObject_SimpleResponse   resp;
-            whKeyId                          keyId;
+            whMessageObject_TypeIdRequest  req;
+            whMessageObject_SimpleResponse resp;
+            whKeyId                        keyId;
 
             memset(&resp, 0, sizeof(resp));
 
@@ -1305,15 +1299,14 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             resp.rc = ret;
 
             (void)wh_MessageObject_TranslateSimpleResponse(
-                magic, &resp,
-                (whMessageObject_SimpleResponse*)resp_packet);
+                magic, &resp, (whMessageObject_SimpleResponse*)resp_packet);
             *out_resp_size = sizeof(resp);
         } break;
 
         case WH_OBJECT_CACHE_COMMIT: {
-            whMessageObject_TypeIdRequest    req;
-            whMessageObject_SimpleResponse   resp;
-            whKeyId                          keyId;
+            whMessageObject_TypeIdRequest  req;
+            whMessageObject_SimpleResponse resp;
+            whKeyId                        keyId;
 
             memset(&resp, 0, sizeof(resp));
 
@@ -1332,16 +1325,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             resp.rc = ret;
 
             (void)wh_MessageObject_TranslateSimpleResponse(
-                magic, &resp,
-                (whMessageObject_SimpleResponse*)resp_packet);
+                magic, &resp, (whMessageObject_SimpleResponse*)resp_packet);
             *out_resp_size = sizeof(resp);
         } break;
 
         case WH_OBJECT_CACHE_EXPORT: {
-            whMessageObject_TypeIdRequest        req;
-            whMessageObject_CacheExportResponse  resp;
-            whKeyId                              keyId;
-            uint32_t                             keySz;
+            whMessageObject_TypeIdRequest       req;
+            whMessageObject_CacheExportResponse resp;
+            whKeyId                             keyId;
+            uint32_t                            keySz;
 
             memset(&resp, 0, sizeof(resp));
 
@@ -1360,8 +1352,8 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             ret      = WH_SERVER_NVM_LOCK(server);
             if (ret == WH_ERROR_OK) {
                 /* read the object */
-                ret = wh_Server_ObjectCacheExportChecked(
-                    server, keyId, meta, out, &keySz);
+                ret = wh_Server_ObjectCacheExportChecked(server, keyId, meta,
+                                                         out, &keySz);
 
                 /* Only provide output if no error */
                 if (ret == WH_ERROR_OK) {
@@ -1381,9 +1373,9 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
         } break;
 
         case WH_OBJECT_CACHE_REVOKE: {
-            whMessageObject_TypeIdRequest    req;
-            whMessageObject_SimpleResponse   resp;
-            whKeyId                          keyId;
+            whMessageObject_TypeIdRequest  req;
+            whMessageObject_SimpleResponse resp;
+            whKeyId                        keyId;
 
             memset(&resp, 0, sizeof(resp));
 
@@ -1402,15 +1394,14 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             resp.rc = ret;
 
             (void)wh_MessageObject_TranslateSimpleResponse(
-                magic, &resp,
-                (whMessageObject_SimpleResponse*)resp_packet);
+                magic, &resp, (whMessageObject_SimpleResponse*)resp_packet);
             *out_resp_size = sizeof(resp);
         } break;
 
         case WH_OBJECT_NVM_ADD: {
-            whMessageObject_NvmAddRequest    req;
-            whMessageObject_SimpleResponse   resp;
-            whNvmSize                        dataSz;
+            whMessageObject_NvmAddRequest  req;
+            whMessageObject_SimpleResponse resp;
+            whNvmSize                      dataSz;
 
             memset(&resp, 0, sizeof(resp));
 
@@ -1432,7 +1423,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             memcpy(meta->label, req.label, req.labelSz);
 
             /* remaining bytes are data */
-            dataSz = req_size - sizeof(req);
+            dataSz    = req_size - sizeof(req);
             meta->len = dataSz;
 
             ret = WH_SERVER_NVM_LOCK(server);
@@ -1444,15 +1435,14 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             resp.rc = ret;
 
             (void)wh_MessageObject_TranslateSimpleResponse(
-                magic, &resp,
-                (whMessageObject_SimpleResponse*)resp_packet);
+                magic, &resp, (whMessageObject_SimpleResponse*)resp_packet);
             *out_resp_size = sizeof(resp);
         } break;
 
         case WH_OBJECT_NVM_DESTROY: {
-            whMessageObject_TypeIdRequest    req;
-            whMessageObject_SimpleResponse   resp;
-            whKeyId                          keyId;
+            whMessageObject_TypeIdRequest  req;
+            whMessageObject_SimpleResponse resp;
+            whKeyId                        keyId;
 
             memset(&resp, 0, sizeof(resp));
 
@@ -1471,16 +1461,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             resp.rc = ret;
 
             (void)wh_MessageObject_TranslateSimpleResponse(
-                magic, &resp,
-                (whMessageObject_SimpleResponse*)resp_packet);
+                magic, &resp, (whMessageObject_SimpleResponse*)resp_packet);
             *out_resp_size = sizeof(resp);
         } break;
 
         case WH_OBJECT_NVM_READ: {
-            whMessageObject_NvmReadRequest   req;
-            whMessageObject_NvmReadResponse  resp;
-            whKeyId                          keyId;
-            uint16_t                         data_len;
+            whMessageObject_NvmReadRequest  req;
+            whMessageObject_NvmReadResponse resp;
+            whKeyId                         keyId;
+            uint16_t                        data_len;
 
             memset(&resp, 0, sizeof(resp));
 
@@ -1509,8 +1498,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             resp.rc = ret;
 
             (void)wh_MessageObject_TranslateNvmReadResponse(
-                magic, &resp,
-                (whMessageObject_NvmReadResponse*)resp_packet);
+                magic, &resp, (whMessageObject_NvmReadResponse*)resp_packet);
 
             if (ret == WH_ERROR_OK) {
                 *out_resp_size = sizeof(resp) + data_len;
@@ -1545,8 +1533,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             resp.id    = 0;
 
             (void)wh_MessageObject_TranslateNvmIterateResponse(
-                magic, &resp,
-                (whMessageObject_NvmIterateResponse*)resp_packet);
+                magic, &resp, (whMessageObject_NvmIterateResponse*)resp_packet);
             *out_resp_size = sizeof(resp);
         } break;
 
@@ -1554,21 +1541,22 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
         case WH_OBJECT_WRAP: {
             whMessageObject_WrapRequest  req;
             whMessageObject_WrapResponse resp;
-            uint8_t*  keyData;
-            uint8_t*  wrappedOut;
-            whKeyId   kekId;
-            whNvmMetadata wrapMeta;
-            uint16_t  capSz;
+            uint8_t*                     keyData;
+            uint8_t*                     wrappedOut;
+            whKeyId                      kekId;
+            whNvmMetadata                wrapMeta;
+            uint16_t                     capSz;
 
             memset(&resp, 0, sizeof(resp));
 
             (void)wh_MessageObject_TranslateWrapRequest(
                 magic, (whMessageObject_WrapRequest*)req_packet, &req);
 
-            keyData = (uint8_t*)req_packet + sizeof(req);
+            keyData    = (uint8_t*)req_packet + sizeof(req);
             wrappedOut = (uint8_t*)resp_packet + sizeof(resp);
 
-            /* KEK is always a crypto object regardless of wrapped object type */
+            /* KEK is always a crypto object regardless of wrapped object type
+             */
             kekId = wh_KeyId_TranslateFromClient(
                 WH_KEYTYPE_CRYPTO, server->comm->client_id, req.serverKekId);
 
@@ -1589,7 +1577,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             wrapMeta.access = req.access;
             wrapMeta.flags  = req.flags;
             wrapMeta.len    = req.keySz;
-            capSz = sizeof(wrapMeta.label);
+            capSz           = sizeof(wrapMeta.label);
             memcpy(wrapMeta.label, req.label, capSz);
 
             resp.wrappedSz = 0;
@@ -1597,10 +1585,10 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
             if (req.cipherType == WC_CIPHER_AES_GCM) {
-                uint16_t wrappedBufSz = WOLFHSM_CFG_COMM_DATA_LEN -
-                                        sizeof(resp);
+                uint16_t wrappedBufSz =
+                    WOLFHSM_CFG_COMM_DATA_LEN - sizeof(resp);
                 uint16_t expectedSz = WH_KEYWRAP_AES_GCM_HEADER_SIZE +
-                                       sizeof(wrapMeta) + req.keySz;
+                                      sizeof(wrapMeta) + req.keySz;
 
                 if (wrappedBufSz < expectedSz) {
                     resp.rc = WH_ERROR_BUFFER_SIZE;
@@ -1609,8 +1597,8 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                     ret = WH_SERVER_NVM_LOCK(server);
                     if (ret == WH_ERROR_OK) {
                         ret = _AesGcmObjectWrap(server, kekId, keyData,
-                                                 req.keySz, &wrapMeta,
-                                                 wrappedOut, expectedSz);
+                                                req.keySz, &wrapMeta,
+                                                wrappedOut, expectedSz);
                         (void)WH_SERVER_NVM_UNLOCK(server);
                     }
                     resp.rc = ret;
@@ -1627,80 +1615,73 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             }
 
             (void)wh_MessageObject_TranslateWrapResponse(
-                magic, &resp,
-                (whMessageObject_WrapResponse*)resp_packet);
+                magic, &resp, (whMessageObject_WrapResponse*)resp_packet);
             *out_resp_size = sizeof(resp) + resp.wrappedSz;
         } break;
 
         case WH_OBJECT_UNWRAP_CACHE: {
             whMessageObject_UnwrapCacheRequest  req;
             whMessageObject_UnwrapCacheResponse resp;
-            uint8_t*      wrappedIn;
-            whKeyId       kekId;
-            whNvmMetadata unwrapMeta;
-            uint8_t       keyBuf[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
-            uint16_t      keySz;
-            uint16_t      wrappedUser = 0;
+            uint8_t*                            wrappedIn;
+            whKeyId                             kekId;
+            whNvmMetadata                       unwrapMeta;
+            uint8_t  keyBuf[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+            uint16_t keySz;
+            uint16_t wrappedUser = 0;
 
             memset(&resp, 0, sizeof(resp));
             resp.id = WH_KEYID_ERASED;
 
             (void)wh_MessageObject_TranslateUnwrapCacheRequest(
-                magic,
-                (whMessageObject_UnwrapCacheRequest*)req_packet, &req);
+                magic, (whMessageObject_UnwrapCacheRequest*)req_packet, &req);
 
             wrappedIn = (uint8_t*)req_packet + sizeof(req);
 
-            /* KEK is always a crypto object regardless of wrapped object type */
+            /* KEK is always a crypto object regardless of wrapped object type
+             */
             kekId = wh_KeyId_TranslateFromClient(
                 WH_KEYTYPE_CRYPTO, server->comm->client_id, req.serverKekId);
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
             if (req.cipherType == WC_CIPHER_AES_GCM) {
-                if (req.wrappedSz < WH_KEYWRAP_AES_GCM_HEADER_SIZE +
-                                    sizeof(unwrapMeta)) {
+                if (req.wrappedSz <
+                    WH_KEYWRAP_AES_GCM_HEADER_SIZE + sizeof(unwrapMeta)) {
                     resp.rc = WH_ERROR_BADARGS;
                 }
                 else {
-                    keySz = req.wrappedSz -
-                            WH_KEYWRAP_AES_GCM_HEADER_SIZE -
+                    keySz = req.wrappedSz - WH_KEYWRAP_AES_GCM_HEADER_SIZE -
                             sizeof(unwrapMeta);
 
                     ret = WH_SERVER_NVM_LOCK(server);
                     if (ret == WH_ERROR_OK) {
-                        ret = _AesGcmObjectUnwrap(server, kekId,
-                                                   wrappedIn, req.wrappedSz,
-                                                   &unwrapMeta, keyBuf,
-                                                   keySz);
+                        ret = _AesGcmObjectUnwrap(server, kekId, wrappedIn,
+                                                  req.wrappedSz, &unwrapMeta,
+                                                  keyBuf, keySz);
                         /* Validate ownership */
                         if (ret == WH_ERROR_OK) {
-                            wrappedUser =
-                                WH_KEYID_USER(unwrapMeta.id);
+                            wrappedUser = WH_KEYID_USER(unwrapMeta.id);
 #ifdef WOLFHSM_CFG_GLOBAL_KEYS
                             if (wrappedUser != WH_KEYUSER_GLOBAL &&
-                                wrappedUser !=
-                                    server->comm->client_id) {
+                                wrappedUser != server->comm->client_id) {
                                 ret = WH_ERROR_ACCESS;
                             }
 #else
-                            if (wrappedUser !=
-                                    server->comm->client_id) {
+                            if (wrappedUser != server->comm->client_id) {
                                 ret = WH_ERROR_ACCESS;
                             }
 #endif
                         }
                         if (ret == WH_ERROR_OK) {
                             /* Force NONPERSISTABLE */
-                            unwrapMeta.flags |=
-                                WH_NVM_FLAGS_NONPERSISTABLE;
+                            unwrapMeta.flags |= WH_NVM_FLAGS_NONPERSISTABLE;
 
                             /* Build cache ID using the ownership from
                              * the wrapped metadata. Global wrapped keys
                              * go to the global cache. */
-                            unwrapMeta.id = WH_MAKE_KEYID(
-                                req.type, wrappedUser,
-                                req.requestedId & WH_KEYID_MASK);
+                            unwrapMeta.id =
+                                WH_MAKE_KEYID(req.type, wrappedUser,
+                                              req.requestedId & WH_KEYID_MASK);
 
                             /* Auto-assign if erased */
                             if (WH_KEYID_ISERASED(unwrapMeta.id)) {
@@ -1709,12 +1690,11 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                             }
                         }
                         if (ret == WH_ERROR_OK) {
-                            ret = wh_Server_ObjectCacheAdd(
-                                server, &unwrapMeta, keyBuf);
+                            ret = wh_Server_ObjectCacheAdd(server, &unwrapMeta,
+                                                           keyBuf);
                         }
                         if (ret == WH_ERROR_OK) {
-                            resp.id = wh_KeyId_TranslateToClient(
-                                unwrapMeta.id);
+                            resp.id = wh_KeyId_TranslateToClient(unwrapMeta.id);
                         }
 
                         (void)WH_SERVER_NVM_UNLOCK(server);
@@ -1738,36 +1718,35 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
         case WH_OBJECT_UNWRAP_EXPORT: {
             whMessageObject_UnwrapExportRequest  req;
             whMessageObject_UnwrapExportResponse resp;
-            uint8_t*      wrappedIn;
-            uint8_t*      keyOut;
-            whKeyId       kekId;
-            whNvmMetadata unwrapMeta;
-            uint8_t       keyBuf[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
-            uint16_t      keySz;
+            uint8_t*                             wrappedIn;
+            uint8_t*                             keyOut;
+            whKeyId                              kekId;
+            whNvmMetadata                        unwrapMeta;
+            uint8_t  keyBuf[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+            uint16_t keySz;
 
             memset(&resp, 0, sizeof(resp));
 
             (void)wh_MessageObject_TranslateUnwrapExportRequest(
-                magic,
-                (whMessageObject_UnwrapExportRequest*)req_packet, &req);
+                magic, (whMessageObject_UnwrapExportRequest*)req_packet, &req);
 
             wrappedIn = (uint8_t*)req_packet + sizeof(req);
-            keyOut = (uint8_t*)resp_packet + sizeof(resp);
+            keyOut    = (uint8_t*)resp_packet + sizeof(resp);
 
-            /* KEK is always a crypto object regardless of wrapped object type */
+            /* KEK is always a crypto object regardless of wrapped object type
+             */
             kekId = wh_KeyId_TranslateFromClient(
                 WH_KEYTYPE_CRYPTO, server->comm->client_id, req.serverKekId);
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
             if (req.cipherType == WC_CIPHER_AES_GCM) {
-                if (req.wrappedSz < WH_KEYWRAP_AES_GCM_HEADER_SIZE +
-                                    sizeof(unwrapMeta)) {
+                if (req.wrappedSz <
+                    WH_KEYWRAP_AES_GCM_HEADER_SIZE + sizeof(unwrapMeta)) {
                     resp.rc = WH_ERROR_BADARGS;
                 }
                 else {
-                    keySz = req.wrappedSz -
-                            WH_KEYWRAP_AES_GCM_HEADER_SIZE -
+                    keySz = req.wrappedSz - WH_KEYWRAP_AES_GCM_HEADER_SIZE -
                             sizeof(unwrapMeta);
 
                     if ((uint32_t)sizeof(resp) + keySz >
@@ -1778,22 +1757,19 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                         ret = WH_SERVER_NVM_LOCK(server);
                         if (ret == WH_ERROR_OK) {
                             ret = _AesGcmObjectUnwrap(
-                                server, kekId, wrappedIn,
-                                req.wrappedSz, &unwrapMeta,
-                                keyBuf, keySz);
+                                server, kekId, wrappedIn, req.wrappedSz,
+                                &unwrapMeta, keyBuf, keySz);
                             /* Validate ownership */
                             if (ret == WH_ERROR_OK) {
                                 uint16_t wrappedUser =
                                     WH_KEYID_USER(unwrapMeta.id);
 #ifdef WOLFHSM_CFG_GLOBAL_KEYS
                                 if (wrappedUser != WH_KEYUSER_GLOBAL &&
-                                    wrappedUser !=
-                                        server->comm->client_id) {
+                                    wrappedUser != server->comm->client_id) {
                                     ret = WH_ERROR_ACCESS;
                                 }
 #else
-                                if (wrappedUser !=
-                                        server->comm->client_id) {
+                                if (wrappedUser != server->comm->client_id) {
                                     ret = WH_ERROR_ACCESS;
                                 }
 #endif
@@ -1858,7 +1834,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                 *out_resp_size = sizeof(resp);
                 break;
             }
-            meta->len    = (uint16_t)req.obj.sz;
+            meta->len = (uint16_t)req.obj.sz;
             /* truncate label if it's too large */
             if (req.labelSz > WH_NVM_LABEL_LEN) {
                 req.labelSz = WH_NVM_LABEL_LEN;

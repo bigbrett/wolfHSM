@@ -69,8 +69,8 @@ static int _InitServerKek(whClientContext* client)
                         0x22, 0x8a, 0xd1, 0x0e, 0xa3, 0x63, 0x1c, 0x0b};
 
     return wh_Client_ObjectCacheAdd(client, WH_KEYTYPE_CRYPTO, &serverKeyId,
-                                    WH_NVM_ACCESS_ANY, flags, kek,
-                                    sizeof(kek), label, sizeof(label));
+                                    WH_NVM_ACCESS_ANY, flags, kek, sizeof(kek),
+                                    label, sizeof(label));
 }
 
 static int _CleanupServerKek(whClientContext* client)
@@ -90,11 +90,11 @@ static int _AesGcm_TestKeyWrap(whClientContext* client, WC_RNG* rng)
     uint8_t       wrappedKey[WH_TEST_AES_WRAPPED_KEYSIZE];
     uint16_t      wrappedKeySz = sizeof(wrappedKey);
     whKeyId       wrappedKeyId = WH_KEYID_ERASED;
-    whNvmFlags    wrapFlags = WH_NVM_FLAGS_USAGE_ANY;
+    whNvmFlags    wrapFlags                   = WH_NVM_FLAGS_USAGE_ANY;
     uint8_t       wrapLabel[WH_NVM_LABEL_LEN] = "AES Key Label";
-    whNvmAccess   tmpAccess = 0;
-    whNvmFlags    tmpFlags  = 0;
-    uint8_t       tmpLabel[WH_NVM_LABEL_LEN] = {0};
+    whNvmAccess   tmpAccess                   = 0;
+    whNvmFlags    tmpFlags                    = 0;
+    uint8_t       tmpLabel[WH_NVM_LABEL_LEN]  = {0};
 
     Aes           aes[1];
     const uint8_t plaintext[] = "hello, wolfSSL AES-GCM!";
@@ -123,10 +123,9 @@ static int _AesGcm_TestKeyWrap(whClientContext* client, WC_RNG* rng)
         return ret;
     }
 
-    ret = wh_Client_ObjectUnwrapCache(client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID,
-                                      WC_CIPHER_AES_GCM, wrappedKey,
-                                      wrappedKeySz, WH_KEYID_ERASED,
-                                      &wrappedKeyId);
+    ret = wh_Client_ObjectUnwrapCache(
+        client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID, WC_CIPHER_AES_GCM, wrappedKey,
+        wrappedKeySz, WH_KEYID_ERASED, &wrappedKeyId);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to wh_Client_AesGcmKeyWrapCache %d\n", ret);
         return ret;
@@ -139,8 +138,7 @@ static int _AesGcm_TestKeyWrap(whClientContext* client, WC_RNG* rng)
         return ret;
     }
 
-    ret =
-        wh_Client_AesSetKeyId(aes, wrappedKeyId);
+    ret = wh_Client_AesSetKeyId(aes, wrappedKeyId);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to wh_Client_AesSetKeyId %d\n", ret);
         return ret;
@@ -181,11 +179,10 @@ static int _AesGcm_TestKeyWrap(whClientContext* client, WC_RNG* rng)
         return -1;
     }
 
-    ret = wh_Client_ObjectUnwrapExport(client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID,
-                                       WC_CIPHER_AES_GCM, wrappedKey,
-                                       wrappedKeySz, tmpPlainKey, &tmpPlainKeySz,
-                                       &tmpAccess, &tmpFlags, tmpLabel,
-                                       WH_NVM_LABEL_LEN);
+    ret = wh_Client_ObjectUnwrapExport(
+        client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID, WC_CIPHER_AES_GCM, wrappedKey,
+        wrappedKeySz, tmpPlainKey, &tmpPlainKeySz, &tmpAccess, &tmpFlags,
+        tmpLabel, WH_NVM_LABEL_LEN);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to wh_Client_KeyUnwrapAndExport %d\n", ret);
         return ret;
@@ -212,11 +209,10 @@ static int _AesGcm_TestKeyWrap(whClientContext* client, WC_RNG* rng)
         uint8_t       localLabel[WH_NVM_LABEL_LEN] = "LocalKeySameId";
         const uint8_t localKey[WH_TEST_AES_KEYSIZE] = {0};
 
-        ret = wh_Client_ObjectCacheAdd(client, WH_KEYTYPE_CRYPTO, &localKeyId,
-                                       WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE,
-                                       (uint8_t*)localKey, sizeof(localKey),
-                                       localLabel,
-                                       (uint16_t)sizeof("LocalKeySameId"));
+        ret = wh_Client_ObjectCacheAdd(
+            client, WH_KEYTYPE_CRYPTO, &localKeyId, WH_NVM_ACCESS_ANY,
+            WH_NVM_FLAGS_NONE, (uint8_t*)localKey, sizeof(localKey), localLabel,
+            (uint16_t)sizeof("LocalKeySameId"));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to cache local key with shared ID %d\n", ret);
             return ret;
@@ -226,7 +222,8 @@ static int _AesGcm_TestKeyWrap(whClientContext* client, WC_RNG* rng)
                            WH_TEST_AESGCM_KEYID, localKeyId);
             return WH_ERROR_ABORTED;
         }
-        WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, localKeyId));
+        WH_TEST_RETURN_ON_FAIL(
+            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, localKeyId));
     }
 
     wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, wrappedKeyId);
@@ -237,29 +234,28 @@ static int _AesGcm_TestKeyWrap(whClientContext* client, WC_RNG* rng)
 
 static int _AesGcm_TestDataWrap(whClientContext* client)
 {
-    int      ret = 0;
-    uint8_t  data[] = "Example data!";
+    int      ret                         = 0;
+    uint8_t  data[]                      = "Example data!";
     uint8_t  unwrappedData[sizeof(data)] = {0};
-    uint16_t unwrappedDataSz = sizeof(unwrappedData);
+    uint16_t unwrappedDataSz             = sizeof(unwrappedData);
     /* ObjectWrap adds metadata to the blob, so buffer needs to be bigger */
     uint8_t  wrappedData[sizeof(data) + sizeof(whNvmMetadata) +
-                          WH_KEYWRAP_AES_GCM_HEADER_SIZE] = {0};
-    uint16_t wrappedDataSz = sizeof(wrappedData);
+                        WH_KEYWRAP_AES_GCM_HEADER_SIZE] = {0};
+    uint16_t wrappedDataSz                               = sizeof(wrappedData);
 
     ret = wh_Client_ObjectWrap(client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID,
-                                WC_CIPHER_AES_GCM, data, sizeof(data),
-                                WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE, 0,
-                                NULL, 0, wrappedData, &wrappedDataSz);
+                               WC_CIPHER_AES_GCM, data, sizeof(data),
+                               WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE, 0, NULL, 0,
+                               wrappedData, &wrappedDataSz);
     if (ret != WH_ERROR_OK) {
         WH_ERROR_PRINT("Failed to ObjectWrap data %d\n", ret);
         return ret;
     }
 
-    ret = wh_Client_ObjectUnwrapExport(client, WH_KEYTYPE_CRYPTO,
-                                        WH_TEST_KEKID, WC_CIPHER_AES_GCM,
-                                        wrappedData, wrappedDataSz,
-                                        unwrappedData, &unwrappedDataSz,
-                                        NULL, NULL, NULL, 0);
+    ret = wh_Client_ObjectUnwrapExport(client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID,
+                                       WC_CIPHER_AES_GCM, wrappedData,
+                                       wrappedDataSz, unwrappedData,
+                                       &unwrappedDataSz, NULL, NULL, NULL, 0);
     if (ret != WH_ERROR_OK) {
         WH_ERROR_PRINT("Failed to ObjectUnwrapExport data %d\n", ret);
         return ret;
@@ -276,15 +272,15 @@ static int _AesGcm_TestDataWrap(whClientContext* client)
 static int _AesGcm_TestKeyUnwrapUnderflow(whClientContext* client)
 {
     int           ret;
-    uint8_t       dummyBuf[1] = {0};
+    uint8_t       dummyBuf[1]                 = {0};
     uint8_t       tmpKey[WH_TEST_AES_KEYSIZE] = {0};
     uint16_t      tmpKeySz = sizeof(tmpKey);
     whKeyId       wrappedKeyId = WH_KEYID_ERASED;
 
     /* wrappedKeySz=0: must return WH_ERROR_BADARGS, not underflow */
     ret = wh_Client_ObjectUnwrapExport(client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID,
-                                       WC_CIPHER_AES_GCM, dummyBuf, 0,
-                                       tmpKey, &tmpKeySz, NULL, NULL, NULL, 0);
+                                       WC_CIPHER_AES_GCM, dummyBuf, 0, tmpKey,
+                                       &tmpKeySz, NULL, NULL, NULL, 0);
     if (ret != WH_ERROR_BADARGS) {
         WH_ERROR_PRINT("KeyUnwrapAndExport(sz=0) expected BADARGS, got %d\n",
                        ret);
@@ -294,8 +290,8 @@ static int _AesGcm_TestKeyUnwrapUnderflow(whClientContext* client)
     /* wrappedKeySz=1: must return WH_ERROR_BADARGS, not underflow */
     tmpKeySz = sizeof(tmpKey);
     ret = wh_Client_ObjectUnwrapExport(client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID,
-                                       WC_CIPHER_AES_GCM, dummyBuf, 1,
-                                       tmpKey, &tmpKeySz, NULL, NULL, NULL, 0);
+                                       WC_CIPHER_AES_GCM, dummyBuf, 1, tmpKey,
+                                       &tmpKeySz, NULL, NULL, NULL, 0);
     if (ret != WH_ERROR_BADARGS) {
         WH_ERROR_PRINT("KeyUnwrapAndExport(sz=1) expected BADARGS, got %d\n",
                        ret);
@@ -333,10 +329,9 @@ static int _AesGcm_TestDataUnwrapUnderflow(whClientContext* client)
     uint16_t outSz       = sizeof(outBuf);
 
     /* wrappedDataSz=0: must return WH_ERROR_BADARGS, not underflow */
-    ret = wh_Client_ObjectUnwrapExport(client, WH_KEYTYPE_CRYPTO,
-                               WH_TEST_KEKID, WC_CIPHER_AES_GCM,
-                               dummyBuf, 0, outBuf, &outSz,
-                               NULL, NULL, NULL, 0);
+    ret = wh_Client_ObjectUnwrapExport(client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID,
+                                       WC_CIPHER_AES_GCM, dummyBuf, 0, outBuf,
+                                       &outSz, NULL, NULL, NULL, 0);
     if (ret != WH_ERROR_BADARGS) {
         WH_ERROR_PRINT("DataUnwrap(sz=0) expected BADARGS, got %d\n", ret);
         return WH_TEST_FAIL;
@@ -344,10 +339,9 @@ static int _AesGcm_TestDataUnwrapUnderflow(whClientContext* client)
 
     /* wrappedDataSz=1: must return WH_ERROR_BADARGS, not underflow */
     outSz = sizeof(outBuf);
-    ret = wh_Client_ObjectUnwrapExport(client, WH_KEYTYPE_CRYPTO,
-                               WH_TEST_KEKID, WC_CIPHER_AES_GCM,
-                               dummyBuf, 1, outBuf, &outSz,
-                               NULL, NULL, NULL, 0);
+    ret = wh_Client_ObjectUnwrapExport(client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID,
+                                       WC_CIPHER_AES_GCM, dummyBuf, 1, outBuf,
+                                       &outSz, NULL, NULL, NULL, 0);
     if (ret != WH_ERROR_BADARGS) {
         WH_ERROR_PRINT("DataUnwrap(sz=1) expected BADARGS, got %d\n", ret);
         return WH_TEST_FAIL;

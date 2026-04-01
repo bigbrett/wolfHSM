@@ -58,11 +58,10 @@ typedef uint16_t whNvmAccess;
 #define WH_ACCESS_EXEC      ((whNvmAccess)1 << 2)
 #define WH_ACCESS_SPECIAL   ((whNvmAccess)1 << 3)
 
-#define WH_NVM_MAKE_ACCESS(_user, _oth, _own)                       \
-    ((whNvmAccess)(                                                 \
-     (((_user) << WH_ACCESS_USER_SHIFT) & WH_ACCESS_USER_MASK) |    \
-     (((_oth)  << WH_ACCESS_OTH_SHIFT)  & WH_ACCESS_OTH_MASK)  |    \
-     (((_own)  << WH_ACCESS_OWN_SHIFT)  & WH_ACCESS_OWN_MASK)))
+#define WH_NVM_MAKE_ACCESS(_user, _oth, _own)                                  \
+    ((whNvmAccess)((((_user) << WH_ACCESS_USER_SHIFT) & WH_ACCESS_USER_MASK) | \
+                   (((_oth) << WH_ACCESS_OTH_SHIFT) & WH_ACCESS_OTH_MASK) |    \
+                   (((_own) << WH_ACCESS_OWN_SHIFT) & WH_ACCESS_OWN_MASK)))
 
 /* HSM NVM Flags type */
 typedef uint16_t whNvmFlags;

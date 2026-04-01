@@ -233,9 +233,8 @@ int whTest_CertClient(whClientContext* client)
     /* Export the cached public key so we can verify it matches the expected
      * leaf public key. Don't assert on the result as we must evict the key
      * first */
-    rc = wh_Client_ObjectCacheExport(client, WH_KEYTYPE_CRYPTO, out_keyId,
-                                      NULL, 0, exportedPubKey,
-                                      &exportedPubKeyLen);
+    rc = wh_Client_ObjectCacheExport(client, WH_KEYTYPE_CRYPTO, out_keyId, NULL,
+                                     0, exportedPubKey, &exportedPubKeyLen);
 
     /* Evict the cached key before any further assertions so it doesn't leak
      * cache slots */
@@ -420,9 +419,9 @@ int whTest_CertClientDma_ClientServerTestInternal(whClientContext* client)
     /* Export the cached public key so we can verify it matches the expected
      * leaf public key. Don't assert on the result as we must evict the key
      * first */
-    rc = wh_Client_ObjectCacheExportDma(
-        client, WH_KEYTYPE_CRYPTO, out_keyId, exportedPubKey,
-        sizeof(exportedPubKey), NULL, 0, &exportedPubKeyLen);
+    rc = wh_Client_ObjectCacheExportDma(client, WH_KEYTYPE_CRYPTO, out_keyId,
+                                        exportedPubKey, sizeof(exportedPubKey),
+                                        NULL, 0, &exportedPubKeyLen);
 
     /* Evict the cached key before any further assertions so it doesn't leak
      * cache slots */

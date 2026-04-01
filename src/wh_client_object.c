@@ -29,8 +29,8 @@
 
 /* System libraries */
 #include <stdint.h>
-#include <stddef.h>  /* For NULL */
-#include <string.h>  /* For memset, memcpy */
+#include <stddef.h> /* For NULL */
+#include <string.h> /* For memset, memcpy */
 
 /* Common WolfHSM types and defines shared with the server */
 #include "wolfhsm/wh_common.h"
@@ -51,14 +51,14 @@
  */
 
 int wh_Client_ObjectNvmAddRequest(whClientContext* c, uint16_t type,
-                                   uint16_t id, whNvmAccess access,
-                                   whNvmFlags flags,
-                                   const uint8_t* label, uint16_t labelSz,
-                                   const uint8_t* data, uint16_t dataSz)
+                                  uint16_t id, whNvmAccess access,
+                                  whNvmFlags flags, const uint8_t* label,
+                                  uint16_t labelSz, const uint8_t* data,
+                                  uint16_t dataSz)
 {
     whMessageObject_NvmAddRequest* req = NULL;
-    uint8_t* packData;
-    uint16_t capSz;
+    uint8_t*                       packData;
+    uint16_t                       capSz;
 
     if (c == NULL || data == NULL || dataSz == 0 ||
         sizeof(*req) + dataSz > WOLFHSM_CFG_COMM_DATA_LEN) {
@@ -85,17 +85,16 @@ int wh_Client_ObjectNvmAddRequest(whClientContext* c, uint16_t type,
 
     memcpy(packData, data, dataSz);
 
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_NVM_ADD,
+    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT, WH_OBJECT_NVM_ADD,
                                  sizeof(*req) + dataSz, (uint8_t*)req);
 }
 
 int wh_Client_ObjectNvmAddResponse(whClientContext* c, int32_t* out_rc)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                       group;
+    uint16_t                       action;
+    uint16_t                       size;
+    int                            ret;
     whMessageObject_SimpleResponse resp;
 
     if (c == NULL) {
@@ -116,16 +115,16 @@ int wh_Client_ObjectNvmAddResponse(whClientContext* c, int32_t* out_rc)
     return ret;
 }
 
-int wh_Client_ObjectNvmAdd(whClientContext* c, uint16_t type,
-                            uint16_t id, whNvmAccess access, whNvmFlags flags,
-                            const uint8_t* label, uint16_t labelSz,
-                            const uint8_t* data, uint16_t dataSz,
-                            int32_t* out_rc)
+int wh_Client_ObjectNvmAdd(whClientContext* c, uint16_t type, uint16_t id,
+                           whNvmAccess access, whNvmFlags flags,
+                           const uint8_t* label, uint16_t labelSz,
+                           const uint8_t* data, uint16_t dataSz,
+                           int32_t* out_rc)
 {
     int ret;
 
-    ret = wh_Client_ObjectNvmAddRequest(c, type, id, access, flags,
-                                         label, labelSz, data, dataSz);
+    ret = wh_Client_ObjectNvmAddRequest(c, type, id, access, flags, label,
+                                        labelSz, data, dataSz);
     if (ret == WH_ERROR_OK) {
         do {
             ret = wh_Client_ObjectNvmAddResponse(c, out_rc);
@@ -141,7 +140,7 @@ int wh_Client_ObjectNvmAdd(whClientContext* c, uint16_t type,
  */
 
 int wh_Client_ObjectNvmDestroyRequest(whClientContext* c, uint16_t type,
-                                       uint16_t id)
+                                      uint16_t id)
 {
     whMessageObject_TypeIdRequest* req = NULL;
 
@@ -158,16 +157,16 @@ int wh_Client_ObjectNvmDestroyRequest(whClientContext* c, uint16_t type,
     req->id   = id;
 
     return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_NVM_DESTROY,
-                                 sizeof(*req), (uint8_t*)req);
+                                 WH_OBJECT_NVM_DESTROY, sizeof(*req),
+                                 (uint8_t*)req);
 }
 
 int wh_Client_ObjectNvmDestroyResponse(whClientContext* c, int32_t* out_rc)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                       group;
+    uint16_t                       action;
+    uint16_t                       size;
+    int                            ret;
     whMessageObject_SimpleResponse resp;
 
     if (c == NULL) {
@@ -189,7 +188,7 @@ int wh_Client_ObjectNvmDestroyResponse(whClientContext* c, int32_t* out_rc)
 }
 
 int wh_Client_ObjectNvmDestroy(whClientContext* c, uint16_t type, uint16_t id,
-                                int32_t* out_rc)
+                               int32_t* out_rc)
 {
     int ret;
 
@@ -209,8 +208,8 @@ int wh_Client_ObjectNvmDestroy(whClientContext* c, uint16_t type, uint16_t id,
  */
 
 int wh_Client_ObjectNvmReadDataRequest(whClientContext* c, uint16_t type,
-                                        uint16_t id, uint16_t offset,
-                                        uint16_t data_len)
+                                       uint16_t id, uint16_t offset,
+                                       uint16_t data_len)
 {
     whMessageObject_NvmReadRequest* req = NULL;
 
@@ -228,21 +227,20 @@ int wh_Client_ObjectNvmReadDataRequest(whClientContext* c, uint16_t type,
     req->offset   = offset;
     req->data_len = data_len;
 
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_NVM_READ,
+    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT, WH_OBJECT_NVM_READ,
                                  sizeof(*req), (uint8_t*)req);
 }
 
 int wh_Client_ObjectNvmReadDataResponse(whClientContext* c, int32_t* out_rc,
-                                         uint8_t* data, uint16_t* out_len)
+                                        uint8_t* data, uint16_t* out_len)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                         group;
+    uint16_t                         action;
+    uint16_t                         size;
+    int                              ret;
     whMessageObject_NvmReadResponse* resp = NULL;
-    uint8_t* packOut;
-    uint16_t dataLen;
+    uint8_t*                         packOut;
+    uint16_t                         dataLen;
 
     if (c == NULL) {
         return WH_ERROR_BADARGS;
@@ -278,18 +276,17 @@ int wh_Client_ObjectNvmReadDataResponse(whClientContext* c, int32_t* out_rc,
     return ret;
 }
 
-int wh_Client_ObjectNvmReadData(whClientContext* c, uint16_t type,
-                                 uint16_t id, uint16_t offset,
-                                 uint16_t data_len, uint8_t* data,
-                                 uint16_t* out_len, int32_t* out_rc)
+int wh_Client_ObjectNvmReadData(whClientContext* c, uint16_t type, uint16_t id,
+                                uint16_t offset, uint16_t data_len,
+                                uint8_t* data, uint16_t* out_len,
+                                int32_t* out_rc)
 {
     int ret;
 
     ret = wh_Client_ObjectNvmReadDataRequest(c, type, id, offset, data_len);
     if (ret == WH_ERROR_OK) {
         do {
-            ret = wh_Client_ObjectNvmReadDataResponse(c, out_rc, data,
-                                                       out_len);
+            ret = wh_Client_ObjectNvmReadDataResponse(c, out_rc, data, out_len);
         } while (ret == WH_ERROR_NOTREADY);
     }
 
@@ -302,14 +299,14 @@ int wh_Client_ObjectNvmReadData(whClientContext* c, uint16_t type,
  */
 
 int wh_Client_ObjectCacheAddRequest(whClientContext* c, uint16_t type,
-                                     uint16_t id, whNvmAccess access,
-                                     whNvmFlags flags,
-                                     const uint8_t* in, uint16_t inSz,
-                                     const uint8_t* label, uint16_t labelSz)
+                                    uint16_t id, whNvmAccess access,
+                                    whNvmFlags flags, const uint8_t* in,
+                                    uint16_t inSz, const uint8_t* label,
+                                    uint16_t labelSz)
 {
     whMessageObject_CacheAddRequest* req = NULL;
-    uint8_t* packIn;
-    uint16_t capSz;
+    uint8_t*                         packIn;
+    uint16_t                         capSz;
 
     if (c == NULL || in == NULL || inSz == 0 ||
         sizeof(*req) + inSz > WOLFHSM_CFG_COMM_DATA_LEN) {
@@ -338,16 +335,16 @@ int wh_Client_ObjectCacheAddRequest(whClientContext* c, uint16_t type,
     memcpy(packIn, in, inSz);
 
     return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_CACHE_ADD,
-                                 sizeof(*req) + inSz, (uint8_t*)req);
+                                 WH_OBJECT_CACHE_ADD, sizeof(*req) + inSz,
+                                 (uint8_t*)req);
 }
 
 int wh_Client_ObjectCacheAddResponse(whClientContext* c, uint16_t* out_id)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                          group;
+    uint16_t                          action;
+    uint16_t                          size;
+    int                               ret;
     whMessageObject_CacheAddResponse* resp = NULL;
 
     if (c == NULL || out_id == NULL) {
@@ -373,10 +370,9 @@ int wh_Client_ObjectCacheAddResponse(whClientContext* c, uint16_t* out_id)
 }
 
 int wh_Client_ObjectCacheAdd(whClientContext* c, uint16_t type,
-                              uint16_t* inout_id, whNvmAccess access,
-                              whNvmFlags flags,
-                              const uint8_t* in, uint16_t inSz,
-                              const uint8_t* label, uint16_t labelSz)
+                             uint16_t* inout_id, whNvmAccess access,
+                             whNvmFlags flags, const uint8_t* in, uint16_t inSz,
+                             const uint8_t* label, uint16_t labelSz)
 {
     int ret;
 
@@ -384,8 +380,8 @@ int wh_Client_ObjectCacheAdd(whClientContext* c, uint16_t type,
         return WH_ERROR_BADARGS;
     }
 
-    ret = wh_Client_ObjectCacheAddRequest(c, type, *inout_id, access, flags,
-                                           in, inSz, label, labelSz);
+    ret = wh_Client_ObjectCacheAddRequest(c, type, *inout_id, access, flags, in,
+                                          inSz, label, labelSz);
     if (ret == WH_ERROR_OK) {
         do {
             ret = wh_Client_ObjectCacheAddResponse(c, inout_id);
@@ -401,7 +397,7 @@ int wh_Client_ObjectCacheAdd(whClientContext* c, uint16_t type,
  */
 
 int wh_Client_ObjectCacheLoadRequest(whClientContext* c, uint16_t type,
-                                      uint16_t id)
+                                     uint16_t id)
 {
     whMessageObject_TypeIdRequest* req = NULL;
 
@@ -418,16 +414,16 @@ int wh_Client_ObjectCacheLoadRequest(whClientContext* c, uint16_t type,
     req->id   = id;
 
     return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_CACHE_LOAD,
-                                 sizeof(*req), (uint8_t*)req);
+                                 WH_OBJECT_CACHE_LOAD, sizeof(*req),
+                                 (uint8_t*)req);
 }
 
 int wh_Client_ObjectCacheLoadResponse(whClientContext* c, int32_t* out_rc)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                       group;
+    uint16_t                       action;
+    uint16_t                       size;
+    int                            ret;
     whMessageObject_SimpleResponse resp;
 
     if (c == NULL) {
@@ -468,7 +464,7 @@ int wh_Client_ObjectCacheLoad(whClientContext* c, uint16_t type, uint16_t id)
  */
 
 int wh_Client_ObjectCacheEvictRequest(whClientContext* c, uint16_t type,
-                                       uint16_t id)
+                                      uint16_t id)
 {
     whMessageObject_TypeIdRequest* req = NULL;
 
@@ -485,16 +481,16 @@ int wh_Client_ObjectCacheEvictRequest(whClientContext* c, uint16_t type,
     req->id   = id;
 
     return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_CACHE_EVICT,
-                                 sizeof(*req), (uint8_t*)req);
+                                 WH_OBJECT_CACHE_EVICT, sizeof(*req),
+                                 (uint8_t*)req);
 }
 
 int wh_Client_ObjectCacheEvictResponse(whClientContext* c, int32_t* out_rc)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                       group;
+    uint16_t                       action;
+    uint16_t                       size;
+    int                            ret;
     whMessageObject_SimpleResponse resp;
 
     if (c == NULL) {
@@ -535,7 +531,7 @@ int wh_Client_ObjectCacheEvict(whClientContext* c, uint16_t type, uint16_t id)
  */
 
 int wh_Client_ObjectCacheCommitRequest(whClientContext* c, uint16_t type,
-                                        uint16_t id)
+                                       uint16_t id)
 {
     whMessageObject_TypeIdRequest* req = NULL;
 
@@ -552,16 +548,16 @@ int wh_Client_ObjectCacheCommitRequest(whClientContext* c, uint16_t type,
     req->id   = id;
 
     return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_CACHE_COMMIT,
-                                 sizeof(*req), (uint8_t*)req);
+                                 WH_OBJECT_CACHE_COMMIT, sizeof(*req),
+                                 (uint8_t*)req);
 }
 
 int wh_Client_ObjectCacheCommitResponse(whClientContext* c, int32_t* out_rc)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                       group;
+    uint16_t                       action;
+    uint16_t                       size;
+    int                            ret;
     whMessageObject_SimpleResponse resp;
 
     if (c == NULL) {
@@ -602,7 +598,7 @@ int wh_Client_ObjectCacheCommit(whClientContext* c, uint16_t type, uint16_t id)
  */
 
 int wh_Client_ObjectCacheExportRequest(whClientContext* c, uint16_t type,
-                                        uint16_t id)
+                                       uint16_t id)
 {
     whMessageObject_TypeIdRequest* req = NULL;
 
@@ -619,28 +615,28 @@ int wh_Client_ObjectCacheExportRequest(whClientContext* c, uint16_t type,
     req->id   = id;
 
     return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_CACHE_EXPORT,
-                                 sizeof(*req), (uint8_t*)req);
+                                 WH_OBJECT_CACHE_EXPORT, sizeof(*req),
+                                 (uint8_t*)req);
 }
 
 int wh_Client_ObjectCacheExportResponse(whClientContext* c, int32_t* out_rc,
-                                         uint8_t* label, uint16_t labelSz,
-                                         uint8_t* out, uint16_t* outSz)
+                                        uint8_t* label, uint16_t labelSz,
+                                        uint8_t* out, uint16_t* outSz)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                             group;
+    uint16_t                             action;
+    uint16_t                             size;
+    int                                  ret;
     whMessageObject_CacheExportResponse* resp = NULL;
-    uint8_t* packOut;
-    uint16_t capSz;
+    uint8_t*                             packOut;
+    uint16_t                             capSz;
 
     if (c == NULL || outSz == NULL) {
         return WH_ERROR_BADARGS;
     }
 
-    resp = (whMessageObject_CacheExportResponse*)
-        wh_CommClient_GetDataPtr(c->comm);
+    resp =
+        (whMessageObject_CacheExportResponse*)wh_CommClient_GetDataPtr(c->comm);
     if (resp == NULL) {
         return WH_ERROR_BADARGS;
     }
@@ -666,8 +662,8 @@ int wh_Client_ObjectCacheExportResponse(whClientContext* c, int32_t* out_rc,
                 *outSz = resp->len;
             }
             if (label != NULL) {
-                capSz = (labelSz > sizeof(resp->label))
-                    ? sizeof(resp->label) : labelSz;
+                capSz = (labelSz > sizeof(resp->label)) ? sizeof(resp->label)
+                                                        : labelSz;
                 memcpy(label, resp->label, capSz);
             }
         }
@@ -681,8 +677,8 @@ int wh_Client_ObjectCacheExportResponse(whClientContext* c, int32_t* out_rc,
 }
 
 int wh_Client_ObjectCacheExport(whClientContext* c, uint16_t type, uint16_t id,
-                                 uint8_t* label, uint16_t labelSz,
-                                 uint8_t* out, uint16_t* outSz)
+                                uint8_t* label, uint16_t labelSz, uint8_t* out,
+                                uint16_t* outSz)
 {
     int ret;
 
@@ -690,7 +686,7 @@ int wh_Client_ObjectCacheExport(whClientContext* c, uint16_t type, uint16_t id,
     if (ret == WH_ERROR_OK) {
         do {
             ret = wh_Client_ObjectCacheExportResponse(c, NULL, label, labelSz,
-                                                       out, outSz);
+                                                      out, outSz);
         } while (ret == WH_ERROR_NOTREADY);
     }
 
@@ -703,7 +699,7 @@ int wh_Client_ObjectCacheExport(whClientContext* c, uint16_t type, uint16_t id,
  */
 
 int wh_Client_ObjectCacheRevokeRequest(whClientContext* c, uint16_t type,
-                                        uint16_t id)
+                                       uint16_t id)
 {
     whMessageObject_TypeIdRequest* req = NULL;
 
@@ -720,16 +716,16 @@ int wh_Client_ObjectCacheRevokeRequest(whClientContext* c, uint16_t type,
     req->id   = id;
 
     return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_CACHE_REVOKE,
-                                 sizeof(*req), (uint8_t*)req);
+                                 WH_OBJECT_CACHE_REVOKE, sizeof(*req),
+                                 (uint8_t*)req);
 }
 
 int wh_Client_ObjectCacheRevokeResponse(whClientContext* c, int32_t* out_rc)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                       group;
+    uint16_t                       action;
+    uint16_t                       size;
+    int                            ret;
     whMessageObject_SimpleResponse resp;
 
     if (c == NULL) {
@@ -770,15 +766,15 @@ int wh_Client_ObjectCacheRevoke(whClientContext* c, uint16_t type, uint16_t id)
  */
 
 int wh_Client_ObjectWrapRequest(whClientContext* c, uint16_t type,
-                                 uint16_t serverKekId, uint16_t cipherType,
-                                 const uint8_t* in, uint16_t inSz,
-                                 whNvmAccess access, whNvmFlags flags,
-                                 uint16_t ownerId,
-                                 const uint8_t* label, uint16_t labelSz)
+                                uint16_t serverKekId, uint16_t cipherType,
+                                const uint8_t* in, uint16_t inSz,
+                                whNvmAccess access, whNvmFlags flags,
+                                uint16_t ownerId, const uint8_t* label,
+                                uint16_t labelSz)
 {
     whMessageObject_WrapRequest* req = NULL;
-    uint8_t* packIn;
-    uint16_t capSz;
+    uint8_t*                     packIn;
+    uint16_t                     capSz;
 
     if (c == NULL || in == NULL || inSz == 0 ||
         sizeof(*req) + inSz > WOLFHSM_CFG_COMM_DATA_LEN) {
@@ -805,20 +801,19 @@ int wh_Client_ObjectWrapRequest(whClientContext* c, uint16_t type,
     }
     memcpy(packIn, in, inSz);
 
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_WRAP,
+    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT, WH_OBJECT_WRAP,
                                  sizeof(*req) + inSz, (uint8_t*)req);
 }
 
 int wh_Client_ObjectWrapResponse(whClientContext* c, int32_t* out_rc,
-                                  uint8_t* wrappedOut, uint16_t* wrappedOutSz)
+                                 uint8_t* wrappedOut, uint16_t* wrappedOutSz)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                      group;
+    uint16_t                      action;
+    uint16_t                      size;
+    int                           ret;
     whMessageObject_WrapResponse* resp = NULL;
-    uint8_t* packOut;
+    uint8_t*                      packOut;
 
     if (c == NULL || wrappedOutSz == NULL) {
         return WH_ERROR_BADARGS;
@@ -857,22 +852,21 @@ int wh_Client_ObjectWrapResponse(whClientContext* c, int32_t* out_rc,
 }
 
 int wh_Client_ObjectWrap(whClientContext* c, uint16_t type,
-                          uint16_t serverKekId, uint16_t cipherType,
-                          const uint8_t* in, uint16_t inSz,
-                          whNvmAccess access, whNvmFlags flags,
-                          uint16_t ownerId,
-                          const uint8_t* label, uint16_t labelSz,
-                          uint8_t* wrappedOut, uint16_t* wrappedOutSz)
+                         uint16_t serverKekId, uint16_t cipherType,
+                         const uint8_t* in, uint16_t inSz, whNvmAccess access,
+                         whNvmFlags flags, uint16_t ownerId,
+                         const uint8_t* label, uint16_t labelSz,
+                         uint8_t* wrappedOut, uint16_t* wrappedOutSz)
 {
     int ret;
 
-    ret = wh_Client_ObjectWrapRequest(c, type, serverKekId, cipherType,
-                                       in, inSz, access, flags,
-                                       ownerId, label, labelSz);
+    ret =
+        wh_Client_ObjectWrapRequest(c, type, serverKekId, cipherType, in, inSz,
+                                    access, flags, ownerId, label, labelSz);
     if (ret == WH_ERROR_OK) {
         do {
-            ret = wh_Client_ObjectWrapResponse(c, NULL, wrappedOut,
-                                                wrappedOutSz);
+            ret =
+                wh_Client_ObjectWrapResponse(c, NULL, wrappedOut, wrappedOutSz);
         } while (ret == WH_ERROR_NOTREADY);
     }
 
@@ -885,22 +879,22 @@ int wh_Client_ObjectWrap(whClientContext* c, uint16_t type,
  */
 
 int wh_Client_ObjectUnwrapCacheRequest(whClientContext* c, uint16_t type,
-                                        uint16_t serverKekId,
-                                        uint16_t cipherType,
-                                        const uint8_t* wrappedIn,
-                                        uint16_t wrappedInSz,
-                                        uint16_t requestedId)
+                                       uint16_t       serverKekId,
+                                       uint16_t       cipherType,
+                                       const uint8_t* wrappedIn,
+                                       uint16_t       wrappedInSz,
+                                       uint16_t       requestedId)
 {
     whMessageObject_UnwrapCacheRequest* req = NULL;
-    uint8_t* packIn;
+    uint8_t*                            packIn;
 
     if (c == NULL || wrappedIn == NULL || wrappedInSz == 0 ||
         sizeof(*req) + wrappedInSz > WOLFHSM_CFG_COMM_DATA_LEN) {
         return WH_ERROR_BADARGS;
     }
 
-    req = (whMessageObject_UnwrapCacheRequest*)
-        wh_CommClient_GetDataPtr(c->comm);
+    req =
+        (whMessageObject_UnwrapCacheRequest*)wh_CommClient_GetDataPtr(c->comm);
     if (req == NULL) {
         return WH_ERROR_BADARGS;
     }
@@ -920,12 +914,12 @@ int wh_Client_ObjectUnwrapCacheRequest(whClientContext* c, uint16_t type,
 }
 
 int wh_Client_ObjectUnwrapCacheResponse(whClientContext* c, int32_t* out_rc,
-                                         uint16_t* out_id)
+                                        uint16_t* out_id)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                            group;
+    uint16_t                            action;
+    uint16_t                            size;
+    int                                 ret;
     whMessageObject_UnwrapCacheResponse resp;
 
     if (c == NULL) {
@@ -952,16 +946,14 @@ int wh_Client_ObjectUnwrapCacheResponse(whClientContext* c, int32_t* out_rc,
 }
 
 int wh_Client_ObjectUnwrapCache(whClientContext* c, uint16_t type,
-                                 uint16_t serverKekId, uint16_t cipherType,
-                                 const uint8_t* wrappedIn,
-                                 uint16_t wrappedInSz,
-                                 uint16_t requestedId, uint16_t* out_id)
+                                uint16_t serverKekId, uint16_t cipherType,
+                                const uint8_t* wrappedIn, uint16_t wrappedInSz,
+                                uint16_t requestedId, uint16_t* out_id)
 {
     int ret;
 
-    ret = wh_Client_ObjectUnwrapCacheRequest(c, type, serverKekId, cipherType,
-                                              wrappedIn, wrappedInSz,
-                                              requestedId);
+    ret = wh_Client_ObjectUnwrapCacheRequest(
+        c, type, serverKekId, cipherType, wrappedIn, wrappedInSz, requestedId);
     if (ret == WH_ERROR_OK) {
         do {
             ret = wh_Client_ObjectUnwrapCacheResponse(c, NULL, out_id);
@@ -977,21 +969,21 @@ int wh_Client_ObjectUnwrapCache(whClientContext* c, uint16_t type,
  */
 
 int wh_Client_ObjectUnwrapExportRequest(whClientContext* c, uint16_t type,
-                                         uint16_t serverKekId,
-                                         uint16_t cipherType,
-                                         const uint8_t* wrappedIn,
-                                         uint16_t wrappedInSz)
+                                        uint16_t       serverKekId,
+                                        uint16_t       cipherType,
+                                        const uint8_t* wrappedIn,
+                                        uint16_t       wrappedInSz)
 {
     whMessageObject_UnwrapExportRequest* req = NULL;
-    uint8_t* packIn;
+    uint8_t*                             packIn;
 
     if (c == NULL || wrappedIn == NULL || wrappedInSz == 0 ||
         sizeof(*req) + wrappedInSz > WOLFHSM_CFG_COMM_DATA_LEN) {
         return WH_ERROR_BADARGS;
     }
 
-    req = (whMessageObject_UnwrapExportRequest*)
-        wh_CommClient_GetDataPtr(c->comm);
+    req =
+        (whMessageObject_UnwrapExportRequest*)wh_CommClient_GetDataPtr(c->comm);
     if (req == NULL) {
         return WH_ERROR_BADARGS;
     }
@@ -1010,26 +1002,25 @@ int wh_Client_ObjectUnwrapExportRequest(whClientContext* c, uint16_t type,
 }
 
 int wh_Client_ObjectUnwrapExportResponse(whClientContext* c, int32_t* out_rc,
-                                          uint8_t* out, uint16_t* outSz,
-                                          whNvmAccess* outAccess,
-                                          whNvmFlags* outFlags,
-                                          uint8_t* outLabel,
-                                          uint16_t outLabelSz)
+                                         uint8_t* out, uint16_t* outSz,
+                                         whNvmAccess* outAccess,
+                                         whNvmFlags*  outFlags,
+                                         uint8_t* outLabel, uint16_t outLabelSz)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                              group;
+    uint16_t                              action;
+    uint16_t                              size;
+    int                                   ret;
     whMessageObject_UnwrapExportResponse* resp = NULL;
-    uint8_t* packOut;
-    uint16_t capSz;
+    uint8_t*                              packOut;
+    uint16_t                              capSz;
 
     if (c == NULL || outSz == NULL) {
         return WH_ERROR_BADARGS;
     }
 
-    resp = (whMessageObject_UnwrapExportResponse*)
-        wh_CommClient_GetDataPtr(c->comm);
+    resp = (whMessageObject_UnwrapExportResponse*)wh_CommClient_GetDataPtr(
+        c->comm);
     if (resp == NULL) {
         return WH_ERROR_BADARGS;
     }
@@ -1058,8 +1049,8 @@ int wh_Client_ObjectUnwrapExportResponse(whClientContext* c, int32_t* out_rc,
                 *outFlags = resp->flags;
             }
             if (outLabel != NULL) {
-                capSz = (outLabelSz > sizeof(resp->label))
-                    ? sizeof(resp->label) : outLabelSz;
+                capSz = (outLabelSz > sizeof(resp->label)) ? sizeof(resp->label)
+                                                           : outLabelSz;
                 memcpy(outLabel, resp->label, capSz);
             }
         }
@@ -1073,23 +1064,20 @@ int wh_Client_ObjectUnwrapExportResponse(whClientContext* c, int32_t* out_rc,
 }
 
 int wh_Client_ObjectUnwrapExport(whClientContext* c, uint16_t type,
-                                  uint16_t serverKekId, uint16_t cipherType,
-                                  const uint8_t* wrappedIn,
-                                  uint16_t wrappedInSz,
-                                  uint8_t* out, uint16_t* outSz,
-                                  whNvmAccess* outAccess,
-                                  whNvmFlags* outFlags,
-                                  uint8_t* outLabel, uint16_t outLabelSz)
+                                 uint16_t serverKekId, uint16_t cipherType,
+                                 const uint8_t* wrappedIn, uint16_t wrappedInSz,
+                                 uint8_t* out, uint16_t* outSz,
+                                 whNvmAccess* outAccess, whNvmFlags* outFlags,
+                                 uint8_t* outLabel, uint16_t outLabelSz)
 {
     int ret;
 
     ret = wh_Client_ObjectUnwrapExportRequest(c, type, serverKekId, cipherType,
-                                               wrappedIn, wrappedInSz);
+                                              wrappedIn, wrappedInSz);
     if (ret == WH_ERROR_OK) {
         do {
-            ret = wh_Client_ObjectUnwrapExportResponse(c, NULL, out, outSz,
-                                                        outAccess, outFlags,
-                                                        outLabel, outLabelSz);
+            ret = wh_Client_ObjectUnwrapExportResponse(
+                c, NULL, out, outSz, outAccess, outFlags, outLabel, outLabelSz);
         } while (ret == WH_ERROR_NOTREADY);
     }
 
@@ -1104,22 +1092,22 @@ int wh_Client_ObjectUnwrapExport(whClientContext* c, uint16_t type,
  */
 
 int wh_Client_ObjectCacheAddDmaRequest(whClientContext* c, uint16_t type,
-                                        uint16_t id, whNvmAccess access,
-                                        whNvmFlags flags,
-                                        const void* objAddr, uint16_t objSz,
-                                        const uint8_t* label, uint16_t labelSz)
+                                       uint16_t id, whNvmAccess access,
+                                       whNvmFlags flags, const void* objAddr,
+                                       uint16_t objSz, const uint8_t* label,
+                                       uint16_t labelSz)
 {
-    int ret;
-    whMessageObject_CacheAddDmaRequest* req = NULL;
-    uintptr_t objAddrPtr = 0;
-    uint16_t capSz = 0;
+    int                                 ret;
+    whMessageObject_CacheAddDmaRequest* req        = NULL;
+    uintptr_t                           objAddrPtr = 0;
+    uint16_t                            capSz      = 0;
 
     if (c == NULL) {
         return WH_ERROR_BADARGS;
     }
 
-    req = (whMessageObject_CacheAddDmaRequest*)
-        wh_CommClient_GetDataPtr(c->comm);
+    req =
+        (whMessageObject_CacheAddDmaRequest*)wh_CommClient_GetDataPtr(c->comm);
     if (req == NULL) {
         return WH_ERROR_BADARGS;
     }
@@ -1132,7 +1120,7 @@ int wh_Client_ObjectCacheAddDmaRequest(whClientContext* c, uint16_t type,
 
     /* Set up DMA buffer info */
     req->obj.sz = objSz;
-    ret = wh_Client_DmaProcessClientAddress(
+    ret         = wh_Client_DmaProcessClientAddress(
         c, (uintptr_t)objAddr, (void**)&objAddrPtr, objSz,
         WH_DMA_OPER_CLIENT_READ_PRE, (whDmaFlags){0});
     req->obj.addr = objAddrPtr;
@@ -1146,8 +1134,8 @@ int wh_Client_ObjectCacheAddDmaRequest(whClientContext* c, uint16_t type,
 
     if (ret == WH_ERROR_OK) {
         ret = wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                     WH_OBJECT_CACHE_ADD_DMA,
-                                     sizeof(*req), (uint8_t*)req);
+                                    WH_OBJECT_CACHE_ADD_DMA, sizeof(*req),
+                                    (uint8_t*)req);
     }
 
     (void)wh_Client_DmaProcessClientAddress(
@@ -1158,18 +1146,18 @@ int wh_Client_ObjectCacheAddDmaRequest(whClientContext* c, uint16_t type,
 
 int wh_Client_ObjectCacheAddDmaResponse(whClientContext* c, uint16_t* out_id)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                             group;
+    uint16_t                             action;
+    uint16_t                             size;
+    int                                  ret;
     whMessageObject_CacheAddDmaResponse* resp = NULL;
 
     if (c == NULL || out_id == NULL) {
         return WH_ERROR_BADARGS;
     }
 
-    resp = (whMessageObject_CacheAddDmaResponse*)
-        wh_CommClient_GetDataPtr(c->comm);
+    resp =
+        (whMessageObject_CacheAddDmaResponse*)wh_CommClient_GetDataPtr(c->comm);
     if (resp == NULL) {
         return WH_ERROR_BADARGS;
     }
@@ -1187,12 +1175,11 @@ int wh_Client_ObjectCacheAddDmaResponse(whClientContext* c, uint16_t* out_id)
     return ret;
 }
 
-int wh_Client_ObjectCacheAddDma(whClientContext* c, uint16_t type,
-                                 uint16_t id, whNvmAccess access,
-                                 whNvmFlags flags,
-                                 const void* objAddr, uint16_t objSz,
-                                 const uint8_t* label, uint16_t labelSz,
-                                 uint16_t* out_id)
+int wh_Client_ObjectCacheAddDma(whClientContext* c, uint16_t type, uint16_t id,
+                                whNvmAccess access, whNvmFlags flags,
+                                const void* objAddr, uint16_t objSz,
+                                const uint8_t* label, uint16_t labelSz,
+                                uint16_t* out_id)
 {
     int ret;
 
@@ -1201,7 +1188,7 @@ int wh_Client_ObjectCacheAddDma(whClientContext* c, uint16_t type,
     }
 
     ret = wh_Client_ObjectCacheAddDmaRequest(c, type, id, access, flags,
-                                              objAddr, objSz, label, labelSz);
+                                             objAddr, objSz, label, labelSz);
     if (ret == WH_ERROR_OK) {
         do {
             ret = wh_Client_ObjectCacheAddDmaResponse(c, out_id);
@@ -1217,36 +1204,36 @@ int wh_Client_ObjectCacheAddDma(whClientContext* c, uint16_t type,
  */
 
 int wh_Client_ObjectCacheExportDmaRequest(whClientContext* c, uint16_t type,
-                                           uint16_t id, const void* objAddr,
-                                           uint16_t objSz)
+                                          uint16_t id, const void* objAddr,
+                                          uint16_t objSz)
 {
-    int ret;
-    whMessageObject_CacheExportDmaRequest* req = NULL;
-    uintptr_t objAddrPtr = 0;
+    int                                    ret;
+    whMessageObject_CacheExportDmaRequest* req        = NULL;
+    uintptr_t                              objAddrPtr = 0;
 
     if (c == NULL) {
         return WH_ERROR_BADARGS;
     }
 
-    req = (whMessageObject_CacheExportDmaRequest*)
-        wh_CommClient_GetDataPtr(c->comm);
+    req = (whMessageObject_CacheExportDmaRequest*)wh_CommClient_GetDataPtr(
+        c->comm);
     if (req == NULL) {
         return WH_ERROR_BADARGS;
     }
     memset(req, 0, sizeof(*req));
 
-    req->type = type;
-    req->id   = id;
+    req->type   = type;
+    req->id     = id;
     req->obj.sz = objSz;
-    ret = wh_Client_DmaProcessClientAddress(
+    ret         = wh_Client_DmaProcessClientAddress(
         c, (uintptr_t)objAddr, (void**)&objAddrPtr, objSz,
         WH_DMA_OPER_CLIENT_WRITE_PRE, (whDmaFlags){0});
     req->obj.addr = objAddrPtr;
 
     if (ret == WH_ERROR_OK) {
         ret = wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                     WH_OBJECT_CACHE_EXPORT_DMA,
-                                     sizeof(*req), (uint8_t*)req);
+                                    WH_OBJECT_CACHE_EXPORT_DMA, sizeof(*req),
+                                    (uint8_t*)req);
     }
 
     (void)wh_Client_DmaProcessClientAddress(
@@ -1255,22 +1242,21 @@ int wh_Client_ObjectCacheExportDmaRequest(whClientContext* c, uint16_t type,
     return ret;
 }
 
-int wh_Client_ObjectCacheExportDmaResponse(whClientContext* c,
-                                            uint8_t* label, uint16_t labelSz,
-                                            uint16_t* outSz)
+int wh_Client_ObjectCacheExportDmaResponse(whClientContext* c, uint8_t* label,
+                                           uint16_t labelSz, uint16_t* outSz)
 {
-    uint16_t group;
-    uint16_t action;
-    uint16_t size;
-    int ret;
+    uint16_t                                group;
+    uint16_t                                action;
+    uint16_t                                size;
+    int                                     ret;
     whMessageObject_CacheExportDmaResponse* resp = NULL;
 
     if (c == NULL || outSz == NULL) {
         return WH_ERROR_BADARGS;
     }
 
-    resp = (whMessageObject_CacheExportDmaResponse*)
-        wh_CommClient_GetDataPtr(c->comm);
+    resp = (whMessageObject_CacheExportDmaResponse*)wh_CommClient_GetDataPtr(
+        c->comm);
     if (resp == NULL) {
         return WH_ERROR_BADARGS;
     }
@@ -1295,9 +1281,9 @@ int wh_Client_ObjectCacheExportDmaResponse(whClientContext* c,
 }
 
 int wh_Client_ObjectCacheExportDma(whClientContext* c, uint16_t type,
-                                    uint16_t id, const void* objAddr,
-                                    uint16_t objSz, uint8_t* label,
-                                    uint16_t labelSz, uint16_t* outSz)
+                                   uint16_t id, const void* objAddr,
+                                   uint16_t objSz, uint8_t* label,
+                                   uint16_t labelSz, uint16_t* outSz)
 {
     int ret;
 
@@ -1305,7 +1291,7 @@ int wh_Client_ObjectCacheExportDma(whClientContext* c, uint16_t type,
     if (ret == WH_ERROR_OK) {
         do {
             ret = wh_Client_ObjectCacheExportDmaResponse(c, label, labelSz,
-                                                          outSz);
+                                                         outSz);
         } while (ret == WH_ERROR_NOTREADY);
     }
 

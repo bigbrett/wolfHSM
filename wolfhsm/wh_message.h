@@ -102,27 +102,27 @@ enum {
 /* object actions */
 enum WH_OBJECT_ENUM {
     /* NVM backing store operations */
-    WH_OBJECT_NVM_ADD           = 0x01,
-    WH_OBJECT_NVM_DESTROY       = 0x02,
-    WH_OBJECT_NVM_READ          = 0x03,
-    WH_OBJECT_NVM_GETAVAIL      = 0x04,
-    WH_OBJECT_NVM_ITERATE       = 0x05,
+    WH_OBJECT_NVM_ADD      = 0x01,
+    WH_OBJECT_NVM_DESTROY  = 0x02,
+    WH_OBJECT_NVM_READ     = 0x03,
+    WH_OBJECT_NVM_GETAVAIL = 0x04,
+    WH_OBJECT_NVM_ITERATE  = 0x05,
     /* Cache lifecycle operations */
-    WH_OBJECT_CACHE_ADD         = 0x10,
-    WH_OBJECT_CACHE_LOAD        = 0x11,
-    WH_OBJECT_CACHE_EVICT       = 0x12,
-    WH_OBJECT_CACHE_COMMIT      = 0x13,
-    WH_OBJECT_CACHE_EXPORT      = 0x14,
-    WH_OBJECT_CACHE_REVOKE      = 0x15,
+    WH_OBJECT_CACHE_ADD    = 0x10,
+    WH_OBJECT_CACHE_LOAD   = 0x11,
+    WH_OBJECT_CACHE_EVICT  = 0x12,
+    WH_OBJECT_CACHE_COMMIT = 0x13,
+    WH_OBJECT_CACHE_EXPORT = 0x14,
+    WH_OBJECT_CACHE_REVOKE = 0x15,
     /* Wrap operations */
-    WH_OBJECT_WRAP              = 0x20,
-    WH_OBJECT_UNWRAP_CACHE      = 0x21,
-    WH_OBJECT_UNWRAP_EXPORT     = 0x22,
+    WH_OBJECT_WRAP          = 0x20,
+    WH_OBJECT_UNWRAP_CACHE  = 0x21,
+    WH_OBJECT_UNWRAP_EXPORT = 0x22,
     /* DMA variants */
-    WH_OBJECT_NVM_ADD_DMA       = 0x30,
-    WH_OBJECT_NVM_READ_DMA      = 0x31,
-    WH_OBJECT_CACHE_ADD_DMA     = 0x32,
-    WH_OBJECT_CACHE_EXPORT_DMA  = 0x33,
+    WH_OBJECT_NVM_ADD_DMA      = 0x30,
+    WH_OBJECT_NVM_READ_DMA     = 0x31,
+    WH_OBJECT_CACHE_ADD_DMA    = 0x32,
+    WH_OBJECT_CACHE_EXPORT_DMA = 0x33,
 };
 
 /* Construct the message kind based on group and action */

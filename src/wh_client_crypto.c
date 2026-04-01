@@ -1517,9 +1517,9 @@ int wh_Client_EccImportKey(whClientContext* ctx, ecc_key* key,
            buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Cache the key and get the keyID */
-        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
-                                 &key_id, WH_NVM_ACCESS_ANY, flags,
-                                 buffer, buffer_len, label, label_len);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &key_id,
+                                       WH_NVM_ACCESS_ANY, flags, buffer,
+                                       buffer_len, label, label_len);
         if ((ret == WH_ERROR_OK) && (inout_keyId != NULL)) {
             *inout_keyId = key_id;
         }
@@ -1543,8 +1543,8 @@ int wh_Client_EccExportKey(whClientContext* ctx, whKeyId keyId, ecc_key* key,
     }
 
     /* Now export the key from the server */
-    ret =
-        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label, label_len, buffer, &buffer_len);
+    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label,
+                                      label_len, buffer, &buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Update the key structure */
         ret = wh_Crypto_EccDeserializeKeyDer(buffer, buffer_len, key);
@@ -2204,9 +2204,9 @@ int wh_Client_Curve25519ImportKey(whClientContext* ctx, curve25519_key* key,
     ret        = wh_Crypto_Curve25519SerializeKey(key, buffer, &buffer_len);
     if (ret == 0) {
         /* Cache the key and get the keyID */
-        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
-                                 &key_id, WH_NVM_ACCESS_ANY, flags,
-                                 buffer, buffer_len, label, label_len);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &key_id,
+                                       WH_NVM_ACCESS_ANY, flags, buffer,
+                                       buffer_len, label, label_len);
         if (inout_keyId != NULL) {
             *inout_keyId = key_id;
         }
@@ -2230,8 +2230,8 @@ int wh_Client_Curve25519ExportKey(whClientContext* ctx, whKeyId keyId,
     }
 
     /* Now export the key from the server */
-    ret =
-        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label, label_len, buffer, &buffer_len);
+    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label,
+                                      label_len, buffer, &buffer_len);
     if (ret == 0) {
         /* Update the key structure */
         ret = wh_Crypto_Curve25519DeserializeKey(buffer, buffer_len, key);
@@ -2534,9 +2534,9 @@ int wh_Client_Ed25519ImportKey(whClientContext* ctx, ed25519_key* key,
     ret =
         wh_Crypto_Ed25519SerializeKeyDer(key, buffer_len, buffer, &buffer_len);
     if (ret == WH_ERROR_OK) {
-        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
-                                 &key_id, WH_NVM_ACCESS_ANY, flags,
-                                 buffer, buffer_len, label, label_len);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &key_id,
+                                       WH_NVM_ACCESS_ANY, flags, buffer,
+                                       buffer_len, label, label_len);
         if ((ret == WH_ERROR_OK) && (inout_keyId != NULL)) {
             *inout_keyId = key_id;
         }
@@ -2557,8 +2557,8 @@ int wh_Client_Ed25519ExportKey(whClientContext* ctx, whKeyId keyId,
         return WH_ERROR_BADARGS;
     }
 
-    ret =
-        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label, label_len, buffer, &buffer_len);
+    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label,
+                                      label_len, buffer, &buffer_len);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_Ed25519DeserializeKeyDer(buffer, buffer_len, key);
         if (ret == 0) {
@@ -3275,9 +3275,9 @@ int wh_Client_RsaImportKey(whClientContext* ctx, const RsaKey* key,
     ret = wh_Crypto_RsaSerializeKeyDer(key, sizeof(keyDer), keyDer, &derSize);
     if (ret == WH_ERROR_OK) {
         /* Cache the key and get the keyID */
-        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
-                                 &key_id, WH_NVM_ACCESS_ANY, flags,
-                                 keyDer, derSize, label, label_len);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &key_id,
+                                       WH_NVM_ACCESS_ANY, flags, keyDer,
+                                       derSize, label, label_len);
         if (inout_keyId != NULL) {
             *inout_keyId = key_id;
         }
@@ -3299,8 +3299,8 @@ int wh_Client_RsaExportKey(whClientContext* ctx, whKeyId keyId, RsaKey* key,
     }
 
     /* Now export the key from the server */
-    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, keyLabel, sizeof(keyLabel), keyDer,
-                              &derSize);
+    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, keyLabel,
+                                      sizeof(keyLabel), keyDer, &derSize);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_RsaDeserializeKeyDer(derSize, keyDer, key);
         if (ret == 0) {
@@ -5505,9 +5505,9 @@ int wh_Client_MlDsaImportKey(whClientContext* ctx, MlDsaKey* key,
            buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Cache the key and get the keyID */
-        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
-                                 &key_id, WH_NVM_ACCESS_ANY, flags,
-                                 buffer, buffer_len, label, label_len);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &key_id,
+                                       WH_NVM_ACCESS_ANY, flags, buffer,
+                                       buffer_len, label, label_len);
         if ((ret == WH_ERROR_OK) && (inout_keyId != NULL)) {
             *inout_keyId = key_id;
         }
@@ -5531,8 +5531,8 @@ int wh_Client_MlDsaExportKey(whClientContext* ctx, whKeyId keyId, MlDsaKey* key,
     }
 
     /* Now export the DER key from the server */
-    ret =
-        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label, label_len, buffer, &buffer_len);
+    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label,
+                                      label_len, buffer, &buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Update the key structure */
         ret = wh_Crypto_MlDsaDeserializeKeyDer(buffer, buffer_len, key);
@@ -5981,10 +5981,9 @@ int wh_Client_MlDsaImportKeyDma(whClientContext* ctx, MlDsaKey* key,
                                          &buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Cache the key using DMA and get the keyID */
-        ret = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO,
-                                    key_id, WH_NVM_ACCESS_ANY, flags,
-                                    buffer, buffer_len, label, label_len,
-                                    &key_id);
+        ret = wh_Client_ObjectCacheAddDma(
+            ctx, WH_KEYTYPE_CRYPTO, key_id, WH_NVM_ACCESS_ANY, flags, buffer,
+            buffer_len, label, label_len, &key_id);
         if ((ret == WH_ERROR_OK) && (inout_keyId != NULL)) {
             *inout_keyId = key_id;
         }
@@ -6006,8 +6005,9 @@ int wh_Client_MlDsaExportKeyDma(whClientContext* ctx, whKeyId keyId,
     }
 
     /* Export the key from server using DMA */
-    ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO, keyId, buffer, buffer_len, label,
-                                 label_len, &buffer_len);
+    ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO, keyId, buffer,
+                                         buffer_len, label, label_len,
+                                         &buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Deserialize the key */
         ret = wh_Crypto_MlDsaDeserializeKeyDer(buffer, buffer_len, key);

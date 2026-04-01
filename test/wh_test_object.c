@@ -37,8 +37,7 @@
 #include "wolfhsm/wh_client_object.h"
 
 #if defined(WOLFHSM_CFG_ENABLE_CLIENT) && \
-    defined(WOLFHSM_CFG_ENABLE_SERVER) && \
-    !defined(WOLFHSM_CFG_NO_CRYPTO)
+    defined(WOLFHSM_CFG_ENABLE_SERVER) && !defined(WOLFHSM_CFG_NO_CRYPTO)
 
 #define BUFFER_SIZE 4096
 #define FLASH_RAM_SIZE (1024 * 1024)
@@ -46,11 +45,9 @@
 #define FLASH_PAGE_SIZE 8
 
 static const uint8_t testObjData[] = {
-    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-    0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
-    0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-    0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20
-};
+    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B,
+    0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+    0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20};
 static const uint8_t testObjLabel[] = "TestObject";
 
 
@@ -81,9 +78,8 @@ static int _testObjectCacheLifecycle(whClientContext* client,
 
     /* CacheAdd with explicit ID */
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddRequest(
-        client, WH_KEYTYPE_CRYPTO, 5, WH_NVM_ACCESS_ANY,
-        WH_NVM_FLAGS_USAGE_ANY, testObjData, sizeof(testObjData),
-        testObjLabel, sizeof(testObjLabel)));
+        client, WH_KEYTYPE_CRYPTO, 5, WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_ANY,
+        testObjData, sizeof(testObjData), testObjLabel, sizeof(testObjLabel)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddResponse(client, &outId));
     WH_TEST_ASSERT_RETURN(outId != 0);
@@ -91,8 +87,8 @@ static int _testObjectCacheLifecycle(whClientContext* client,
     /* CacheExport - verify data matches */
     memset(exportBuf, 0, sizeof(exportBuf));
     exportSz = sizeof(exportBuf);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectCacheExportRequest(client, WH_KEYTYPE_CRYPTO, outId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportResponse(
         client, &rc, labelBuf, sizeof(labelBuf), exportBuf, &exportSz));
@@ -100,31 +96,28 @@ static int _testObjectCacheLifecycle(whClientContext* client,
     WH_TEST_ASSERT_RETURN(0 == memcmp(exportBuf, testObjData, exportSz));
 
     /* CacheCommit to NVM */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommitRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheCommitResponse(client, &rc));
+        wh_Client_ObjectCacheCommitRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommitResponse(client, &rc));
 
     /* CacheEvict from cache */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheEvictResponse(client, &rc));
+        wh_Client_ObjectCacheEvictRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictResponse(client, &rc));
 
     /* CacheLoad - reload from NVM */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheLoadRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheLoadResponse(client, &rc));
+        wh_Client_ObjectCacheLoadRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheLoadResponse(client, &rc));
 
     /* CacheExport after reload - verify data still matches */
     memset(exportBuf, 0, sizeof(exportBuf));
     exportSz = sizeof(exportBuf);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectCacheExportRequest(client, WH_KEYTYPE_CRYPTO, outId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportResponse(
         client, &rc, labelBuf, sizeof(labelBuf), exportBuf, &exportSz));
@@ -132,11 +125,10 @@ static int _testObjectCacheLifecycle(whClientContext* client,
     WH_TEST_ASSERT_RETURN(0 == memcmp(exportBuf, testObjData, exportSz));
 
     /* CacheEvict cleanup */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheEvictResponse(client, &rc));
+        wh_Client_ObjectCacheEvictRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictResponse(client, &rc));
 
     return WH_ERROR_OK;
 }
@@ -157,8 +149,8 @@ static int _testObjectCacheAddAutoId(whClientContext* client,
     /* CacheAdd with id=WH_KEYID_ERASED (0) to request auto-assigned ID */
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddRequest(
         client, WH_KEYTYPE_CRYPTO, WH_KEYID_ERASED, WH_NVM_ACCESS_ANY,
-        WH_NVM_FLAGS_USAGE_ANY, testObjData, sizeof(testObjData),
-        testObjLabel, sizeof(testObjLabel)));
+        WH_NVM_FLAGS_USAGE_ANY, testObjData, sizeof(testObjData), testObjLabel,
+        sizeof(testObjLabel)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddResponse(client, &outId));
     /* Server should assign a non-zero ID */
@@ -167,8 +159,8 @@ static int _testObjectCacheAddAutoId(whClientContext* client,
     /* Export and verify data */
     memset(exportBuf, 0, sizeof(exportBuf));
     exportSz = sizeof(exportBuf);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectCacheExportRequest(client, WH_KEYTYPE_CRYPTO, outId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportResponse(
         client, &rc, labelBuf, sizeof(labelBuf), exportBuf, &exportSz));
@@ -176,11 +168,10 @@ static int _testObjectCacheAddAutoId(whClientContext* client,
     WH_TEST_ASSERT_RETURN(0 == memcmp(exportBuf, testObjData, exportSz));
 
     /* CacheEvict cleanup */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheEvictResponse(client, &rc));
+        wh_Client_ObjectCacheEvictRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictResponse(client, &rc));
 
     return WH_ERROR_OK;
 }
@@ -192,17 +183,16 @@ static int _testObjectCacheAddAutoId(whClientContext* client,
 static int _testObjectNvmOperations(whClientContext* client,
                                     whServerContext* server)
 {
-    int32_t  rc      = 0;
-    int      ret     = 0;
+    int32_t  rc  = 0;
+    int      ret = 0;
     uint8_t  readBuf[sizeof(testObjData)];
     uint16_t readLen = 0;
 
     /* ObjectNvmAdd with explicit id */
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectNvmAddRequest(
         client, WH_KEYTYPE_CRYPTO, 10, WH_NVM_ACCESS_ANY,
-        WH_NVM_FLAGS_USAGE_ANY,
-        testObjLabel, sizeof(testObjLabel),
-        testObjData, sizeof(testObjData)));
+        WH_NVM_FLAGS_USAGE_ANY, testObjLabel, sizeof(testObjLabel), testObjData,
+        sizeof(testObjData)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectNvmAddResponse(client, &rc));
 
@@ -212,14 +202,14 @@ static int _testObjectNvmOperations(whClientContext* client,
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectNvmReadDataRequest(
         client, WH_KEYTYPE_CRYPTO, 10, 0, sizeof(testObjData)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectNvmReadDataResponse(
-        client, &rc, readBuf, &readLen));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectNvmReadDataResponse(client, &rc, readBuf, &readLen));
     WH_TEST_ASSERT_RETURN(readLen == sizeof(testObjData));
     WH_TEST_ASSERT_RETURN(0 == memcmp(readBuf, testObjData, readLen));
 
     /* ObjectNvmDestroy */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectNvmDestroyRequest(
-        client, WH_KEYTYPE_CRYPTO, 10));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectNvmDestroyRequest(client, WH_KEYTYPE_CRYPTO, 10));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectNvmDestroyResponse(client, &rc));
 
@@ -250,16 +240,15 @@ static int _testObjectNonpersistable(whClientContext* client,
     /* CacheAdd with NONPERSISTABLE flag */
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddRequest(
         client, WH_KEYTYPE_CRYPTO, 20, WH_NVM_ACCESS_ANY,
-        WH_NVM_FLAGS_USAGE_ANY | WH_NVM_FLAGS_NONPERSISTABLE,
-        testObjData, sizeof(testObjData),
-        testObjLabel, sizeof(testObjLabel)));
+        WH_NVM_FLAGS_USAGE_ANY | WH_NVM_FLAGS_NONPERSISTABLE, testObjData,
+        sizeof(testObjData), testObjLabel, sizeof(testObjLabel)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddResponse(client, &outId));
     WH_TEST_ASSERT_RETURN(outId != 0);
 
     /* CacheCommit should fail with ACCESS error due to NONPERSISTABLE */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommitRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectCacheCommitRequest(client, WH_KEYTYPE_CRYPTO, outId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     ret = wh_Client_ObjectCacheCommitResponse(client, &rc);
     WH_TEST_ASSERT_RETURN(ret != WH_ERROR_OK);
@@ -267,8 +256,8 @@ static int _testObjectNonpersistable(whClientContext* client,
     /* CacheExport should succeed (data is still in cache) */
     memset(exportBuf, 0, sizeof(exportBuf));
     exportSz = sizeof(exportBuf);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectCacheExportRequest(client, WH_KEYTYPE_CRYPTO, outId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportResponse(
         client, &rc, labelBuf, sizeof(labelBuf), exportBuf, &exportSz));
@@ -276,11 +265,10 @@ static int _testObjectNonpersistable(whClientContext* client,
     WH_TEST_ASSERT_RETURN(0 == memcmp(exportBuf, testObjData, exportSz));
 
     /* CacheEvict cleanup */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheEvictResponse(client, &rc));
+        wh_Client_ObjectCacheEvictRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictResponse(client, &rc));
 
     return WH_ERROR_OK;
 }
@@ -303,35 +291,33 @@ static int _testObjectCacheErase(whClientContext* client,
     /* CacheAdd */
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddRequest(
         client, WH_KEYTYPE_CRYPTO, 30, WH_NVM_ACCESS_ANY,
-        WH_NVM_FLAGS_USAGE_ANY, testObjData, sizeof(testObjData),
-        testObjLabel, sizeof(testObjLabel)));
+        WH_NVM_FLAGS_USAGE_ANY, testObjData, sizeof(testObjData), testObjLabel,
+        sizeof(testObjLabel)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddResponse(client, &outId));
     WH_TEST_ASSERT_RETURN(outId != 0);
 
     /* CacheCommit to NVM */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommitRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheCommitResponse(client, &rc));
+        wh_Client_ObjectCacheCommitRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommitResponse(client, &rc));
 
     /* Evict from cache */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheEvictResponse(client, &rc));
+        wh_Client_ObjectCacheEvictRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictResponse(client, &rc));
 
     /* Destroy from NVM */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectNvmDestroyRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectNvmDestroyRequest(client, WH_KEYTYPE_CRYPTO, outId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectNvmDestroyResponse(client, &rc));
 
     /* CacheLoad should fail (NOTFOUND) since object is gone from both */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheLoadRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectCacheLoadRequest(client, WH_KEYTYPE_CRYPTO, outId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     ret = wh_Client_ObjectCacheLoadResponse(client, &rc);
     WH_TEST_ASSERT_RETURN(ret != WH_ERROR_OK);
@@ -348,8 +334,7 @@ static int _testObjectCacheErase(whClientContext* client,
  * NONMODIFIABLE and clears usage flags on the metadata, so we verify a
  * subsequent CacheCommit fails (since NONMODIFIABLE prevents modification).
  */
-static int _testObjectRevoke(whClientContext* client,
-                             whServerContext* server)
+static int _testObjectRevoke(whClientContext* client, whServerContext* server)
 {
     uint16_t outId = 0;
     int32_t  rc    = 0;
@@ -360,32 +345,29 @@ static int _testObjectRevoke(whClientContext* client,
     /* CacheAdd with usage flags set */
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddRequest(
         client, WH_KEYTYPE_CRYPTO, 40, WH_NVM_ACCESS_ANY,
-        WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT,
-        testObjData, sizeof(testObjData),
-        testObjLabel, sizeof(testObjLabel)));
+        WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT, testObjData,
+        sizeof(testObjData), testObjLabel, sizeof(testObjLabel)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddResponse(client, &outId));
     WH_TEST_ASSERT_RETURN(outId != 0);
 
     /* CacheCommit so eviction is allowed after revoke */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommitRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheCommitResponse(client, &rc));
+        wh_Client_ObjectCacheCommitRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheCommitResponse(client, &rc));
 
     /* CacheRevoke */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheRevokeRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheRevokeResponse(client, &rc));
+        wh_Client_ObjectCacheRevokeRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheRevokeResponse(client, &rc));
 
     /* CacheExport should still succeed (object data is present) */
     memset(exportBuf, 0, sizeof(exportBuf));
     exportSz = sizeof(exportBuf);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Client_ObjectCacheExportRequest(client, WH_KEYTYPE_CRYPTO, outId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportResponse(
         client, &rc, labelBuf, sizeof(labelBuf), exportBuf, &exportSz));
@@ -393,11 +375,10 @@ static int _testObjectRevoke(whClientContext* client,
     WH_TEST_ASSERT_RETURN(0 == memcmp(exportBuf, testObjData, exportSz));
 
     /* CacheEvict cleanup */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(
-        client, WH_KEYTYPE_CRYPTO, outId));
-    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_ObjectCacheEvictResponse(client, &rc));
+        wh_Client_ObjectCacheEvictRequest(client, WH_KEYTYPE_CRYPTO, outId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictResponse(client, &rc));
 
     return WH_ERROR_OK;
 }
@@ -423,50 +404,50 @@ int whTest_Object(void)
     whTransportClientCb         tccb[1]    = {WH_TRANSPORT_MEM_CLIENT_CB};
     whTransportMemClientContext tmcc[1]    = {0};
     whCommClientConfig          cc_conf[1] = {{
-        .transport_cb      = tccb,
-        .transport_context = (void*)tmcc,
-        .transport_config  = (void*)tmcf,
-        .client_id         = WH_TEST_DEFAULT_CLIENT_ID,
-        .connect_cb        = _objectTestConnectCb,
+                 .transport_cb      = tccb,
+                 .transport_context = (void*)tmcc,
+                 .transport_config  = (void*)tmcf,
+                 .client_id         = WH_TEST_DEFAULT_CLIENT_ID,
+                 .connect_cb        = _objectTestConnectCb,
     }};
 
     whClientContext client[1] = {0};
     whClientConfig  c_conf[1] = {{
-        .comm = cc_conf,
+         .comm = cc_conf,
     }};
 
     /* Server configuration/contexts */
     whTransportServerCb         tscb[1]    = {WH_TRANSPORT_MEM_SERVER_CB};
     whTransportMemServerContext tmsc[1]    = {0};
     whCommServerConfig          cs_conf[1] = {{
-        .transport_cb      = tscb,
-        .transport_context = (void*)tmsc,
-        .transport_config  = (void*)tmcf,
-        .server_id         = 124,
+                 .transport_cb      = tscb,
+                 .transport_context = (void*)tmsc,
+                 .transport_config  = (void*)tmcf,
+                 .server_id         = 124,
     }};
 
     /* RamSim Flash state and configuration */
-    uint8_t memory[FLASH_RAM_SIZE] = {0};
-    whFlashRamsimCtx fc[1]      = {0};
-    whFlashRamsimCfg fc_conf[1] = {{
-        .size       = FLASH_RAM_SIZE,
-        .sectorSize = FLASH_SECTOR_SIZE,
-        .pageSize   = FLASH_PAGE_SIZE,
-        .erasedByte = ~(uint8_t)0,
-        .memory     = memory,
+    uint8_t          memory[FLASH_RAM_SIZE] = {0};
+    whFlashRamsimCtx fc[1]                  = {0};
+    whFlashRamsimCfg fc_conf[1]             = {{
+                    .size       = FLASH_RAM_SIZE,
+                    .sectorSize = FLASH_SECTOR_SIZE,
+                    .pageSize   = FLASH_PAGE_SIZE,
+                    .erasedByte = ~(uint8_t)0,
+                    .memory     = memory,
     }};
-    const whFlashCb fcb[1] = {WH_FLASH_RAMSIM_CB};
+    const whFlashCb  fcb[1]                 = {WH_FLASH_RAMSIM_CB};
 
     whTestNvmBackendUnion nvm_setup;
     whNvmConfig           n_conf[1] = {0};
-    whNvmContext           nvm[1]    = {{0}};
+    whNvmContext          nvm[1]    = {{0}};
 
     whServerCryptoContext crypto[1] = {0};
 
     whServerConfig  s_conf[1] = {{
-        .comm_config = cs_conf,
-        .nvm         = nvm,
-        .crypto      = crypto,
+         .comm_config = cs_conf,
+         .nvm         = nvm,
+         .crypto      = crypto,
     }};
     whServerContext server[1] = {0};
 
@@ -478,9 +459,8 @@ int whTest_Object(void)
 
     WH_TEST_RETURN_ON_FAIL(wolfCrypt_Init());
     WH_TEST_RETURN_ON_FAIL(wc_InitRng_ex(crypto->rng, NULL, INVALID_DEVID));
-    WH_TEST_RETURN_ON_FAIL(
-        whTest_NvmCfgBackend(WH_NVM_TEST_BACKEND_FLASH, &nvm_setup, n_conf,
-                             fc_conf, fc, fcb));
+    WH_TEST_RETURN_ON_FAIL(whTest_NvmCfgBackend(
+        WH_NVM_TEST_BACKEND_FLASH, &nvm_setup, n_conf, fc_conf, fc, fcb));
     WH_TEST_RETURN_ON_FAIL(wh_Nvm_Init(nvm, n_conf));
 
     /* Init server then client (server must be first so the connect callback
@@ -541,5 +521,5 @@ int whTest_Object(void)
     return 0;
 }
 
-#endif /* WOLFHSM_CFG_ENABLE_CLIENT && WOLFHSM_CFG_ENABLE_SERVER &&
+#endif /* WOLFHSM_CFG_ENABLE_CLIENT && WOLFHSM_CFG_ENABLE_SERVER && \
         * !WOLFHSM_CFG_NO_CRYPTO */

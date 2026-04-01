@@ -290,7 +290,7 @@ static int whTest_CryptoRsa(whClientContext* ctx, int devId, WC_RNG* rng)
                 (void)wc_FreeRsaKey(rsa);
             }
         }
-        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
     }
     if (ret == 0) {
         WH_TEST_PRINT("RSA SUCCESS\n");
@@ -623,7 +623,8 @@ static int whTest_CryptoEcc(whClientContext* ctx, int devId, WC_RNG* rng)
         }
         /* Evict server key regardless of test success */
         if (!WH_KEYID_ISERASED(keyIdPrivate)) {
-            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyIdPrivate);
+            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                             keyIdPrivate);
         }
     }
 
@@ -648,7 +649,8 @@ static int whTest_CryptoEccCacheDuplicate(whClientContext* client)
     ret = wh_Client_EccMakeCacheKey(client, 32, ECC_SECP256R1, &keyId,
                                     WH_NVM_FLAGS_NONE, 0, NULL);
     if (ret == WH_ERROR_OK) {
-        ret = wh_Client_ObjectCacheExport(client, WH_KEYTYPE_CRYPTO,keyId, NULL, 0, key1, &key1Len);
+        ret = wh_Client_ObjectCacheExport(client, WH_KEYTYPE_CRYPTO, keyId,
+                                          NULL, 0, key1, &key1Len);
     }
 
     /* Generate a second key using the same keyId to create a duplicate slot */
@@ -660,7 +662,8 @@ static int whTest_CryptoEccCacheDuplicate(whClientContext* client)
     /* Export again; result should match the most recent key, not the first */
     if (ret == WH_ERROR_OK) {
         key2Len = sizeof(key2);
-        ret     = wh_Client_ObjectCacheExport(client, WH_KEYTYPE_CRYPTO,keyId, NULL, 0, key2, &key2Len);
+        ret     = wh_Client_ObjectCacheExport(client, WH_KEYTYPE_CRYPTO, keyId,
+                                              NULL, 0, key2, &key2Len);
     }
 
     if (ret == WH_ERROR_OK) {
@@ -676,7 +679,7 @@ static int whTest_CryptoEccCacheDuplicate(whClientContext* client)
     }
 
     if (!WH_KEYID_ISERASED(keyId)) {
-        wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+        wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
     }
 
     return ret;
@@ -798,7 +801,7 @@ static int whTest_CryptoEccCrossVerify_OneCurve(whClientContext* ctx,
     if (hsmKeyInit) {
         if (wh_Client_EccGetKeyId(hsmKey, &keyId) == 0 &&
             !WH_KEYID_ISERASED(keyId)) {
-            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
         }
         wc_ecc_free(hsmKey);
         hsmKeyInit = 0;
@@ -880,7 +883,7 @@ static int whTest_CryptoEccCrossVerify_OneCurve(whClientContext* ctx,
     if (hsmKeyInit) {
         if (wh_Client_EccGetKeyId(hsmKey, &keyId) == 0 &&
             !WH_KEYID_ISERASED(keyId)) {
-            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
         }
         wc_ecc_free(hsmKey);
     }
@@ -1192,10 +1195,10 @@ static int whTest_CryptoEd25519ServerKey(whClientContext* ctx, int devId,
     }
 
     if (!WH_KEYID_ISERASED(signKeyId)) {
-        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,signKeyId);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, signKeyId);
     }
     if (!WH_KEYID_ISERASED(verifyKeyId)) {
-        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,verifyKeyId);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, verifyKeyId);
     }
 
     if (ret == 0) {
@@ -1280,10 +1283,10 @@ static int whTest_CryptoEd25519Dma(whClientContext* ctx, int devId, WC_RNG* rng)
     }
 
     if (!WH_KEYID_ISERASED(signKeyId)) {
-        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,signKeyId);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, signKeyId);
     }
     if (!WH_KEYID_ISERASED(verifyKeyId)) {
-        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,verifyKeyId);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, verifyKeyId);
     }
 
     if (ret == 0) {
@@ -1460,10 +1463,12 @@ static int whTest_CryptoCurve25519(whClientContext* ctx, int devId, WC_RNG* rng)
                     }
                 }
                 if (!WH_KEYID_ISERASED(key_id_a)) {
-                    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id_a);
+                    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                     key_id_a);
                 }
                 if (!WH_KEYID_ISERASED(key_id_b)) {
-                    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id_b);
+                    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                     key_id_b);
                 }
                 wc_curve25519_free(key_b);
             }
@@ -2052,7 +2057,7 @@ static int whTest_CryptoHkdf(whClientContext* ctx, int devId, WC_RNG* rng)
     /* Verify key was cached */
     if (key_id == WH_KEYID_ERASED) {
         WH_ERROR_PRINT("Key ID was not assigned\n");
-        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
         return -1;
     }
 
@@ -2061,11 +2066,12 @@ static int whTest_CryptoHkdf(whClientContext* ctx, int devId, WC_RNG* rng)
     {
         uint8_t  export_label[sizeof(label)] = {0};
         uint16_t export_len                  = WH_TEST_HKDF_OKM_SIZE;
-        ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,key_id, export_label,
-                                  sizeof(export_label), okm2, &export_len);
+        ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, key_id,
+                                          export_label, sizeof(export_label),
+                                          okm2, &export_len);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyExport: %d\n", ret);
-            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id);
+            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
             return ret;
         }
 
@@ -2073,7 +2079,7 @@ static int whTest_CryptoHkdf(whClientContext* ctx, int devId, WC_RNG* rng)
         if (export_len != WH_TEST_HKDF_OKM_SIZE) {
             WH_ERROR_PRINT("Exported key length mismatch: %u != %u\n",
                            export_len, WH_TEST_HKDF_OKM_SIZE);
-            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id);
+            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
             return -1;
         }
 
@@ -2081,13 +2087,13 @@ static int whTest_CryptoHkdf(whClientContext* ctx, int devId, WC_RNG* rng)
         if (memcmp(okm2, expected, WH_TEST_HKDF_OKM_SIZE) != 0) {
             WH_ERROR_PRINT(
                 "HKDF output does not match expected (MakeCacheKey)\n");
-            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id);
+            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
             return -1;
         }
     }
 
     /* Evict the cached HKDF key */
-    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id);
+    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to evict HKDF cached key: %d\n", ret);
         return ret;
@@ -2105,10 +2111,10 @@ static int whTest_CryptoHkdf(whClientContext* ctx, int devId, WC_RNG* rng)
         byte    okm_direct[WH_TEST_HKDF_OKM_SIZE];
 
         /* First, cache the input key */
-        ret =
-            wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyIdIn,
-                               WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_DERIVE,
-                               ikm2, sizeof(ikm2), label_in, sizeof(label_in));
+        ret = wh_Client_ObjectCacheAdd(
+            ctx, WH_KEYTYPE_CRYPTO, &keyIdIn, WH_NVM_ACCESS_ANY,
+            WH_NVM_FLAGS_USAGE_DERIVE, ikm2, sizeof(ikm2), label_in,
+            sizeof(label_in));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to cache input key: %d\n", ret);
             return ret;
@@ -2121,7 +2127,7 @@ static int whTest_CryptoHkdf(whClientContext* ctx, int devId, WC_RNG* rng)
             sizeof(info2), okm_cache, sizeof(okm_cache));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed HKDF with cached input key: %d\n", ret);
-            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyIdIn);
+            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyIdIn);
             return ret;
         }
 
@@ -2133,7 +2139,7 @@ static int whTest_CryptoHkdf(whClientContext* ctx, int devId, WC_RNG* rng)
                                           sizeof(okm_direct));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed HKDF with direct input key: %d\n", ret);
-            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyIdIn);
+            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyIdIn);
             return ret;
         }
 
@@ -2141,12 +2147,12 @@ static int whTest_CryptoHkdf(whClientContext* ctx, int devId, WC_RNG* rng)
         if (memcmp(okm_cache, okm_direct, sizeof(okm_cache)) != 0) {
             WH_ERROR_PRINT(
                 "HKDF output mismatch (cached vs direct input key)\n");
-            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyIdIn);
+            (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyIdIn);
             return -1;
         }
 
         /* Clean up - evict the cached input key */
-        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyIdIn);
+        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyIdIn);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to evict input key: %d\n", ret);
             return ret;
@@ -2249,20 +2255,21 @@ static int whTest_CryptoCmacKdf(whClientContext* ctx, int devId, WC_RNG* rng)
     memset(exported, 0, sizeof(exported));
     export_len = (uint16_t)sizeof(exported);
     memset(exportLabel, 0, sizeof(exportLabel));
-    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,key_id, exportLabel, sizeof(exportLabel),
-                              exported, &export_len);
+    ret =
+        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, key_id, exportLabel,
+                                    sizeof(exportLabel), exported, &export_len);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to export cached CMAC KDF key: %d\n", ret);
-        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
         return ret;
     }
     if ((export_len != WH_TEST_CMAC_KDF_OUT_SIZE) ||
         (memcmp(exported, expected, sizeof(exported)) != 0)) {
         WH_ERROR_PRINT("Exported CMAC KDF key mismatch\n");
-        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
         return -1;
     }
-    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id);
+    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to evict cached CMAC KDF key: %d\n", ret);
         return ret;
@@ -2272,18 +2279,18 @@ static int whTest_CryptoCmacKdf(whClientContext* ctx, int devId, WC_RNG* rng)
     whKeyId saltKeyId = WH_KEYID_ERASED;
     whKeyId zKeyId    = WH_KEYID_ERASED;
     ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &saltKeyId,
-                             WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_DERIVE,
-                             salt, WH_TEST_CMAC_KDF_SALT_SIZE, NULL, 0);
+                                   WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_DERIVE,
+                                   salt, WH_TEST_CMAC_KDF_SALT_SIZE, NULL, 0);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to cache CMAC KDF salt: %d\n", ret);
         return ret;
     }
     ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &zKeyId,
-                             WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_DERIVE,
-                             z, WH_TEST_CMAC_KDF_Z_SIZE, NULL, 0);
+                                   WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_DERIVE,
+                                   z, WH_TEST_CMAC_KDF_Z_SIZE, NULL, 0);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to cache CMAC KDF Z input: %d\n", ret);
-        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,saltKeyId);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, saltKeyId);
         return ret;
     }
 
@@ -2321,8 +2328,9 @@ static int whTest_CryptoCmacKdf(whClientContext* ctx, int devId, WC_RNG* rng)
     memset(exported, 0, sizeof(exported));
     export_len = (uint16_t)sizeof(exported);
     memset(exportLabel, 0, sizeof(exportLabel));
-    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,key_id, exportLabel, sizeof(exportLabel),
-                              exported, &export_len);
+    ret =
+        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, key_id, exportLabel,
+                                    sizeof(exportLabel), exported, &export_len);
     if ((ret != 0) || (export_len != WH_TEST_CMAC_KDF_OUT_SIZE) ||
         (memcmp(exported, expected, sizeof(exported)) != 0)) {
         WH_ERROR_PRINT("Export mismatch for CMAC KDF cached inputs (ret=%d)\n",
@@ -2332,11 +2340,11 @@ static int whTest_CryptoCmacKdf(whClientContext* ctx, int devId, WC_RNG* rng)
         }
     }
 
-    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,key_id);
+    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
 
 cleanup_inputs:
-    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,saltKeyId);
-    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,zKeyId);
+    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, saltKeyId);
+    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, zKeyId);
 
     if (ret != WH_ERROR_OK) {
         return ret;
@@ -2356,12 +2364,14 @@ static int whTest_CacheExportKey(whClientContext* ctx, whKeyId* inout_key_id,
     uint16_t key_len_out = key_len;
     whKeyId key_id_out = *inout_key_id;
     ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &key_id_out,
-            WH_NVM_ACCESS_ANY, 0, key_in, key_len, label_in, label_len);
+                                   WH_NVM_ACCESS_ANY, 0, key_in, key_len,
+                                   label_in, label_len);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
     } else {
-        ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,key_id_out, label_out, label_len_out,
-                key_out, &key_len_out);
+        ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, key_id_out,
+                                          label_out, label_len_out, key_out,
+                                          &key_len_out);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyExport %d\n", ret);
         } else {
@@ -2388,15 +2398,15 @@ static int whTest_CacheExportKeyDma(whClientContext* ctx, whKeyId* inout_key_id,
     whKeyId  key_id_out    = *inout_key_id;
 
     ret = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, key_id_out,
-                                WH_NVM_ACCESS_ANY, 0, key_in, key_len,
-                                label_in, label_len, &key_id_out);
+                                      WH_NVM_ACCESS_ANY, 0, key_in, key_len,
+                                      label_in, label_len, &key_id_out);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to wh_Client_KeyCacheDma %d\n", ret);
     }
     else {
-        ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO,
-                                     key_id_out, key_out, key_len_out,
-                                     label_out, label_len_out, &key_len_out);
+        ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO, key_id_out,
+                                             key_out, key_len_out, label_out,
+                                             label_len_out, &key_len_out);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyExportDma %d\n", ret);
         }
@@ -2465,7 +2475,7 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                 WH_ERROR_PRINT("Failed to CommInit:%d\n", ret);
             } else {
                 /* Check that evicting the other client's key fails */
-                ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
                 if (ret != WH_ERROR_NOTFOUND) {
                     WH_ERROR_PRINT("Failed to wh_Client_KeyEvict %d\n",
                             ret);
@@ -2478,7 +2488,8 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                                 ret);
                     } else {
                         /* evict for this client */
-                        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                         keyId);
                     }
                 }
                 /* switch back and verify original key */
@@ -2489,8 +2500,9 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                     WH_ERROR_PRINT("Failed to reconnect: %d\n", ret);
                 } else {
                     outLen = sizeof(keyOut);
-                    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,keyId, labelOut,
-                            sizeof(labelOut), keyOut, &outLen);
+                    ret    = wh_Client_ObjectCacheExport(
+                        ctx, WH_KEYTYPE_CRYPTO, keyId, labelOut,
+                        sizeof(labelOut), keyOut, &outLen);
                     if (ret != 0) {
                         WH_ERROR_PRINT("Failed to wh_Client_KeyExport %d\n",
                                 ret);
@@ -2512,13 +2524,14 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
 #endif /* WOLFHSM_CFG_IS_TEST_SERVER */
     if (ret == 0) {
         /* test evict for original client */
-        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyEvict %d\n", ret);
         } else {
             outLen = sizeof(keyOut);
-            ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,keyId, labelOut, sizeof(labelOut),
-                    keyOut, &outLen);
+            ret    = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId,
+                                                 labelOut, sizeof(labelOut),
+                                                 keyOut, &outLen);
             if (ret != WH_ERROR_NOTFOUND) {
                 WH_ERROR_PRINT("Failed to not find evicted key %d\n", ret);
             } else {
@@ -2531,23 +2544,24 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
     if (ret == 0) {
         /* test commit/erase */
         keyId = WH_KEYID_ERASED;
-        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                WH_NVM_ACCESS_ANY, 0, key, sizeof(key), labelIn,
-                sizeof(labelIn));
+        ret   = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
+                                         WH_NVM_ACCESS_ANY, 0, key, sizeof(key),
+                                         labelIn, sizeof(labelIn));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
         } else {
-            ret = wh_Client_ObjectCacheCommit(ctx, WH_KEYTYPE_CRYPTO,keyId);
+            ret = wh_Client_ObjectCacheCommit(ctx, WH_KEYTYPE_CRYPTO, keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCommit %d\n", ret);
             } else {
-                ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
                 if (ret != 0) {
                     WH_ERROR_PRINT("Failed to wh_Client_KeyEvict %d\n", ret);
                 } else {
                     outLen = sizeof(keyOut);
-                    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,keyId, labelOut,
-                            sizeof(labelOut), keyOut, &outLen);
+                    ret    = wh_Client_ObjectCacheExport(
+                        ctx, WH_KEYTYPE_CRYPTO, keyId, labelOut,
+                        sizeof(labelOut), keyOut, &outLen);
                     if (ret != 0) {
                         WH_ERROR_PRINT("Failed to wh_Client_KeyExport %d\n",
                                 ret);
@@ -2562,28 +2576,31 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                         else {
                             /* verify commit isn't using new nvm objects */
                             for (i = 0; i < WOLFHSM_CFG_NVM_OBJECT_COUNT; i++) {
-                                ret = wh_Client_ObjectCacheCommit(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                                ret = wh_Client_ObjectCacheCommit(
+                                    ctx, WH_KEYTYPE_CRYPTO, keyId);
                                 if (ret != 0) {
                                     WH_ERROR_PRINT("Failed to over commit %d\n",
                                             ret);
                                 }
                             }
                             if (ret == 0) {
-                                ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                                ret = wh_Client_ObjectCacheEvict(
+                                    ctx, WH_KEYTYPE_CRYPTO, keyId);
                                 if (ret == 0) {
                                     int32_t drc = 0;
-                                    ret = wh_Client_ObjectNvmDestroy(ctx,
-                                            WH_KEYTYPE_CRYPTO, keyId, &drc);
-                                    if (ret == 0) ret = drc;
+                                    ret         = wh_Client_ObjectNvmDestroy(
+                                        ctx, WH_KEYTYPE_CRYPTO, keyId, &drc);
+                                    if (ret == 0)
+                                        ret = drc;
                                 }
                                 if (ret != 0) {
                                     WH_ERROR_PRINT("Failed to erase key %d\n",
                                             ret);
                                 } else {
                                     outLen = sizeof(keyOut);
-                                    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,keyId,
-                                            labelOut, sizeof(labelOut), keyOut,
-                                            &outLen);
+                                    ret    = wh_Client_ObjectCacheExport(
+                                        ctx, WH_KEYTYPE_CRYPTO, keyId, labelOut,
+                                        sizeof(labelOut), keyOut, &outLen);
                                     if (ret != WH_ERROR_NOTFOUND) {
                                         WH_ERROR_PRINT("Failed to not find "
                                                         "erased key\n");
@@ -2627,20 +2644,18 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
 
         /* Test 1: Cache small key first, then cache same keyId with big key */
         keyId = WH_KEYID_ERASED;
-        ret   = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                                   WH_NVM_ACCESS_ANY, 0, smallKey,
-                                   sizeof(smallKey), labelSmall,
-                                   sizeof(labelSmall));
+        ret   = wh_Client_ObjectCacheAdd(
+            ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY, 0, smallKey,
+            sizeof(smallKey), labelSmall, sizeof(labelSmall));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to cache small key: %d\n", ret);
         }
         else {
             /* Now cache big key with same keyId - should succeed and evict the
              * small key */
-            ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                                     WH_NVM_ACCESS_ANY, 0, bigKey,
-                                     sizeof(bigKey), labelBig,
-                                     sizeof(labelBig));
+            ret = wh_Client_ObjectCacheAdd(
+                ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY, 0, bigKey,
+                sizeof(bigKey), labelBig, sizeof(labelBig));
             if (ret != 0) {
                 WH_ERROR_PRINT(
                     "Failed to cache big key (expected success): %d\n", ret);
@@ -2648,9 +2663,9 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
             else {
                 /* Verify the cached key is the big key by exporting it */
                 exportedKeySize = sizeof(exportedKey);
-                ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,keyId, exportedLabel,
-                                          sizeof(exportedLabel), exportedKey,
-                                          &exportedKeySize);
+                ret             = wh_Client_ObjectCacheExport(
+                    ctx, WH_KEYTYPE_CRYPTO, keyId, exportedLabel,
+                    sizeof(exportedLabel), exportedKey, &exportedKeySize);
                 if (ret != 0) {
                     WH_ERROR_PRINT("Failed to export key after cache: %d\n",
                                    ret);
@@ -2676,18 +2691,21 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                 }
                 /* Clean up */
                 if (ret == 0) {
-                    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                     keyId);
                     if (ret != 0) {
                         WH_ERROR_PRINT("Failed to evict key: %d\n", ret);
                     }
                 }
                 else {
                     /* On error, try our best to clean up */
-                    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                     keyId);
                 }
 
                 if (ret == 0) {
-                    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                     keyId);
                     if (ret != 0) {
                         /* double evict should fail */
                         ret = 0;
@@ -2704,20 +2722,18 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
         /* Test 2: Cache big key first, then cache same keyId with small key */
         if (ret == 0) {
             keyId = WH_KEYID_ERASED;
-            ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                                     WH_NVM_ACCESS_ANY, 0, bigKey,
-                                     sizeof(bigKey), labelBig,
-                                     sizeof(labelBig));
+            ret   = wh_Client_ObjectCacheAdd(
+                ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY, 0, bigKey,
+                sizeof(bigKey), labelBig, sizeof(labelBig));
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to cache big key: %d\n", ret);
             }
             else {
                 /* Now cache small key with same keyId - should succeed and
                  * evict the big key */
-                ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                                         WH_NVM_ACCESS_ANY, 0, smallKey,
-                                         sizeof(smallKey), labelSmall,
-                                         sizeof(labelSmall));
+                ret = wh_Client_ObjectCacheAdd(
+                    ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY, 0,
+                    smallKey, sizeof(smallKey), labelSmall, sizeof(labelSmall));
                 if (ret != 0) {
                     WH_ERROR_PRINT(
                         "Failed to cache small key (expected success): %d\n",
@@ -2726,9 +2742,9 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                 else {
                     /* Verify the cached key is the small key by exporting it */
                     exportedKeySize = sizeof(exportedKey);
-                    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,keyId, exportedLabel,
-                                              sizeof(exportedLabel),
-                                              exportedKey, &exportedKeySize);
+                    ret             = wh_Client_ObjectCacheExport(
+                        ctx, WH_KEYTYPE_CRYPTO, keyId, exportedLabel,
+                        sizeof(exportedLabel), exportedKey, &exportedKeySize);
                     if (ret != 0) {
                         WH_ERROR_PRINT(
                             "Failed to export key after cache: %d\n", ret);
@@ -2754,18 +2770,21 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                     }
                     /* Clean up */
                     if (ret == 0) {
-                        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                         keyId);
                         if (ret != 0) {
                             WH_ERROR_PRINT("Failed to evict key: %d\n", ret);
                         }
                     }
                     else {
                         /* On error, try our best to clean up */
-                        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                         keyId);
                     }
 
                     if (ret == 0) {
-                        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                         keyId);
                         if (ret != 0) {
                             /* double evict should fail */
                             ret = 0;
@@ -2797,7 +2816,7 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
             WH_ERROR_PRINT("Failed to Test CacheExportKeyDma %d\n", ret);
         }
         else {
-            ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+            ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyEvict %d\n", ret);
             }
@@ -2832,20 +2851,18 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
         /* Test 1: Cache small key with DMA first, then cache same keyId
          * with big key using DMA */
         keyId = WH_KEYID_ERASED;
-        ret   = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
-                                      WH_NVM_ACCESS_ANY, 0,
-                                      smallKey, sizeof(smallKey),
-                                      labelSmall, sizeof(labelSmall), &keyId);
+        ret   = wh_Client_ObjectCacheAddDma(
+            ctx, WH_KEYTYPE_CRYPTO, keyId, WH_NVM_ACCESS_ANY, 0, smallKey,
+            sizeof(smallKey), labelSmall, sizeof(labelSmall), &keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to cache small key with DMA: %d\n", ret);
         }
         else {
             /* Now cache big key with same keyId using DMA - should succeed and
              * evict the small key */
-            ret = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
-                                        WH_NVM_ACCESS_ANY, 0,
-                                        bigKey, sizeof(bigKey),
-                                        labelBig, sizeof(labelBig), &keyId);
+            ret = wh_Client_ObjectCacheAddDma(
+                ctx, WH_KEYTYPE_CRYPTO, keyId, WH_NVM_ACCESS_ANY, 0, bigKey,
+                sizeof(bigKey), labelBig, sizeof(labelBig), &keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT(
                     "Failed to cache big key with DMA (expected success): %d\n",
@@ -2855,9 +2872,8 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                 /* Verify the cached key is the big key by exporting it */
                 exportedKeySize = bigKeySize;
                 ret             = wh_Client_ObjectCacheExportDma(
-                    ctx, WH_KEYTYPE_CRYPTO, keyId, exportedKey,
-                    exportedKeySize, exportedLabel, sizeof(exportedLabel),
-                    &exportedKeySize);
+                    ctx, WH_KEYTYPE_CRYPTO, keyId, exportedKey, exportedKeySize,
+                    exportedLabel, sizeof(exportedLabel), &exportedKeySize);
                 if (ret != 0) {
                     WH_ERROR_PRINT("Failed to export key after cache: %d\n",
                                    ret);
@@ -2883,18 +2899,21 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                 }
                 /* Clean up */
                 if (ret == 0) {
-                    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                     keyId);
                     if (ret != 0) {
                         WH_ERROR_PRINT("Failed to evict key: %d\n", ret);
                     }
                 }
                 else {
                     /* On error, try our best to clean up */
-                    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                    (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                     keyId);
                 }
 
                 if (ret == 0) {
-                    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                    ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                     keyId);
                     if (ret != 0) {
                         /* double evict should fail */
                         ret = 0;
@@ -2912,21 +2931,19 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
          * same keyId with small key using DMA */
         if (ret == 0) {
             keyId = WH_KEYID_ERASED;
-            ret   = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
-                                          WH_NVM_ACCESS_ANY, 0,
-                                          bigKey, sizeof(bigKey),
-                                          labelBig, sizeof(labelBig), &keyId);
+            ret   = wh_Client_ObjectCacheAddDma(
+                ctx, WH_KEYTYPE_CRYPTO, keyId, WH_NVM_ACCESS_ANY, 0, bigKey,
+                sizeof(bigKey), labelBig, sizeof(labelBig), &keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to cache big key with DMA: %d\n", ret);
             }
             else {
                 /* Now cache small key with same keyId using DMA - should
                  * succeed and evict the big key */
-                ret = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
-                                            WH_NVM_ACCESS_ANY, 0,
-                                            smallKey, sizeof(smallKey),
-                                            labelSmall, sizeof(labelSmall),
-                                            &keyId);
+                ret = wh_Client_ObjectCacheAddDma(
+                    ctx, WH_KEYTYPE_CRYPTO, keyId, WH_NVM_ACCESS_ANY, 0,
+                    smallKey, sizeof(smallKey), labelSmall, sizeof(labelSmall),
+                    &keyId);
                 if (ret != 0) {
                     WH_ERROR_PRINT("Failed to cache small key with DMA "
                                    "(expected success): %d\n",
@@ -2964,18 +2981,21 @@ static int whTest_KeyCache(whClientContext* ctx, int devId, WC_RNG* rng)
                     }
                     /* Clean up */
                     if (ret == 0) {
-                        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                         keyId);
                         if (ret != 0) {
                             WH_ERROR_PRINT("Failed to evict key: %d\n", ret);
                         }
                     }
                     else {
                         /* On error, try our best to clean up */
-                        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                         keyId);
                     }
 
                     if (ret == 0) {
-                        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,
+                                                         keyId);
                         if (ret != 0) {
                             /* double evict should fail */
                             ret = 0;
@@ -3021,9 +3041,9 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
     WH_TEST_PRINT("Testing non-exportable keystore enforcement...\n");
 
     /* Test 1: Cache a key with non-exportable flag and try to export it */
-    ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                             WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONEXPORTABLE,
-                             key, sizeof(key), label, sizeof(label));
+    ret = wh_Client_ObjectCacheAdd(
+        ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+        WH_NVM_FLAGS_NONEXPORTABLE, key, sizeof(key), label, sizeof(label));
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to cache non-exportable key: %d\n", ret);
         return ret;
@@ -3031,8 +3051,9 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
 
     /* Try to export the non-exportable key - should fail */
     exportedKeySize = sizeof(exportedKey);
-    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,keyId, exportedLabel, sizeof(exportedLabel),
-                              exportedKey, &exportedKeySize);
+    ret             = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId,
+                                                  exportedLabel, sizeof(exportedLabel),
+                                                  exportedKey, &exportedKeySize);
     if (ret != WH_ERROR_ACCESS) {
         WH_ERROR_PRINT("Non-exportable key was exported unexpectedly: %d\n",
                        ret);
@@ -3042,14 +3063,14 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
     WH_TEST_DEBUG_PRINT("Non-exportable key export correctly denied\n");
 
     /* Clean up the key */
-    wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+    wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
 
     /* Test 2: Cache a key without non-exportable flag and verify it can be
      * exported */
     keyId = WH_KEYID_ERASED;
-    ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                             WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE,
-                             key, sizeof(key), label, sizeof(label));
+    ret   = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
+                                     WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE, key,
+                                     sizeof(key), label, sizeof(label));
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to cache exportable key: %d\n", ret);
         return ret;
@@ -3057,8 +3078,9 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
 
     /* Try to export the exportable key - should succeed */
     exportedKeySize = sizeof(exportedKey);
-    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO,keyId, exportedLabel, sizeof(exportedLabel),
-                              exportedKey, &exportedKeySize);
+    ret             = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId,
+                                                  exportedLabel, sizeof(exportedLabel),
+                                                  exportedKey, &exportedKeySize);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to export exportable key: %d\n", ret);
         return ret;
@@ -3075,7 +3097,7 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
     WH_TEST_DEBUG_PRINT("Exportable key export succeeded\n");
 
     /* Clean up */
-    wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+    wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
 
 #ifdef WOLFHSM_CFG_DMA
     /* Test 3: Test DMA export with non-exportable key */
@@ -3083,9 +3105,9 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
 
     /* Cache a key with non-exportable flag */
     keyId = WH_KEYID_ERASED;
-    ret   = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                               WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONEXPORTABLE,
-                               key, sizeof(key), label, sizeof(label));
+    ret   = wh_Client_ObjectCacheAdd(
+        ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+        WH_NVM_FLAGS_NONEXPORTABLE, key, sizeof(key), label, sizeof(label));
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to cache non-exportable key for DMA test: %d\n",
                        ret);
@@ -3094,10 +3116,9 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
 
     /* Try to export the non-exportable key via DMA - should fail */
     exportedKeySize = sizeof(exportedKey);
-    ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
-                                 exportedKey, sizeof(exportedKey),
-                                 exportedLabel, sizeof(exportedLabel),
-                                 &exportedKeySize);
+    ret             = wh_Client_ObjectCacheExportDma(
+        ctx, WH_KEYTYPE_CRYPTO, keyId, exportedKey, sizeof(exportedKey),
+        exportedLabel, sizeof(exportedLabel), &exportedKeySize);
     if (ret != WH_ERROR_ACCESS) {
         WH_ERROR_PRINT(
             "Non-exportable key was exported via DMA unexpectedly: %d\n", ret);
@@ -3107,13 +3128,13 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
     WH_TEST_DEBUG_PRINT("Non-exportable key DMA export correctly denied\n");
 
     /* Clean up the key */
-    wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+    wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
 
     /* Test 4: Test DMA export with exportable key */
     keyId = WH_KEYID_ERASED;
-    ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                             WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE,
-                             key, sizeof(key), label, sizeof(label));
+    ret   = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
+                                     WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE, key,
+                                     sizeof(key), label, sizeof(label));
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to cache exportable key for DMA test: %d\n",
                        ret);
@@ -3124,10 +3145,9 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
     memset(exportedKey, 0, sizeof(exportedKey));
     memset(exportedLabel, 0, sizeof(exportedLabel));
     exportedKeySize = sizeof(exportedKey);
-    ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO, keyId,
-                                 exportedKey, sizeof(exportedKey),
-                                 exportedLabel, sizeof(exportedLabel),
-                                 &exportedKeySize);
+    ret             = wh_Client_ObjectCacheExportDma(
+        ctx, WH_KEYTYPE_CRYPTO, keyId, exportedKey, sizeof(exportedKey),
+        exportedLabel, sizeof(exportedLabel), &exportedKeySize);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to export exportable key via DMA: %d\n", ret);
         return ret;
@@ -3144,7 +3164,7 @@ static int whTest_NonExportableKeystore(whClientContext* ctx, int devId,
     WH_TEST_DEBUG_PRINT("Exportable key DMA export succeeded\n");
 
     /* Clean up */
-    wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+    wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
 #endif /* WOLFHSM_CFG_DMA */
 
     WH_TEST_PRINT("NON-EXPORTABLE KEYSTORE TEST SUCCESS\n");
@@ -3233,9 +3253,9 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
         else {
             keyId = WH_KEYID_ERASED;
             ret   = wh_Client_ObjectCacheAdd(
-                  ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
-                  WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT,
-                  key, sizeof(key), labelIn, sizeof(labelIn));
+                ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+                WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT, key,
+                sizeof(key), labelIn, sizeof(labelIn));
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
             }
@@ -3281,7 +3301,7 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
                         }
                     }
                 }
-                (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
             }
             (void)wc_AesFree(aes);
             memset(cipher, 0, sizeof(cipher));
@@ -3461,9 +3481,9 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
         else {
             keyId = WH_KEYID_ERASED;
             ret   = wh_Client_ObjectCacheAdd(
-                  ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
-                  WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT,
-                  key, sizeof(key), labelIn, sizeof(labelIn));
+                ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+                WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT, key,
+                sizeof(key), labelIn, sizeof(labelIn));
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
             }
@@ -3510,7 +3530,7 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
                         }
                     }
                 }
-                (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
             }
             (void)wc_AesFree(aes);
             memset(cipher, 0, sizeof(cipher));
@@ -3573,9 +3593,9 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
         } else {
             keyId = WH_KEYID_ERASED;
             ret   = wh_Client_ObjectCacheAdd(
-                  ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
-                  WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT,
-                  key, sizeof(key), labelIn, sizeof(labelIn));
+                ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+                WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT, key,
+                sizeof(key), labelIn, sizeof(labelIn));
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
             } else {
@@ -3615,7 +3635,7 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
                         }
                     }
                 }
-                (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
             }
             (void)wc_AesFree(aes);
             memset(cipher, 0, sizeof(cipher));
@@ -3849,9 +3869,9 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
         } else {
             keyId = WH_KEYID_ERASED;
             ret   = wh_Client_ObjectCacheAdd(
-                  ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
-                  WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT,
-                  key, sizeof(key), labelIn, sizeof(labelIn));
+                ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+                WH_NVM_FLAGS_USAGE_ENCRYPT | WH_NVM_FLAGS_USAGE_DECRYPT, key,
+                sizeof(key), labelIn, sizeof(labelIn));
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCache %d\n", ret);
             } else {
@@ -3882,7 +3902,7 @@ static int whTestCrypto_Aes(whClientContext* ctx, int devId, WC_RNG* rng)
                         }
                     }
                 }
-                (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
             }
             (void)wc_AesFree(aes);
             memset(cipher, 0, sizeof(cipher));
@@ -4019,9 +4039,9 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
         /* (a) One-shot generate with cached key */
         keyId = WH_KEYID_ERASED;
         ret   = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                                   WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_SIGN,
-                                   (uint8_t*)tc->k, tc->kSz,
-                                   labelIn, sizeof(labelIn));
+                                         WH_NVM_ACCESS_ANY,
+                                         WH_NVM_FLAGS_USAGE_SIGN, (uint8_t*)tc->k,
+                                         tc->kSz, labelIn, sizeof(labelIn));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyCache (gen) tc=%d %d\n", i,
                            ret);
@@ -4051,7 +4071,7 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
             ret = -1;
             break;
         }
-        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyEvict (gen) tc=%d %d\n", i,
                            ret);
@@ -4060,10 +4080,10 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
 
         /* (b) One-shot verify with cached key */
         keyId = WH_KEYID_ERASED;
-        ret   = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                                   WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_VERIFY,
-                                   (uint8_t*)tc->k, tc->kSz,
-                                   labelIn, sizeof(labelIn));
+        ret   = wh_Client_ObjectCacheAdd(
+            ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+            WH_NVM_FLAGS_USAGE_VERIFY, (uint8_t*)tc->k, tc->kSz, labelIn,
+            sizeof(labelIn));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyCache (ver) tc=%d %d\n", i,
                            ret);
@@ -4082,7 +4102,7 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
             break;
         }
         wc_CmacFree(cmac);
-        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyEvict (ver) tc=%d %d\n", i,
                            ret);
@@ -4092,9 +4112,9 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
         /* (c) Incremental init/update/final with cached key */
         keyId = WH_KEYID_ERASED;
         ret   = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                                   WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_SIGN,
-                                   (uint8_t*)tc->k, tc->kSz,
-                                   labelIn, sizeof(labelIn));
+                                         WH_NVM_ACCESS_ANY,
+                                         WH_NVM_FLAGS_USAGE_SIGN, (uint8_t*)tc->k,
+                                         tc->kSz, labelIn, sizeof(labelIn));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyCache (inc) tc=%d %d\n", i,
                            ret);
@@ -4147,7 +4167,7 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
             break;
         }
         wc_CmacFree(cmac);
-        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+        ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyEvict (inc) tc=%d %d\n", i,
                            ret);
@@ -4159,20 +4179,20 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
     if (ret == 0) {
 #ifdef WOLFSSL_AES_128
         keyId = WH_KEYID_ERASED;
-        ret   = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO, &keyId,
-                                   WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_VERIFY,
-                                   (uint8_t*)k128, sizeof(k128),
-                                   labelIn, sizeof(labelIn));
+        ret   = wh_Client_ObjectCacheAdd(
+            ctx, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+            WH_NVM_FLAGS_USAGE_VERIFY, (uint8_t*)k128, sizeof(k128), labelIn,
+            sizeof(labelIn));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to wh_Client_KeyCache (commit) %d\n", ret);
         }
         else {
-            ret = wh_Client_ObjectCacheCommit(ctx, WH_KEYTYPE_CRYPTO,keyId);
+            ret = wh_Client_ObjectCacheCommit(ctx, WH_KEYTYPE_CRYPTO, keyId);
             if (ret != 0) {
                 WH_ERROR_PRINT("Failed to wh_Client_KeyCommit %d\n", ret);
             }
             else {
-                ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
                 if (ret != 0) {
                     WH_ERROR_PRINT("Failed to wh_Client_KeyEvict %d\n", ret);
                 }
@@ -4199,7 +4219,8 @@ static int whTestCrypto_Cmac(whClientContext* ctx, int devId, WC_RNG* rng)
                                     ret);
                             }
                             else {
-                                ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+                                ret = wh_Client_ObjectCacheEvict(
+                                    ctx, WH_KEYTYPE_CRYPTO, keyId);
                                 if (ret != 0) {
                                     WH_ERROR_PRINT(
                                         "Failed to wh_Client_KeyErase %d\n",
@@ -4639,7 +4660,8 @@ static int whTestCrypto_MlDsaDmaClient(whClientContext* ctx, int devId,
 
     /* Clean up the cached key if it was imported */
     if (keyImported) {
-        int evict_ret = wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId);
+        int evict_ret =
+            wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId);
         if (evict_ret != 0) {
             WH_ERROR_PRINT("Failed to evict ML-DSA key: %d\n", evict_ret);
             if (ret == 0) {
@@ -5099,7 +5121,8 @@ int whTestCrypto_MlDsaVerifyOnlyDma(whClientContext* ctx, int devId,
     }
 
     if (evictKey) {
-        if (WH_ERROR_OK != wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO,keyId)) {
+        if (WH_ERROR_OK !=
+            wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, keyId)) {
             WH_ERROR_PRINT("Failed to evict key\n");
         }
     }
@@ -5154,9 +5177,9 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
         /* Cache key WITHOUT encrypt flag */
         keyId = WH_KEYID_ERASED;
         ret   = wh_Client_ObjectCacheAdd(client, WH_KEYTYPE_CRYPTO, &keyId,
-                                   WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE,
-                                   key, keyLen, (uint8_t*)"aes-no-enc",
-                                   strlen("aes-no-enc"));
+                                         WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONE,
+                                         key, keyLen, (uint8_t*)"aes-no-enc",
+                                         strlen("aes-no-enc"));
         if (ret == 0) {
             /* Initialize AES with HSM device ID */
             ret = wc_AesInit(aes, NULL, WH_DEV_ID);
@@ -5184,7 +5207,7 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                 }
                 wc_AesFree(aes);
             }
-            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
         }
     }
     if (ret != 0)
@@ -5200,10 +5223,10 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
 
         /* First, create some ciphertext using a key with ENCRYPT flag */
         keyId = WH_KEYID_ERASED;
-        ret   = wh_Client_ObjectCacheAdd(client, WH_KEYTYPE_CRYPTO, &keyId,
-                                   WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_ENCRYPT,
-                                   key, keyLen, (uint8_t*)"aes-enc-only",
-                                   strlen("aes-enc-only"));
+        ret   = wh_Client_ObjectCacheAdd(
+            client, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+            WH_NVM_FLAGS_USAGE_ENCRYPT, key, keyLen, (uint8_t*)"aes-enc-only",
+            strlen("aes-enc-only"));
         if (ret == 0) {
             ret = wc_AesInit(aes, NULL, WH_DEV_ID);
             if (ret == 0) {
@@ -5218,17 +5241,16 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                 }
                 wc_AesFree(aes);
             }
-            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
         }
 
         if (ret == 0) {
             /* Now cache same key WITHOUT decrypt flag */
             keyId = WH_KEYID_ERASED;
             ret   = wh_Client_ObjectCacheAdd(
-                  client, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
-                  WH_NVM_FLAGS_USAGE_ENCRYPT, /* Only ENCRYPT, no DECRYPT */
-                  key, keyLen, (uint8_t*)"aes-no-dec",
-                  strlen("aes-no-dec"));
+                client, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+                WH_NVM_FLAGS_USAGE_ENCRYPT, /* Only ENCRYPT, no DECRYPT */
+                key, keyLen, (uint8_t*)"aes-no-dec", strlen("aes-no-dec"));
             if (ret == 0) {
                 /* Initialize AES with HSM device ID */
                 ret = wc_AesInit(aes, NULL, WH_DEV_ID);
@@ -5258,7 +5280,7 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                     }
                     wc_AesFree(aes);
                 }
-                wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+                wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
             }
         }
     }
@@ -5312,7 +5334,7 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                 }
                 wc_ecc_free(eccKey);
             }
-            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
         }
     }
     if (ret != 0)
@@ -5383,7 +5405,7 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                 }
                 wc_ecc_free(privKey);
             }
-            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
         }
     }
     if (ret != 0)
@@ -5403,9 +5425,9 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
             /* Cache IKM without DERIVE flag */
             keyId = WH_KEYID_ERASED;
             ret   = wh_Client_ObjectCacheAdd(
-                  client, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
-                  WH_NVM_FLAGS_NONE, ikm, sizeof(ikm),
-                  (uint8_t*)"hkdf-no-derive", strlen("hkdf-no-derive"));
+                client, WH_KEYTYPE_CRYPTO, &keyId, WH_NVM_ACCESS_ANY,
+                WH_NVM_FLAGS_NONE, ikm, sizeof(ikm), (uint8_t*)"hkdf-no-derive",
+                strlen("hkdf-no-derive"));
             if (ret == 0) {
                 /* Try HKDF using cached key - should fail */
                 ret = wh_Client_HkdfMakeCacheKey(
@@ -5424,9 +5446,10 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                         "    FAIL: Expected WH_ERROR_USAGE, got %d\n", ret);
                     ret = WH_ERROR_ABORTED;
                 }
-                wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+                wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
                 if (!WH_KEYID_ISERASED(outKeyId)) {
-                    wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,outKeyId);
+                    wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,
+                                               outKeyId);
                 }
             }
         }
@@ -5479,7 +5502,7 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                 }
                 wc_CmacFree(&cmac);
             }
-            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
         }
     }
     if (ret != 0)
@@ -5532,7 +5555,7 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                 }
                 wc_CmacFree(&cmac);
             }
-            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+            wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
         }
     }
     if (ret != 0)
@@ -5558,15 +5581,14 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
             /* Cache KEK without WRAP flag */
             ret = wh_Client_ObjectCacheAdd(
                 client, WH_KEYTYPE_CRYPTO, &kekId, WH_NVM_ACCESS_ANY,
-                WH_NVM_FLAGS_NONE, kek, sizeof(kek),
-                (uint8_t*)"kek-no-wrap", strlen("kek-no-wrap"));
+                WH_NVM_FLAGS_NONE, kek, sizeof(kek), (uint8_t*)"kek-no-wrap",
+                strlen("kek-no-wrap"));
             if (ret == 0) {
                 /* Try to wrap - should fail */
-                ret = wh_Client_ObjectWrap(client, WH_KEYTYPE_CRYPTO, kekId,
-                                        WC_CIPHER_AES_GCM, dataKey,
-                                        sizeof(dataKey), WH_NVM_ACCESS_ANY,
-                                        WH_NVM_FLAGS_NONE, 0, NULL, 0,
-                                        wrappedKey, &wrappedKeySz);
+                ret = wh_Client_ObjectWrap(
+                    client, WH_KEYTYPE_CRYPTO, kekId, WC_CIPHER_AES_GCM,
+                    dataKey, sizeof(dataKey), WH_NVM_ACCESS_ANY,
+                    WH_NVM_FLAGS_NONE, 0, NULL, 0, wrappedKey, &wrappedKeySz);
                 if (ret == WH_ERROR_USAGE) {
                     WH_TEST_PRINT("    PASS: Correctly denied key wrapping\n");
                     ret = 0; /* Test passed */
@@ -5576,7 +5598,7 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                         "    FAIL: Expected WH_ERROR_USAGE, got %d\n", ret);
                     ret = WH_ERROR_ABORTED;
                 }
-                wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,kekId);
+                wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, kekId);
             }
         }
     }
@@ -5656,11 +5678,10 @@ int whTest_CryptoKeyRevocationAesCbc(whClientContext* client, WC_RNG* rng)
 
         WH_TEST_PRINT("  AES-CBC key revoke flow...\n");
 
-        ret =
-            wh_Client_ObjectCacheAdd(client, WH_KEYTYPE_CRYPTO, &keyId,
-                               WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_ANY,
-                               key, sizeof(key), (uint8_t*)label,
-                               sizeof(label));
+        ret = wh_Client_ObjectCacheAdd(client, WH_KEYTYPE_CRYPTO, &keyId,
+                                       WH_NVM_ACCESS_ANY,
+                                       WH_NVM_FLAGS_USAGE_ANY, key, sizeof(key),
+                                       (uint8_t*)label, sizeof(label));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to cache AES key: %d\n", ret);
             return ret;
@@ -5671,7 +5692,7 @@ int whTest_CryptoKeyRevocationAesCbc(whClientContext* client, WC_RNG* rng)
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to encrypt with unrevoked AES key: %d\n",
                            ret);
-            (void)wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+            (void)wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
             return ret;
         }
 
@@ -5682,7 +5703,7 @@ int whTest_CryptoKeyRevocationAesCbc(whClientContext* client, WC_RNG* rng)
         }
 
         /* revoke a key in the cache */
-        ret = wh_Client_ObjectCacheRevoke(client, WH_KEYTYPE_CRYPTO,keyId);
+        ret = wh_Client_ObjectCacheRevoke(client, WH_KEYTYPE_CRYPTO, keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to revoke AES key: %d\n", ret);
             return ret;
@@ -5698,7 +5719,7 @@ int whTest_CryptoKeyRevocationAesCbc(whClientContext* client, WC_RNG* rng)
         }
 
         /* commit the key */
-        ret = wh_Client_ObjectCacheCommit(client, WH_KEYTYPE_CRYPTO,keyId);
+        ret = wh_Client_ObjectCacheCommit(client, WH_KEYTYPE_CRYPTO, keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to commit revoked AES key: %d\n", ret);
             return ret;
@@ -5713,28 +5734,26 @@ int whTest_CryptoKeyRevocationAesCbc(whClientContext* client, WC_RNG* rng)
             return WH_ERROR_ABORTED;
         }
 
-        ret = wh_Client_ObjectNvmDestroy(client, WH_KEYTYPE_CRYPTO, keyId,
-                                          NULL);
+        ret =
+            wh_Client_ObjectNvmDestroy(client, WH_KEYTYPE_CRYPTO, keyId, NULL);
         if (ret != expectedEraseErr) {
-            WH_ERROR_PRINT(
-                "Revoked key erase should fail (%d), got %d\n",
-                expectedEraseErr, ret);
+            WH_ERROR_PRINT("Revoked key erase should fail (%d), got %d\n",
+                           expectedEraseErr, ret);
             return WH_ERROR_ABORTED;
         }
 
         /* try a slightly different flow */
         keyId = WH_KEYID_ERASED;
-        ret =
-            wh_Client_ObjectCacheAdd(client, WH_KEYTYPE_CRYPTO, &keyId,
-                               WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_ANY,
-                               key, sizeof(key), (uint8_t*)label,
-                               sizeof(label));
+        ret   = wh_Client_ObjectCacheAdd(client, WH_KEYTYPE_CRYPTO, &keyId,
+                                         WH_NVM_ACCESS_ANY,
+                                         WH_NVM_FLAGS_USAGE_ANY, key, sizeof(key),
+                                         (uint8_t*)label, sizeof(label));
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to cache AES key (2nd time): %d\n", ret);
             return ret;
         }
         /* commit the key */
-        ret = wh_Client_ObjectCacheCommit(client, WH_KEYTYPE_CRYPTO,keyId);
+        ret = wh_Client_ObjectCacheCommit(client, WH_KEYTYPE_CRYPTO, keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to commit AES key (2nd time): %d\n", ret);
             return ret;
@@ -5745,17 +5764,17 @@ int whTest_CryptoKeyRevocationAesCbc(whClientContext* client, WC_RNG* rng)
             WH_ERROR_PRINT("Failed to encrypt with unrevoked AES key (2nd "
                            "time): %d\n",
                            ret);
-            (void)wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+            (void)wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
             return ret != 0 ? ret : encryptRes;
         }
         /* evict the key */
-        ret = wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+        ret = wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
         if (ret != 0 && ret != WH_ERROR_NOTFOUND) {
             WH_ERROR_PRINT("Failed to evict AES key (2nd time): %d\n", ret);
             return ret;
         }
         /* revoke with key in the NVM */
-        ret = wh_Client_ObjectCacheRevoke(client, WH_KEYTYPE_CRYPTO,keyId);
+        ret = wh_Client_ObjectCacheRevoke(client, WH_KEYTYPE_CRYPTO, keyId);
         if (ret != 0) {
             WH_ERROR_PRINT("Failed to revoke AES key (2nd time): %d\n", ret);
             return ret;
@@ -5766,7 +5785,7 @@ int whTest_CryptoKeyRevocationAesCbc(whClientContext* client, WC_RNG* rng)
             WH_ERROR_PRINT(
                 "Encrypt with revoked AES key should fail (%d), got %d\n",
                 WH_ERROR_USAGE, encryptRes);
-            (void)wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO,keyId);
+            (void)wh_Client_ObjectCacheEvict(client, WH_KEYTYPE_CRYPTO, keyId);
             return WH_ERROR_ABORTED;
         }
 

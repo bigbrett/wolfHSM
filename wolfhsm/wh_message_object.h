@@ -38,13 +38,13 @@
 
 /* Simple response: just a return code (4 bytes, pad to 8) */
 typedef struct {
-    int32_t  rc;
-    uint8_t  WH_PAD[4];
+    int32_t rc;
+    uint8_t WH_PAD[4];
 } whMessageObject_SimpleResponse;
 
-int wh_MessageObject_TranslateSimpleResponse(uint16_t magic,
-        const whMessageObject_SimpleResponse* src,
-        whMessageObject_SimpleResponse* dest);
+int wh_MessageObject_TranslateSimpleResponse(
+    uint16_t magic, const whMessageObject_SimpleResponse* src,
+    whMessageObject_SimpleResponse* dest);
 
 /* Shared request for operations that only need type + id (8 bytes) */
 typedef struct {
@@ -53,9 +53,9 @@ typedef struct {
     uint8_t  WH_PAD[4];
 } whMessageObject_TypeIdRequest;
 
-int wh_MessageObject_TranslateTypeIdRequest(uint16_t magic,
-        const whMessageObject_TypeIdRequest* src,
-        whMessageObject_TypeIdRequest* dest);
+int wh_MessageObject_TranslateTypeIdRequest(
+    uint16_t magic, const whMessageObject_TypeIdRequest* src,
+    whMessageObject_TypeIdRequest* dest);
 
 
 /*
@@ -74,9 +74,9 @@ typedef struct {
     /* Data follows */
 } whMessageObject_NvmAddRequest;
 
-int wh_MessageObject_TranslateNvmAddRequest(uint16_t magic,
-        const whMessageObject_NvmAddRequest* src,
-        whMessageObject_NvmAddRequest* dest);
+int wh_MessageObject_TranslateNvmAddRequest(
+    uint16_t magic, const whMessageObject_NvmAddRequest* src,
+    whMessageObject_NvmAddRequest* dest);
 
 /* NVM Add Response: use SimpleResponse */
 
@@ -102,20 +102,20 @@ typedef struct {
     uint16_t data_len;
 } whMessageObject_NvmReadRequest;
 
-int wh_MessageObject_TranslateNvmReadRequest(uint16_t magic,
-        const whMessageObject_NvmReadRequest* src,
-        whMessageObject_NvmReadRequest* dest);
+int wh_MessageObject_TranslateNvmReadRequest(
+    uint16_t magic, const whMessageObject_NvmReadRequest* src,
+    whMessageObject_NvmReadRequest* dest);
 
 /* NVM Read Response (8 bytes) */
 typedef struct {
-    int32_t  rc;
-    uint8_t  WH_PAD[4];
+    int32_t rc;
+    uint8_t WH_PAD[4];
     /* Data follows */
 } whMessageObject_NvmReadResponse;
 
-int wh_MessageObject_TranslateNvmReadResponse(uint16_t magic,
-        const whMessageObject_NvmReadResponse* src,
-        whMessageObject_NvmReadResponse* dest);
+int wh_MessageObject_TranslateNvmReadResponse(
+    uint16_t magic, const whMessageObject_NvmReadResponse* src,
+    whMessageObject_NvmReadResponse* dest);
 
 
 /*
@@ -128,9 +128,9 @@ typedef struct {
     uint8_t  WH_PAD[2];
 } whMessageObject_NvmGetAvailRequest;
 
-int wh_MessageObject_TranslateNvmGetAvailRequest(uint16_t magic,
-        const whMessageObject_NvmGetAvailRequest* src,
-        whMessageObject_NvmGetAvailRequest* dest);
+int wh_MessageObject_TranslateNvmGetAvailRequest(
+    uint16_t magic, const whMessageObject_NvmGetAvailRequest* src,
+    whMessageObject_NvmGetAvailRequest* dest);
 
 /* NVM GetAvailable Response (12 bytes) */
 typedef struct {
@@ -140,9 +140,9 @@ typedef struct {
     uint8_t  WH_PAD[2];
 } whMessageObject_NvmGetAvailResponse;
 
-int wh_MessageObject_TranslateNvmGetAvailResponse(uint16_t magic,
-        const whMessageObject_NvmGetAvailResponse* src,
-        whMessageObject_NvmGetAvailResponse* dest);
+int wh_MessageObject_TranslateNvmGetAvailResponse(
+    uint16_t magic, const whMessageObject_NvmGetAvailResponse* src,
+    whMessageObject_NvmGetAvailResponse* dest);
 
 
 /*
@@ -157,9 +157,9 @@ typedef struct {
     uint16_t flags;
 } whMessageObject_NvmIterateRequest;
 
-int wh_MessageObject_TranslateNvmIterateRequest(uint16_t magic,
-        const whMessageObject_NvmIterateRequest* src,
-        whMessageObject_NvmIterateRequest* dest);
+int wh_MessageObject_TranslateNvmIterateRequest(
+    uint16_t magic, const whMessageObject_NvmIterateRequest* src,
+    whMessageObject_NvmIterateRequest* dest);
 
 /* NVM Iterate Response (8 bytes) */
 typedef struct {
@@ -168,9 +168,9 @@ typedef struct {
     uint16_t id;
 } whMessageObject_NvmIterateResponse;
 
-int wh_MessageObject_TranslateNvmIterateResponse(uint16_t magic,
-        const whMessageObject_NvmIterateResponse* src,
-        whMessageObject_NvmIterateResponse* dest);
+int wh_MessageObject_TranslateNvmIterateResponse(
+    uint16_t magic, const whMessageObject_NvmIterateResponse* src,
+    whMessageObject_NvmIterateResponse* dest);
 
 
 /*
@@ -189,9 +189,9 @@ typedef struct {
     /* Data follows */
 } whMessageObject_CacheAddRequest;
 
-int wh_MessageObject_TranslateCacheAddRequest(uint16_t magic,
-        const whMessageObject_CacheAddRequest* src,
-        whMessageObject_CacheAddRequest* dest);
+int wh_MessageObject_TranslateCacheAddRequest(
+    uint16_t magic, const whMessageObject_CacheAddRequest* src,
+    whMessageObject_CacheAddRequest* dest);
 
 /* Cache Add Response (8 bytes) */
 typedef struct {
@@ -200,9 +200,9 @@ typedef struct {
     uint8_t  WH_PAD[2];
 } whMessageObject_CacheAddResponse;
 
-int wh_MessageObject_TranslateCacheAddResponse(uint16_t magic,
-        const whMessageObject_CacheAddResponse* src,
-        whMessageObject_CacheAddResponse* dest);
+int wh_MessageObject_TranslateCacheAddResponse(
+    uint16_t magic, const whMessageObject_CacheAddResponse* src,
+    whMessageObject_CacheAddResponse* dest);
 
 
 /*
@@ -246,9 +246,9 @@ typedef struct {
     /* Data follows */
 } whMessageObject_CacheExportResponse;
 
-int wh_MessageObject_TranslateCacheExportResponse(uint16_t magic,
-        const whMessageObject_CacheExportResponse* src,
-        whMessageObject_CacheExportResponse* dest);
+int wh_MessageObject_TranslateCacheExportResponse(
+    uint16_t magic, const whMessageObject_CacheExportResponse* src,
+    whMessageObject_CacheExportResponse* dest);
 
 
 /*
@@ -272,16 +272,16 @@ typedef struct {
     uint16_t keySz;
     uint16_t access;
     uint16_t flags;
-    uint16_t ownerId;  /* Client-format ID indicating ownership (use
-                        * WH_KEYID_CLIENT_GLOBAL_FLAG for global) */
-    uint8_t  WH_PAD[2];
-    uint8_t  label[WH_NVM_LABEL_LEN];
+    uint16_t ownerId; /* Client-format ID indicating ownership (use
+                       * WH_KEYID_CLIENT_GLOBAL_FLAG for global) */
+    uint8_t WH_PAD[2];
+    uint8_t label[WH_NVM_LABEL_LEN];
     /* Key data follows */
 } whMessageObject_WrapRequest;
 
-int wh_MessageObject_TranslateWrapRequest(uint16_t magic,
-        const whMessageObject_WrapRequest* src,
-        whMessageObject_WrapRequest* dest);
+int wh_MessageObject_TranslateWrapRequest(
+    uint16_t magic, const whMessageObject_WrapRequest* src,
+    whMessageObject_WrapRequest* dest);
 
 /* Wrap Response (8 bytes) */
 typedef struct {
@@ -291,9 +291,9 @@ typedef struct {
     /* Wrapped data follows */
 } whMessageObject_WrapResponse;
 
-int wh_MessageObject_TranslateWrapResponse(uint16_t magic,
-        const whMessageObject_WrapResponse* src,
-        whMessageObject_WrapResponse* dest);
+int wh_MessageObject_TranslateWrapResponse(
+    uint16_t magic, const whMessageObject_WrapResponse* src,
+    whMessageObject_WrapResponse* dest);
 
 
 /*
@@ -311,9 +311,9 @@ typedef struct {
     /* Wrapped data follows */
 } whMessageObject_UnwrapCacheRequest;
 
-int wh_MessageObject_TranslateUnwrapCacheRequest(uint16_t magic,
-        const whMessageObject_UnwrapCacheRequest* src,
-        whMessageObject_UnwrapCacheRequest* dest);
+int wh_MessageObject_TranslateUnwrapCacheRequest(
+    uint16_t magic, const whMessageObject_UnwrapCacheRequest* src,
+    whMessageObject_UnwrapCacheRequest* dest);
 
 /* Unwrap Cache Response (8 bytes) */
 typedef struct {
@@ -322,9 +322,9 @@ typedef struct {
     uint8_t  WH_PAD[2];
 } whMessageObject_UnwrapCacheResponse;
 
-int wh_MessageObject_TranslateUnwrapCacheResponse(uint16_t magic,
-        const whMessageObject_UnwrapCacheResponse* src,
-        whMessageObject_UnwrapCacheResponse* dest);
+int wh_MessageObject_TranslateUnwrapCacheResponse(
+    uint16_t magic, const whMessageObject_UnwrapCacheResponse* src,
+    whMessageObject_UnwrapCacheResponse* dest);
 
 
 /*
@@ -340,9 +340,9 @@ typedef struct {
     /* Wrapped data follows */
 } whMessageObject_UnwrapExportRequest;
 
-int wh_MessageObject_TranslateUnwrapExportRequest(uint16_t magic,
-        const whMessageObject_UnwrapExportRequest* src,
-        whMessageObject_UnwrapExportRequest* dest);
+int wh_MessageObject_TranslateUnwrapExportRequest(
+    uint16_t magic, const whMessageObject_UnwrapExportRequest* src,
+    whMessageObject_UnwrapExportRequest* dest);
 
 /* Unwrap Export Response (40 bytes) */
 typedef struct {
@@ -355,9 +355,9 @@ typedef struct {
     /* Key data follows */
 } whMessageObject_UnwrapExportResponse;
 
-int wh_MessageObject_TranslateUnwrapExportResponse(uint16_t magic,
-        const whMessageObject_UnwrapExportResponse* src,
-        whMessageObject_UnwrapExportResponse* dest);
+int wh_MessageObject_TranslateUnwrapExportResponse(
+    uint16_t magic, const whMessageObject_UnwrapExportResponse* src,
+    whMessageObject_UnwrapExportResponse* dest);
 
 
 /*
@@ -390,30 +390,30 @@ typedef struct {
 
 /* Cache Add DMA Request */
 typedef struct {
-    whMessageObject_DmaBuffer obj;   /* Client memory buffer containing data */
-    uint16_t type;
-    uint16_t id;
-    uint16_t access;
-    uint16_t flags;
-    uint32_t labelSz;
-    uint8_t  label[WH_NVM_LABEL_LEN];
-    uint8_t  WH_PAD[4];
+    whMessageObject_DmaBuffer obj; /* Client memory buffer containing data */
+    uint16_t                  type;
+    uint16_t                  id;
+    uint16_t                  access;
+    uint16_t                  flags;
+    uint32_t                  labelSz;
+    uint8_t                   label[WH_NVM_LABEL_LEN];
+    uint8_t                   WH_PAD[4];
 } whMessageObject_CacheAddDmaRequest;
 
 /* Cache Add DMA Response */
 typedef struct {
     whMessageObject_DmaAddrStatus dmaAddrStatus;
-    int32_t  rc;
-    uint16_t id;
-    uint8_t  WH_PAD[2];
+    int32_t                       rc;
+    uint16_t                      id;
+    uint8_t                       WH_PAD[2];
 } whMessageObject_CacheAddDmaResponse;
 
-int wh_MessageObject_TranslateCacheAddDmaRequest(uint16_t magic,
-        const whMessageObject_CacheAddDmaRequest* src,
-        whMessageObject_CacheAddDmaRequest* dest);
-int wh_MessageObject_TranslateCacheAddDmaResponse(uint16_t magic,
-        const whMessageObject_CacheAddDmaResponse* src,
-        whMessageObject_CacheAddDmaResponse* dest);
+int wh_MessageObject_TranslateCacheAddDmaRequest(
+    uint16_t magic, const whMessageObject_CacheAddDmaRequest* src,
+    whMessageObject_CacheAddDmaRequest* dest);
+int wh_MessageObject_TranslateCacheAddDmaResponse(
+    uint16_t magic, const whMessageObject_CacheAddDmaResponse* src,
+    whMessageObject_CacheAddDmaResponse* dest);
 
 
 /*
@@ -422,26 +422,26 @@ int wh_MessageObject_TranslateCacheAddDmaResponse(uint16_t magic,
 
 /* Cache Export DMA Request */
 typedef struct {
-    whMessageObject_DmaBuffer obj;   /* Client memory buffer to receive data */
-    uint16_t type;
-    uint16_t id;
-    uint8_t  WH_PAD[4];
+    whMessageObject_DmaBuffer obj; /* Client memory buffer to receive data */
+    uint16_t                  type;
+    uint16_t                  id;
+    uint8_t                   WH_PAD[4];
 } whMessageObject_CacheExportDmaRequest;
 
 /* Cache Export DMA Response */
 typedef struct {
     whMessageObject_DmaAddrStatus dmaAddrStatus;
-    int32_t  rc;
-    uint32_t len;
-    uint8_t  label[WH_NVM_LABEL_LEN];
+    int32_t                       rc;
+    uint32_t                      len;
+    uint8_t                       label[WH_NVM_LABEL_LEN];
 } whMessageObject_CacheExportDmaResponse;
 
-int wh_MessageObject_TranslateCacheExportDmaRequest(uint16_t magic,
-        const whMessageObject_CacheExportDmaRequest* src,
-        whMessageObject_CacheExportDmaRequest* dest);
-int wh_MessageObject_TranslateCacheExportDmaResponse(uint16_t magic,
-        const whMessageObject_CacheExportDmaResponse* src,
-        whMessageObject_CacheExportDmaResponse* dest);
+int wh_MessageObject_TranslateCacheExportDmaRequest(
+    uint16_t magic, const whMessageObject_CacheExportDmaRequest* src,
+    whMessageObject_CacheExportDmaRequest* dest);
+int wh_MessageObject_TranslateCacheExportDmaResponse(
+    uint16_t magic, const whMessageObject_CacheExportDmaResponse* src,
+    whMessageObject_CacheExportDmaResponse* dest);
 
 #endif /* WOLFHSM_CFG_DMA */
 

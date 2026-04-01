@@ -918,10 +918,9 @@ static int doKeyCache(whClientContext* client, whKeyId keyId, int iteration)
     snprintf((char*)label, sizeof(label), "Key%04X", keyId);
 
     /* Send request */
-    rc = wh_Client_ObjectCacheAddRequest(client, WH_KEYTYPE_CRYPTO, keyId,
-                                        WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_USAGE_ANY,
-                                        keyData, sizeof(keyData),
-                                        label, sizeof(label));
+    rc = wh_Client_ObjectCacheAddRequest(
+        client, WH_KEYTYPE_CRYPTO, keyId, WH_NVM_ACCESS_ANY,
+        WH_NVM_FLAGS_USAGE_ANY, keyData, sizeof(keyData), label, sizeof(label));
     if (rc != WH_ERROR_OK) {
         return rc;
     }
@@ -953,8 +952,8 @@ static int doKeyExport(whClientContext* client, whKeyId keyId)
 
     /* Wait for response from server thread */
     do {
-        rc = wh_Client_ObjectCacheExportResponse(client, NULL, label, labelSz, keyData,
-                                         &keySz);
+        rc = wh_Client_ObjectCacheExportResponse(client, NULL, label, labelSz,
+                                                 keyData, &keySz);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
         }
@@ -1169,11 +1168,9 @@ static int doKeyCacheDma(ClientServerPair* pair, whKeyId keyId, int iteration)
     snprintf((char*)label, sizeof(label), "DmaKey%04X", keyId);
 
     /* Send DMA request */
-    rc = wh_Client_ObjectCacheAddDmaRequest(&pair->client, WH_KEYTYPE_CRYPTO,
-                                      keyId, WH_NVM_ACCESS_ANY, 0,
-                                      pair->dmaKeyBuffer,
-                                      sizeof(pair->dmaKeyBuffer),
-                                      label, sizeof(label));
+    rc = wh_Client_ObjectCacheAddDmaRequest(
+        &pair->client, WH_KEYTYPE_CRYPTO, keyId, WH_NVM_ACCESS_ANY, 0,
+        pair->dmaKeyBuffer, sizeof(pair->dmaKeyBuffer), label, sizeof(label));
     if (rc != WH_ERROR_OK) {
         return rc;
     }
@@ -1197,8 +1194,8 @@ static int doKeyExportDma(ClientServerPair* pair, whKeyId keyId)
 
     /* Send DMA request - provide buffer for DMA export */
     rc = wh_Client_ObjectCacheExportDmaRequest(&pair->client, WH_KEYTYPE_CRYPTO,
-                                       keyId, pair->dmaKeyBuffer,
-                                       sizeof(pair->dmaKeyBuffer));
+                                               keyId, pair->dmaKeyBuffer,
+                                               sizeof(pair->dmaKeyBuffer));
     if (rc != WH_ERROR_OK) {
         return rc;
     }
@@ -1206,7 +1203,7 @@ static int doKeyExportDma(ClientServerPair* pair, whKeyId keyId)
     /* Wait for response from server thread */
     do {
         rc = wh_Client_ObjectCacheExportDmaResponse(&pair->client, label,
-                                            sizeof(label), &outSz);
+                                                    sizeof(label), &outSz);
         if (rc == WH_ERROR_NOTREADY) {
             sched_yield();
         }
