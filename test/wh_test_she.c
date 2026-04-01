@@ -33,7 +33,7 @@
 #include "wolfhsm/wh_nvm.h"
 #include "wolfhsm/wh_nvm_flash.h"
 #include "wolfhsm/wh_flash_ramsim.h"
-#include "wolfhsm/wh_server_keystore.h"
+#include "wolfhsm/wh_server_object.h"
 #endif
 
 #include "wolfhsm/wh_comm.h"
@@ -1064,8 +1064,8 @@ static int wh_She_TestMasterEcuKeyFallback(void)
     memset(keyBuf, 0xFF, sizeof(keyBuf));
 
     /* Read master ECU key when it has never been provisioned */
-    ret = wh_Server_KeystoreReadKey(server, masterEcuKeyId, outMeta, keyBuf,
-                                    &keySz);
+    ret = wh_Server_ObjectCacheExport(server, masterEcuKeyId, outMeta, keyBuf,
+                                      &keySz);
 
     WH_TEST_ASSERT_RETURN(ret == 0);
     WH_TEST_ASSERT_RETURN(keySz == WH_SHE_KEY_SZ);

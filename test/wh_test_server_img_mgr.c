@@ -36,7 +36,7 @@
 #include "wolfhsm/wh_flash_ramsim.h"
 #include "wolfhsm/wh_server.h"
 #include "wolfhsm/wh_server_img_mgr.h"
-#include "wolfhsm/wh_server_keystore.h"
+#include "wolfhsm/wh_server_object.h"
 #include "wolfhsm/wh_comm.h"
 #include "wolfhsm/wh_transport_mem.h"
 
@@ -367,7 +367,7 @@ static int whTest_ServerImgMgrServerCfgEcc256(whServerConfig* serverCfg)
     keyMeta.len           = pubKeyDerLen;
     snprintf((char*)keyMeta.label, WH_NVM_LABEL_LEN, "TestKey");
 
-    ret = wh_Server_KeystoreCacheKey(server, &keyMeta, pubKeyDer);
+    ret = wh_Server_ObjectCacheAdd(server, &keyMeta, pubKeyDer);
     if (ret != WH_ERROR_OK) {
         WH_ERROR_PRINT("Failed to cache key in keystore: %d\n", ret);
         wh_Server_Cleanup(server);
@@ -378,7 +378,7 @@ static int whTest_ServerImgMgrServerCfgEcc256(whServerConfig* serverCfg)
     }
 
     /* Commit the key to NVM */
-    ret = wh_Server_KeystoreCommitKey(server, testEccKeyId);
+    ret = wh_Server_ObjectCacheCommit(server, testEccKeyId);
     if (ret != WH_ERROR_OK) {
         WH_ERROR_PRINT("Failed to commit key to NVM: %d\n", ret);
         wh_Server_Cleanup(server);
@@ -659,7 +659,7 @@ static int whTest_ServerImgMgrServerCfgAes128Cmac(whServerConfig* serverCfg)
     keyMeta.len           = sizeof(testAes128Key);
     snprintf((char*)keyMeta.label, WH_NVM_LABEL_LEN, "TestAes128Key");
 
-    ret = wh_Server_KeystoreCacheKey(server, &keyMeta, (uint8_t*)testAes128Key);
+    ret = wh_Server_ObjectCacheAdd(server, &keyMeta, (uint8_t*)testAes128Key);
     if (ret != WH_ERROR_OK) {
         WH_ERROR_PRINT("Failed to cache AES128 key in keystore: %d\n", ret);
         wh_Server_Cleanup(server);
@@ -667,7 +667,7 @@ static int whTest_ServerImgMgrServerCfgAes128Cmac(whServerConfig* serverCfg)
     }
 
     /* Commit the key to NVM */
-    ret = wh_Server_KeystoreCommitKey(server, testAesCmacKeyId);
+    ret = wh_Server_ObjectCacheCommit(server, testAesCmacKeyId);
     if (ret != WH_ERROR_OK) {
         WH_ERROR_PRINT("Failed to commit AES128 key to NVM: %d\n", ret);
         wh_Server_Cleanup(server);
@@ -986,7 +986,7 @@ static int whTest_ServerImgMgrServerCfgRsa2048(whServerConfig* serverCfg)
     keyMeta.len           = pubKeyDerLen;
     snprintf((char*)keyMeta.label, WH_NVM_LABEL_LEN, "TestRsaKey");
 
-    ret = wh_Server_KeystoreCacheKey(server, &keyMeta, pubKeyDer);
+    ret = wh_Server_ObjectCacheAdd(server, &keyMeta, pubKeyDer);
     if (ret != WH_ERROR_OK) {
         WH_ERROR_PRINT("Failed to cache RSA key in keystore: %d\n", ret);
         wh_Server_Cleanup(server);
@@ -997,7 +997,7 @@ static int whTest_ServerImgMgrServerCfgRsa2048(whServerConfig* serverCfg)
     }
 
     /* Commit the key to NVM */
-    ret = wh_Server_KeystoreCommitKey(server, testRsaKeyId);
+    ret = wh_Server_ObjectCacheCommit(server, testRsaKeyId);
     if (ret != WH_ERROR_OK) {
         WH_ERROR_PRINT("Failed to commit RSA key to NVM: %d\n", ret);
         wh_Server_Cleanup(server);

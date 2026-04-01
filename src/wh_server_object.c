@@ -767,14 +767,11 @@ int wh_Server_ObjectCacheCommit(whServerContext* server, whNvmId objId)
     /* Get the appropriate cache context for this object */
     ctx = _GetCacheContext(server, objId);
 
-    /* Check NONPERSISTABLE flag - object cannot be committed to NVM */
-    ret = _FindInKeyCache(ctx, objId, NULL, NULL, NULL, &slotMeta);
+    /* Find the object and check NONPERSISTABLE flag */
+    ret = _FindInKeyCache(ctx, objId, NULL, NULL, &slotBuf, &slotMeta);
     if (ret == WH_ERROR_OK && (slotMeta->flags & WH_NVM_FLAGS_NONPERSISTABLE)) {
         return WH_ERROR_ACCESS;
     }
-
-    /* Find the object in the appropriate cache context obtained above. */
-    ret = _FindInKeyCache(ctx, objId, NULL, NULL, &slotBuf, &slotMeta);
     if (ret == WH_ERROR_OK) {
         size = slotMeta->len;
         ret = wh_Nvm_AddObjectWithReclaim(server->nvm, slotMeta, size, slotBuf);
@@ -1202,9 +1199,9 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
     whNvmMetadata meta[1] = {{0}};
 
     (void)seq;
-    (void)req_size;
 
-    if ((server == NULL) || (req_packet == NULL) || (out_resp_size == NULL)) {
+    if ((server == NULL) || (req_packet == NULL) || (out_resp_size == NULL) ||
+        (resp_packet == NULL)) {
         return WH_ERROR_BADARGS;
     }
 
@@ -1497,6 +1494,11 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             out      = (uint8_t*)resp_packet + sizeof(resp);
             data_len = req.data_len;
 
+            /* Clamp to available response buffer space */
+            if (data_len > WOLFHSM_CFG_COMM_DATA_LEN - sizeof(resp)) {
+                data_len = WOLFHSM_CFG_COMM_DATA_LEN - sizeof(resp);
+            }
+
             ret = WH_SERVER_NVM_LOCK(server);
             if (ret == WH_ERROR_OK) {
                 ret = wh_Nvm_ReadChecked(server->nvm, keyId, req.offset,
@@ -1522,8 +1524,9 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             whMessageObject_NvmGetAvailResponse resp;
 
             memset(&resp, 0, sizeof(resp));
-            resp.rc           = WH_ERROR_OK;
-            resp.avail_size   = 0;
+            /* TODO: implement NVM available space query */
+            resp.rc            = WH_ERROR_NOTIMPL;
+            resp.avail_size    = 0;
             resp.avail_objects = 0;
 
             (void)wh_MessageObject_TranslateNvmGetAvailResponse(
@@ -1536,7 +1539,8 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             whMessageObject_NvmIterateResponse resp;
 
             memset(&resp, 0, sizeof(resp));
-            resp.rc    = WH_ERROR_OK;
+            /* TODO: implement NVM iteration */
+            resp.rc    = WH_ERROR_NOTIMPL;
             resp.count = 0;
             resp.id    = 0;
 
@@ -1546,6 +1550,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             *out_resp_size = sizeof(resp);
         } break;
 
+#ifdef WOLFHSM_CFG_KEYWRAP
         case WH_OBJECT_WRAP: {
             whMessageObject_WrapRequest  req;
             whMessageObject_WrapResponse resp;
@@ -1563,8 +1568,9 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             keyData = (uint8_t*)req_packet + sizeof(req);
             wrappedOut = (uint8_t*)resp_packet + sizeof(resp);
 
+            /* KEK is always a crypto object regardless of wrapped object type */
             kekId = wh_KeyId_TranslateFromClient(
-                req.type, server->comm->client_id, req.serverKekId);
+                WH_KEYTYPE_CRYPTO, server->comm->client_id, req.serverKekId);
 
             /* Build metadata from request fields. Embed the wrapping
              * client's identity in the metadata ID for ownership validation
@@ -1645,8 +1651,9 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             wrappedIn = (uint8_t*)req_packet + sizeof(req);
 
+            /* KEK is always a crypto object regardless of wrapped object type */
             kekId = wh_KeyId_TranslateFromClient(
-                req.type, server->comm->client_id, req.serverKekId);
+                WH_KEYTYPE_CRYPTO, server->comm->client_id, req.serverKekId);
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
@@ -1747,8 +1754,9 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             wrappedIn = (uint8_t*)req_packet + sizeof(req);
             keyOut = (uint8_t*)resp_packet + sizeof(resp);
 
+            /* KEK is always a crypto object regardless of wrapped object type */
             kekId = wh_KeyId_TranslateFromClient(
-                req.type, server->comm->client_id, req.serverKekId);
+                WH_KEYTYPE_CRYPTO, server->comm->client_id, req.serverKekId);
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
@@ -1824,6 +1832,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                 (whMessageObject_UnwrapExportResponse*)resp_packet);
             *out_resp_size = sizeof(resp) + resp.keySz;
         } break;
+#endif /* WOLFHSM_CFG_KEYWRAP */
 
 #ifdef WOLFHSM_CFG_DMA
         case WH_OBJECT_CACHE_ADD_DMA: {
@@ -1841,7 +1850,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                 req.type, server->comm->client_id, req.id);
             meta->access = req.access;
             meta->flags  = req.flags;
-            meta->len    = req.obj.sz;
+            if (req.obj.sz > UINT16_MAX) {
+                resp.rc = WH_ERROR_BADARGS;
+                (void)wh_MessageObject_TranslateCacheAddDmaResponse(
+                    magic, &resp,
+                    (whMessageObject_CacheAddDmaResponse*)resp_packet);
+                *out_resp_size = sizeof(resp);
+                break;
+            }
+            meta->len    = (uint16_t)req.obj.sz;
             /* truncate label if it's too large */
             if (req.labelSz > WH_NVM_LABEL_LEN) {
                 req.labelSz = WH_NVM_LABEL_LEN;
@@ -1910,7 +1927,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                 }
 
                 if (ret == WH_ERROR_OK) {
-                    resp.len = req.obj.sz;
+                    resp.len = meta->len;
                     memcpy(resp.label, meta->label, sizeof(meta->label));
                 }
 

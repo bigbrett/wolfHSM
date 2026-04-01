@@ -49,6 +49,7 @@
 #include "wolfhsm/wh_server_crypto.h"
 #include "wolfhsm/wh_server_counter.h"
 #include "wolfhsm/wh_server_object.h"
+#include "wolfhsm/wh_server_keystore.h"
 
 #if defined(WOLFHSM_CFG_CERTIFICATE_MANAGER) && !defined(WOLFHSM_CFG_NO_CRYPTO)
 #include "wolfhsm/wh_server_cert.h"
@@ -377,6 +378,11 @@ int wh_Server_HandleRequestMessage(whServerContext* server)
 #endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER && !WOLFHSM_CFG_NO_CRYPTO */
 
 #ifndef WOLFHSM_CFG_NO_CRYPTO
+        case WH_MESSAGE_GROUP_KEY:
+            rc = wh_Server_HandleKeyRequest(server, magic, action,
+                    size, data, &size, data);
+        break;
+
         case WH_MESSAGE_GROUP_OBJECT:
             rc = wh_Server_HandleObjectRequest(server, magic, action, seq,
                     size, data, &size, data);

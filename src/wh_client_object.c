@@ -651,12 +651,15 @@ int wh_Client_ObjectCacheExportResponse(whClientContext* c, int32_t* out_rc,
         if (resp->rc != 0) {
             ret = resp->rc;
         }
+        else if (resp->len > size - sizeof(*resp)) {
+            ret = WH_ERROR_BADARGS;
+        }
         else {
             if (out == NULL) {
                 *outSz = resp->len;
             }
             else if (*outSz < resp->len) {
-                ret = WH_ERROR_ABORTED;
+                ret = WH_ERROR_BUFFER_SIZE;
             }
             else {
                 memcpy(out, packOut, resp->len);
@@ -761,6 +764,7 @@ int wh_Client_ObjectCacheRevoke(whClientContext* c, uint16_t type, uint16_t id)
     return ret;
 }
 
+#ifdef WOLFHSM_CFG_KEYWRAP
 /*
  * Object Wrap
  */
@@ -1091,6 +1095,7 @@ int wh_Client_ObjectUnwrapExport(whClientContext* c, uint16_t type,
 
     return ret;
 }
+#endif /* WOLFHSM_CFG_KEYWRAP */
 
 #ifdef WOLFHSM_CFG_DMA
 
@@ -1215,7 +1220,9 @@ int wh_Client_ObjectCacheExportDmaRequest(whClientContext* c, uint16_t type,
                                            uint16_t id, const void* objAddr,
                                            uint16_t objSz)
 {
+    int ret;
     whMessageObject_CacheExportDmaRequest* req = NULL;
+    uintptr_t objAddrPtr = 0;
 
     if (c == NULL) {
         return WH_ERROR_BADARGS;
@@ -1228,14 +1235,24 @@ int wh_Client_ObjectCacheExportDmaRequest(whClientContext* c, uint16_t type,
     }
     memset(req, 0, sizeof(*req));
 
-    req->type     = type;
-    req->id       = id;
-    req->obj.addr = (uint64_t)((uintptr_t)objAddr);
-    req->obj.sz   = objSz;
+    req->type = type;
+    req->id   = id;
+    req->obj.sz = objSz;
+    ret = wh_Client_DmaProcessClientAddress(
+        c, (uintptr_t)objAddr, (void**)&objAddrPtr, objSz,
+        WH_DMA_OPER_CLIENT_WRITE_PRE, (whDmaFlags){0});
+    req->obj.addr = objAddrPtr;
 
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
-                                 WH_OBJECT_CACHE_EXPORT_DMA,
-                                 sizeof(*req), (uint8_t*)req);
+    if (ret == WH_ERROR_OK) {
+        ret = wh_Client_SendRequest(c, WH_MESSAGE_GROUP_OBJECT,
+                                     WH_OBJECT_CACHE_EXPORT_DMA,
+                                     sizeof(*req), (uint8_t*)req);
+    }
+
+    (void)wh_Client_DmaProcessClientAddress(
+        c, (uintptr_t)objAddr, (void**)&objAddrPtr, objSz,
+        WH_DMA_OPER_CLIENT_WRITE_POST, (whDmaFlags){0});
+    return ret;
 }
 
 int wh_Client_ObjectCacheExportDmaResponse(whClientContext* c,

@@ -103,6 +103,7 @@ int wh_Client_ObjectCacheRevokeRequest(whClientContext* c, uint16_t type,
 int wh_Client_ObjectCacheRevokeResponse(whClientContext* c, int32_t* out_rc);
 int wh_Client_ObjectCacheRevoke(whClientContext* c, uint16_t type, uint16_t id);
 
+#ifdef WOLFHSM_CFG_KEYWRAP
 /* Object Wrap */
 int wh_Client_ObjectWrapRequest(whClientContext* c, uint16_t type,
     uint16_t serverKekId, uint16_t cipherType,
@@ -146,6 +147,7 @@ int wh_Client_ObjectUnwrapExport(whClientContext* c, uint16_t type,
     uint8_t* out, uint16_t* outSz,
     whNvmAccess* outAccess, whNvmFlags* outFlags,
     uint8_t* outLabel, uint16_t outLabelSz);
+#endif /* WOLFHSM_CFG_KEYWRAP */
 
 #ifdef WOLFHSM_CFG_DMA
 /* Cache Add DMA */
