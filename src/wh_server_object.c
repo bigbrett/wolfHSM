@@ -1566,8 +1566,20 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             kekId = wh_KeyId_TranslateFromClient(
                 req.type, server->comm->client_id, req.serverKekId);
 
-            /* Build metadata from request fields */
+            /* Build metadata from request fields. Embed the wrapping
+             * client's identity in the metadata ID for ownership validation
+             * during unwrap. Use the KEK's translated ID to determine if
+             * this is a global or local wrap. */
             memset(&wrapMeta, 0, sizeof(wrapMeta));
+            {
+                uint16_t ownerUser = server->comm->client_id;
+#ifdef WOLFHSM_CFG_GLOBAL_KEYS
+                if ((req.ownerId & WH_KEYID_CLIENT_GLOBAL_FLAG) != 0) {
+                    ownerUser = WH_KEYUSER_GLOBAL;
+                }
+#endif
+                wrapMeta.id = WH_MAKE_KEYID(req.type, ownerUser, 0);
+            }
             wrapMeta.access = req.access;
             wrapMeta.flags  = req.flags;
             wrapMeta.len    = req.keySz;
@@ -1622,6 +1634,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             whNvmMetadata unwrapMeta;
             uint8_t       keyBuf[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
             uint16_t      keySz;
+            uint16_t      wrappedUser = 0;
 
             memset(&resp, 0, sizeof(resp));
             resp.id = WH_KEYID_ERASED;
@@ -1653,16 +1666,34 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                                                    wrappedIn, req.wrappedSz,
                                                    &unwrapMeta, keyBuf,
                                                    keySz);
+                        /* Validate ownership */
+                        if (ret == WH_ERROR_OK) {
+                            wrappedUser =
+                                WH_KEYID_USER(unwrapMeta.id);
+#ifdef WOLFHSM_CFG_GLOBAL_KEYS
+                            if (wrappedUser != WH_KEYUSER_GLOBAL &&
+                                wrappedUser !=
+                                    server->comm->client_id) {
+                                ret = WH_ERROR_ACCESS;
+                            }
+#else
+                            if (wrappedUser !=
+                                    server->comm->client_id) {
+                                ret = WH_ERROR_ACCESS;
+                            }
+#endif
+                        }
                         if (ret == WH_ERROR_OK) {
                             /* Force NONPERSISTABLE */
                             unwrapMeta.flags |=
                                 WH_NVM_FLAGS_NONPERSISTABLE;
 
-                            /* Build cache ID from request */
-                            unwrapMeta.id =
-                                wh_KeyId_TranslateFromClient(
-                                    req.type, server->comm->client_id,
-                                    req.requestedId);
+                            /* Build cache ID using the ownership from
+                             * the wrapped metadata. Global wrapped keys
+                             * go to the global cache. */
+                            unwrapMeta.id = WH_MAKE_KEYID(
+                                req.type, wrappedUser,
+                                req.requestedId & WH_KEYID_MASK);
 
                             /* Auto-assign if erased */
                             if (WH_KEYID_ISERASED(unwrapMeta.id)) {
@@ -1742,6 +1773,23 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                                 server, kekId, wrappedIn,
                                 req.wrappedSz, &unwrapMeta,
                                 keyBuf, keySz);
+                            /* Validate ownership */
+                            if (ret == WH_ERROR_OK) {
+                                uint16_t wrappedUser =
+                                    WH_KEYID_USER(unwrapMeta.id);
+#ifdef WOLFHSM_CFG_GLOBAL_KEYS
+                                if (wrappedUser != WH_KEYUSER_GLOBAL &&
+                                    wrappedUser !=
+                                        server->comm->client_id) {
+                                    ret = WH_ERROR_ACCESS;
+                                }
+#else
+                                if (wrappedUser !=
+                                        server->comm->client_id) {
+                                    ret = WH_ERROR_ACCESS;
+                                }
+#endif
+                            }
                             if (ret == WH_ERROR_OK) {
                                 /* Check exportable */
                                 if (unwrapMeta.flags &

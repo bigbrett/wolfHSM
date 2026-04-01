@@ -470,11 +470,12 @@ static int _testGlobalKeyDma(whClientContext* client1, whServerContext* server1,
 
     /* Part 1: Cache via DMA, export via regular */
     /* Client 1 caches a global key using DMA */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyCacheDmaRequest(
-        client1, 0, (uint8_t*)"DmaGlobal35", sizeof("DmaGlobal35"), keyData1,
-        sizeof(keyData1), keyId1));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddDmaRequest(
+        client1, WH_KEYTYPE_CRYPTO, keyId1, WH_NVM_ACCESS_ANY, 0,
+        keyData1, sizeof(keyData1),
+        (uint8_t*)"DmaGlobal35", sizeof("DmaGlobal35")));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyCacheDmaResponse(client1, &keyId1));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddDmaResponse(client1, &keyId1));
 
     /* Client 2 reads the global key via regular export */
     keyId1 = WH_CLIENT_KEYID_MAKE_GLOBAL(DUMMY_KEYID_1);
@@ -503,10 +504,11 @@ static int _testGlobalKeyDma(whClientContext* client1, whServerContext* server1,
     outSz  = sizeof(outBuf);
     memset(outBuf, 0, sizeof(outBuf));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_KeyExportDmaRequest(client2, keyId2, outBuf, sizeof(outBuf)));
+        wh_Client_ObjectCacheExportDmaRequest(client2, WH_KEYTYPE_CRYPTO,
+            keyId2, outBuf, sizeof(outBuf)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
     WH_TEST_RETURN_ON_FAIL(
-        wh_Client_KeyExportDmaResponse(client2, label, labelSz, &outSz));
+        wh_Client_ObjectCacheExportDmaResponse(client2, label, labelSz, &outSz));
 
     /* Verify the key data matches */
     WH_TEST_ASSERT_RETURN(outSz == sizeof(keyData2));
@@ -569,20 +571,21 @@ static int _testGlobalKeyWrapExport(whClientContext* client1,
     meta.id =
         WH_CLIENT_KEYID_MAKE_WRAPPED_META(WH_KEYUSER_GLOBAL, DUMMY_KEYID_2);
     meta.len    = sizeof(plainKey);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client2, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client2, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, WH_KEYID_CLIENT_GLOBAL_FLAG,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client2, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client2, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 1 unwraps the key using the same global server key */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportRequest(
-        client1, WC_CIPHER_AES_GCM, serverKeyId, wrappedKey,
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportRequest(
+        client1, WH_KEYTYPE_CRYPTO, serverKeyId, WC_CIPHER_AES_GCM, wrappedKey,
         sizeof(wrappedKey)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportResponse(
-        client1, WC_CIPHER_AES_GCM, &meta, unwrappedKey, &unwrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportResponse(
+        client1, NULL, unwrappedKey, &unwrappedKeySz, NULL, NULL, NULL, 0));
 
     /* Verify the unwrapped key matches the original */
     WH_TEST_ASSERT_RETURN(0 ==
@@ -641,42 +644,43 @@ static int _testGlobalKeyUnwrapCache(whClientContext* client1,
         WH_CLIENT_KEYID_MAKE_WRAPPED_META(WH_KEYUSER_GLOBAL, DUMMY_KEYID_2);
     meta.len    = sizeof(plainKey);
 
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client1, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client1, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, WH_KEYID_CLIENT_GLOBAL_FLAG,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client1, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client1, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 2 unwraps and caches the key using the global server key */
     serverKeyId = WH_CLIENT_KEYID_MAKE_GLOBAL(DUMMY_KEYID_1);
-    ret         = wh_Client_KeyUnwrapAndCacheRequest(client2, WC_CIPHER_AES_GCM,
-                                                     serverKeyId, wrappedKey,
-                                                     sizeof(wrappedKey));
+    ret         = wh_Client_ObjectUnwrapCacheRequest(client2, WH_KEYTYPE_CRYPTO,
+                                                     serverKeyId, WC_CIPHER_AES_GCM, wrappedKey,
+                                                     sizeof(wrappedKey), WH_KEYID_ERASED);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
 
     ret = wh_Server_HandleRequestMessage(server2);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
 
-    ret = wh_Client_KeyUnwrapAndCacheResponse(client2, WC_CIPHER_AES_GCM,
+    ret = wh_Client_ObjectUnwrapCacheResponse(client2, NULL,
                                               &cachedKeyId);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_OK);
 
     /* Verify the cached key by exporting it */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyExportRequest(
-        client2, WH_CLIENT_KEYID_MAKE_WRAPPED_GLOBAL(cachedKeyId)));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportRequest(
+        client2, WH_KEYTYPE_CRYPTO, cachedKeyId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyExportResponse(client2, label, labelSz,
-                                                       verifyBuf, &verifySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportResponse(
+        client2, NULL, label, labelSz, verifyBuf, &verifySz));
 
     /* Verify the exported key matches the original */
     WH_TEST_ASSERT_RETURN(0 == memcmp(verifyBuf, plainKey, sizeof(plainKey)));
 
     /* Clean up */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyEvictRequest(
-        client2, WH_CLIENT_KEYID_MAKE_WRAPPED_GLOBAL(cachedKeyId)));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(
+        client2, WH_KEYTYPE_CRYPTO, cachedKeyId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyEvictResponse(client2));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictResponse(client2, NULL));
 
     serverKeyId = WH_CLIENT_KEYID_MAKE_GLOBAL(DUMMY_KEYID_1);
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(client1, WH_KEYTYPE_CRYPTO, serverKeyId));
@@ -726,20 +730,21 @@ static int _testWrappedKey_GlobalWrap_GlobalKey_Positive(
     meta.id =
         WH_CLIENT_KEYID_MAKE_WRAPPED_META(WH_KEYUSER_GLOBAL, DUMMY_KEYID_2);
     meta.len = sizeof(plainKey);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client2, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client2, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, WH_KEYID_CLIENT_GLOBAL_FLAG,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client2, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client2, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 1 unwraps and exports the global key */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportRequest(
-        client1, WC_CIPHER_AES_GCM, serverKeyId, wrappedKey,
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportRequest(
+        client1, WH_KEYTYPE_CRYPTO, serverKeyId, WC_CIPHER_AES_GCM, wrappedKey,
         sizeof(wrappedKey)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportResponse(
-        client1, WC_CIPHER_AES_GCM, &meta, unwrappedKey, &unwrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportResponse(
+        client1, NULL, unwrappedKey, &unwrappedKeySz, NULL, NULL, NULL, 0));
 
     /* Verify the unwrapped key matches the original */
     WH_TEST_ASSERT_RETURN(0 ==
@@ -794,20 +799,21 @@ static int _testWrappedKey_GlobalWrap_GlobalKey_NonExportable(
         WH_CLIENT_KEYID_MAKE_WRAPPED_META(WH_KEYUSER_GLOBAL, DUMMY_KEYID_2);
     meta.len   = sizeof(plainKey);
     meta.flags = WH_NVM_FLAGS_NONEXPORTABLE;
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client2, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client2, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, WH_KEYID_CLIENT_GLOBAL_FLAG,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client2, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client2, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 1 tries to unwrap and export - should fail */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportRequest(
-        client1, WC_CIPHER_AES_GCM, serverKeyId, wrappedKey,
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportRequest(
+        client1, WH_KEYTYPE_CRYPTO, serverKeyId, WC_CIPHER_AES_GCM, wrappedKey,
         sizeof(wrappedKey)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    ret = wh_Client_KeyUnwrapAndExportResponse(
-        client1, WC_CIPHER_AES_GCM, &meta, unwrappedKey, &unwrappedKeySz);
+    ret = wh_Client_ObjectUnwrapExportResponse(
+        client1, NULL, unwrappedKey, &unwrappedKeySz, NULL, NULL, NULL, 0);
 
     /* Should fail due to non-exportable flag */
     WH_TEST_ASSERT_RETURN(ret != 0);
@@ -860,20 +866,21 @@ static int _testWrappedKey_GlobalWrap_LocalKey_OwnerExport(
     serverKeyId = WH_CLIENT_KEYID_MAKE_GLOBAL(DUMMY_KEYID_1);
     meta.id     = WH_CLIENT_KEYID_MAKE_WRAPPED_META(client2Id, DUMMY_KEYID_2);
     meta.len = sizeof(plainKey);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client2, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client2, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, 0,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client2, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client2, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 2 (owner) unwraps and exports the local key */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportRequest(
-        client2, WC_CIPHER_AES_GCM, serverKeyId, wrappedKey,
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportRequest(
+        client2, WH_KEYTYPE_CRYPTO, serverKeyId, WC_CIPHER_AES_GCM, wrappedKey,
         sizeof(wrappedKey)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportResponse(
-        client2, WC_CIPHER_AES_GCM, &meta, unwrappedKey, &unwrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportResponse(
+        client2, NULL, unwrappedKey, &unwrappedKeySz, NULL, NULL, NULL, 0));
 
     /* Verify the unwrapped key matches the original */
     WH_TEST_ASSERT_RETURN(0 ==
@@ -930,30 +937,31 @@ static int _testWrappedKey_GlobalWrap_LocalKey_NonOwnerFails(
     serverKeyId = WH_CLIENT_KEYID_MAKE_GLOBAL(DUMMY_KEYID_1);
     meta.id     = WH_CLIENT_KEYID_MAKE_WRAPPED_META(client2Id, DUMMY_KEYID_2);
     meta.len = sizeof(plainKey);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client2, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client2, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, 0,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client2, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client2, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 1 (non-owner) tries to unwrap and export - should fail */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportRequest(
-        client1, WC_CIPHER_AES_GCM, serverKeyId, wrappedKey,
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportRequest(
+        client1, WH_KEYTYPE_CRYPTO, serverKeyId, WC_CIPHER_AES_GCM, wrappedKey,
         sizeof(wrappedKey)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    ret = wh_Client_KeyUnwrapAndExportResponse(
-        client1, WC_CIPHER_AES_GCM, &meta, unwrappedKey, &unwrappedKeySz);
+    ret = wh_Client_ObjectUnwrapExportResponse(
+        client1, NULL, unwrappedKey, &unwrappedKeySz, NULL, NULL, NULL, 0);
 
     /* Should fail - Client 1 is not the owner */
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_ACCESS);
 
     /* Client 1 (non-owner) tries to unwrap and cache - should also fail */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndCacheRequest(
-        client1, WC_CIPHER_AES_GCM, serverKeyId, wrappedKey,
-        sizeof(wrappedKey)));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapCacheRequest(
+        client1, WH_KEYTYPE_CRYPTO, serverKeyId, WC_CIPHER_AES_GCM,
+        wrappedKey, sizeof(wrappedKey), WH_KEYID_ERASED));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    ret = wh_Client_KeyUnwrapAndCacheResponse(client1, WC_CIPHER_AES_GCM,
+    ret = wh_Client_ObjectUnwrapCacheResponse(client1, NULL,
                                               &cachedKeyId);
 
     /* Should also fail - Client 1 is not the owner */
@@ -1007,20 +1015,21 @@ static int _testWrappedKey_LocalWrap_LocalKey_SameOwner(
     serverKeyId = DUMMY_KEYID_1; /* Use local wrapping key */
     meta.id     = WH_CLIENT_KEYID_MAKE_WRAPPED_META(client1Id, DUMMY_KEYID_2);
     meta.len = sizeof(plainKey);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client1, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client1, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, 0,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client1, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client1, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 1 (owner) unwraps and exports the local key */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportRequest(
-        client1, WC_CIPHER_AES_GCM, serverKeyId, wrappedKey,
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportRequest(
+        client1, WH_KEYTYPE_CRYPTO, serverKeyId, WC_CIPHER_AES_GCM, wrappedKey,
         sizeof(wrappedKey)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndExportResponse(
-        client1, WC_CIPHER_AES_GCM, &meta, unwrappedKey, &unwrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapExportResponse(
+        client1, NULL, unwrappedKey, &unwrappedKeySz, NULL, NULL, NULL, 0));
 
     /* Verify the unwrapped key matches the original */
     WH_TEST_ASSERT_RETURN(0 ==
@@ -1079,21 +1088,22 @@ static int _testWrappedKey_LocalWrap_LocalKey_NoAccessWithoutWrapKey(
     serverKeyId = DUMMY_KEYID_1; /* Use local wrapping key */
     meta.id     = WH_CLIENT_KEYID_MAKE_WRAPPED_META(client1Id, DUMMY_KEYID_2);
     meta.len = sizeof(plainKey);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client1, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client1, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, 0,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client1, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client1, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 2 tries to unwrap - should fail (no wrapping key) */
-    ret = wh_Client_KeyUnwrapAndExportRequest(client2, WC_CIPHER_AES_GCM,
-                                              serverKeyId, wrappedKey,
+    ret = wh_Client_ObjectUnwrapExportRequest(client2, WH_KEYTYPE_CRYPTO,
+                                              serverKeyId, WC_CIPHER_AES_GCM, wrappedKey,
                                               sizeof(wrappedKey));
     if (ret == 0) {
         WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-        ret = wh_Client_KeyUnwrapAndExportResponse(
-            client2, WC_CIPHER_AES_GCM, &meta, unwrappedKey, &unwrappedKeySz);
+        ret = wh_Client_ObjectUnwrapExportResponse(
+            client2, NULL, unwrappedKey, &unwrappedKeySz, NULL, NULL, NULL, 0);
     }
 
     /* Should fail - Client 2 doesn't have the wrapping key */
@@ -1152,36 +1162,37 @@ static int _testWrappedKey_LocalWrap_GlobalKey_AnyCacheGlobal(
     meta.id =
         WH_CLIENT_KEYID_MAKE_WRAPPED_META(WH_KEYUSER_GLOBAL, DUMMY_KEYID_2);
     meta.len = sizeof(plainKey);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client1, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client1, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, WH_KEYID_CLIENT_GLOBAL_FLAG,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client1, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client1, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 1 unwraps and caches to global cache */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndCacheRequest(
-        client1, WC_CIPHER_AES_GCM, serverKeyId, wrappedKey,
-        sizeof(wrappedKey)));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapCacheRequest(
+        client1, WH_KEYTYPE_CRYPTO, serverKeyId, WC_CIPHER_AES_GCM,
+        wrappedKey, sizeof(wrappedKey), WH_KEYID_ERASED));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyUnwrapAndCacheResponse(
-        client1, WC_CIPHER_AES_GCM, &cachedKeyId));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectUnwrapCacheResponse(
+        client1, NULL, &cachedKeyId));
 
     /* Client 2 reads from global cache via KeyExport */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyExportRequest(
-        client2, WH_CLIENT_KEYID_MAKE_WRAPPED_GLOBAL(cachedKeyId)));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportRequest(
+        client2, WH_KEYTYPE_CRYPTO, cachedKeyId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyExportResponse(
-        client2, label, labelSz, exportedKey, &exportedSz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheExportResponse(
+        client2, NULL, label, labelSz, exportedKey, &exportedSz));
 
     /* Verify the exported key matches the original */
     WH_TEST_ASSERT_RETURN(0 == memcmp(exportedKey, plainKey, sizeof(plainKey)));
 
     /* Clean up */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyEvictRequest(
-        client2, WH_CLIENT_KEYID_MAKE_WRAPPED_GLOBAL(cachedKeyId)));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(
+        client2, WH_KEYTYPE_CRYPTO, cachedKeyId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyEvictResponse(client2));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictResponse(client2, NULL));
 
     serverKeyId = DUMMY_KEYID_1;
     WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheEvictRequest(client1, WH_KEYTYPE_CRYPTO, serverKeyId));
@@ -1231,21 +1242,22 @@ static int _testWrappedKey_LocalWrap_GlobalKey_NonOwnerNoWrapKey(
     meta.id =
         WH_CLIENT_KEYID_MAKE_WRAPPED_META(WH_KEYUSER_GLOBAL, DUMMY_KEYID_2);
     meta.len = sizeof(plainKey);
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapRequest(client1, WC_CIPHER_AES_GCM,
-                                                    serverKeyId, plainKey,
-                                                    sizeof(plainKey), &meta));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapRequest(client1, WH_KEYTYPE_CRYPTO,
+                                                    serverKeyId, WC_CIPHER_AES_GCM, plainKey,
+                                                    sizeof(plainKey), meta.access, meta.flags, WH_KEYID_CLIENT_GLOBAL_FLAG,
+                                                    meta.label, sizeof(meta.label)));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_KeyWrapResponse(
-        client1, WC_CIPHER_AES_GCM, wrappedKey, &wrappedKeySz));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectWrapResponse(
+        client1, NULL, wrappedKey, &wrappedKeySz));
 
     /* Client 2 tries to unwrap - should fail (no wrapping key) */
-    ret = wh_Client_KeyUnwrapAndExportRequest(client2, WC_CIPHER_AES_GCM,
-                                              serverKeyId, wrappedKey,
+    ret = wh_Client_ObjectUnwrapExportRequest(client2, WH_KEYTYPE_CRYPTO,
+                                              serverKeyId, WC_CIPHER_AES_GCM, wrappedKey,
                                               sizeof(wrappedKey));
     if (ret == 0) {
         WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
-        ret = wh_Client_KeyUnwrapAndExportResponse(
-            client2, WC_CIPHER_AES_GCM, &meta, unwrappedKey, &unwrappedKeySz);
+        ret = wh_Client_ObjectUnwrapExportResponse(
+            client2, NULL, unwrappedKey, &unwrappedKeySz, NULL, NULL, NULL, 0);
     }
 
     /* Should fail - Client 2 doesn't have the wrapping key */
@@ -1281,7 +1293,7 @@ static int _testKeyIdFlagPreservation(whClientContext* client1,
 
     /* Test 1: Global key cache preserves global flag */
     {
-        whKeyId keyId         = WH_CLIENT_KEYID_MAKE_GLOBAL(DUMMY_KEYID_1);
+        whKeyId keyId         = WH_CLIENT_KEYID_MAKE_GLOBAL(10);
         whKeyId returnedKeyId = 0;
 
         WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddRequest(
@@ -1295,7 +1307,7 @@ static int _testKeyIdFlagPreservation(whClientContext* client1,
         /* Verify global flag is preserved */
         WH_TEST_ASSERT_RETURN((returnedKeyId & WH_KEYID_CLIENT_GLOBAL_FLAG) !=
                               0);
-        WH_TEST_ASSERT_RETURN((returnedKeyId & WH_KEYID_MASK) == DUMMY_KEYID_1);
+        WH_TEST_ASSERT_RETURN((returnedKeyId & WH_KEYID_MASK) == 10);
 
         /* Clean up */
         WH_TEST_RETURN_ON_FAIL(
@@ -1308,7 +1320,7 @@ static int _testKeyIdFlagPreservation(whClientContext* client1,
 
     /* Test 2: Local key cache does not have global flag */
     {
-        whKeyId keyId         = DUMMY_KEYID_2; /* Local key - no flags */
+        whKeyId keyId         = 11; /* Local key - no flags */
         whKeyId returnedKeyId = 0;
 
         WH_TEST_RETURN_ON_FAIL(wh_Client_ObjectCacheAddRequest(
@@ -1322,7 +1334,7 @@ static int _testKeyIdFlagPreservation(whClientContext* client1,
         /* Verify no global flag */
         WH_TEST_ASSERT_RETURN((returnedKeyId & WH_KEYID_CLIENT_GLOBAL_FLAG) ==
                               0);
-        WH_TEST_ASSERT_RETURN((returnedKeyId & WH_KEYID_MASK) == DUMMY_KEYID_2);
+        WH_TEST_ASSERT_RETURN((returnedKeyId & WH_KEYID_MASK) == 11);
 
         /* Clean up */
         WH_TEST_RETURN_ON_FAIL(
@@ -1335,7 +1347,7 @@ static int _testKeyIdFlagPreservation(whClientContext* client1,
 
     /* Test 3: Reusing returned keyId works correctly */
     {
-        whKeyId  requestKeyId  = WH_CLIENT_KEYID_MAKE_GLOBAL(DUMMY_KEYID_1);
+        whKeyId  requestKeyId  = WH_CLIENT_KEYID_MAKE_GLOBAL(12);
         whKeyId  returnedKeyId = 0;
         uint8_t  outBuf[sizeof(TEST_KEY_DATA_1)] = {0};
         uint16_t outSz                           = sizeof(outBuf);

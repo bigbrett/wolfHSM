@@ -219,6 +219,7 @@ int wh_MessageObject_TranslateWrapRequest(uint16_t magic,
     WH_T16(magic, dest, src, keySz);
     WH_T16(magic, dest, src, access);
     WH_T16(magic, dest, src, flags);
+    WH_T16(magic, dest, src, ownerId);
     /* Label is just a byte array, no translation needed */
     if (src != dest) {
         memcpy(dest->label, src->label, WH_NVM_LABEL_LEN);

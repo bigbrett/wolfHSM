@@ -5565,7 +5565,7 @@ int whTest_CryptoKeyUsagePolicies(whClientContext* client, WC_RNG* rng)
                 ret = wh_Client_ObjectWrap(client, WH_KEYTYPE_CRYPTO, kekId,
                                         WC_CIPHER_AES_GCM, dataKey,
                                         sizeof(dataKey), WH_NVM_ACCESS_ANY,
-                                        WH_NVM_FLAGS_NONE, NULL, 0,
+                                        WH_NVM_FLAGS_NONE, 0, NULL, 0,
                                         wrappedKey, &wrappedKeySz);
                 if (ret == WH_ERROR_USAGE) {
                     WH_TEST_PRINT("    PASS: Correctly denied key wrapping\n");

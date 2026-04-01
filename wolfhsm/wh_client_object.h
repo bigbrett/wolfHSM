@@ -108,6 +108,7 @@ int wh_Client_ObjectWrapRequest(whClientContext* c, uint16_t type,
     uint16_t serverKekId, uint16_t cipherType,
     const uint8_t* in, uint16_t inSz,
     whNvmAccess access, whNvmFlags flags,
+    uint16_t ownerId,
     const uint8_t* label, uint16_t labelSz);
 int wh_Client_ObjectWrapResponse(whClientContext* c, int32_t* out_rc,
     uint8_t* wrappedOut, uint16_t* wrappedOutSz);
@@ -115,6 +116,7 @@ int wh_Client_ObjectWrap(whClientContext* c, uint16_t type,
     uint16_t serverKekId, uint16_t cipherType,
     const uint8_t* in, uint16_t inSz,
     whNvmAccess access, whNvmFlags flags,
+    uint16_t ownerId,
     const uint8_t* label, uint16_t labelSz,
     uint8_t* wrappedOut, uint16_t* wrappedOutSz);
 

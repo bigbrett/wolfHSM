@@ -272,7 +272,9 @@ typedef struct {
     uint16_t keySz;
     uint16_t access;
     uint16_t flags;
-    uint8_t  WH_PAD[4];
+    uint16_t ownerId;  /* Client-format ID indicating ownership (use
+                        * WH_KEYID_CLIENT_GLOBAL_FLAG for global) */
+    uint8_t  WH_PAD[2];
     uint8_t  label[WH_NVM_LABEL_LEN];
     /* Key data follows */
 } whMessageObject_WrapRequest;

@@ -769,6 +769,7 @@ int wh_Client_ObjectWrapRequest(whClientContext* c, uint16_t type,
                                  uint16_t serverKekId, uint16_t cipherType,
                                  const uint8_t* in, uint16_t inSz,
                                  whNvmAccess access, whNvmFlags flags,
+                                 uint16_t ownerId,
                                  const uint8_t* label, uint16_t labelSz)
 {
     whMessageObject_WrapRequest* req = NULL;
@@ -793,6 +794,7 @@ int wh_Client_ObjectWrapRequest(whClientContext* c, uint16_t type,
     req->keySz       = inSz;
     req->access      = access;
     req->flags       = flags;
+    req->ownerId     = ownerId;
     if (label != NULL) {
         capSz = (labelSz > WH_NVM_LABEL_LEN) ? WH_NVM_LABEL_LEN : labelSz;
         memcpy(req->label, label, capSz);
@@ -854,6 +856,7 @@ int wh_Client_ObjectWrap(whClientContext* c, uint16_t type,
                           uint16_t serverKekId, uint16_t cipherType,
                           const uint8_t* in, uint16_t inSz,
                           whNvmAccess access, whNvmFlags flags,
+                          uint16_t ownerId,
                           const uint8_t* label, uint16_t labelSz,
                           uint8_t* wrappedOut, uint16_t* wrappedOutSz)
 {
@@ -861,7 +864,7 @@ int wh_Client_ObjectWrap(whClientContext* c, uint16_t type,
 
     ret = wh_Client_ObjectWrapRequest(c, type, serverKekId, cipherType,
                                        in, inSz, access, flags,
-                                       label, labelSz);
+                                       ownerId, label, labelSz);
     if (ret == WH_ERROR_OK) {
         do {
             ret = wh_Client_ObjectWrapResponse(c, NULL, wrappedOut,

@@ -116,7 +116,7 @@ static int _AesGcm_TestKeyWrap(whClientContext* client, WC_RNG* rng)
 
     ret = wh_Client_ObjectWrap(client, WH_KEYTYPE_CRYPTO, WH_TEST_KEKID,
                                WC_CIPHER_AES_GCM, plainKey, sizeof(plainKey),
-                               WH_NVM_ACCESS_ANY, wrapFlags, wrapLabel,
+                               WH_NVM_ACCESS_ANY, wrapFlags, 0, wrapLabel,
                                WH_NVM_LABEL_LEN, wrappedKey, &wrappedKeySz);
     if (ret != 0) {
         WH_ERROR_PRINT("Failed to wh_Client_AesGcmKeyWrap %d\n", ret);
