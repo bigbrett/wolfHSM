@@ -47,7 +47,6 @@
 #include "wolfhsm/wh_server.h"
 #include "wolfhsm/wh_server_nvm.h"
 #include "wolfhsm/wh_server_crypto.h"
-#include "wolfhsm/wh_server_keystore.h"
 #include "wolfhsm/wh_server_counter.h"
 #include "wolfhsm/wh_server_object.h"
 
@@ -339,11 +338,6 @@ int wh_Server_HandleRequestMessage(whServerContext* server)
             break;
 
 #ifndef WOLFHSM_CFG_NO_CRYPTO
-        case WH_MESSAGE_GROUP_KEY:
-            rc = wh_Server_HandleKeyRequest(server, magic, action, size, data,
-                                            &size, data);
-            break;
-
         case WH_MESSAGE_GROUP_CRYPTO:
             rc = wh_Server_HandleCryptoRequest(server, magic, action, seq, size,
                                                data, &size, data);

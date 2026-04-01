@@ -66,6 +66,7 @@
 #include "wolfhsm/wh_message_crypto.h"
 
 #include "wolfhsm/wh_client.h"
+#include "wolfhsm/wh_client_object.h"
 #include "wolfhsm/wh_client_crypto.h"
 
 /** Forward declarations */
@@ -1516,8 +1517,9 @@ int wh_Client_EccImportKey(whClientContext* ctx, ecc_key* key,
            buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Cache the key and get the keyID */
-        ret = wh_Client_KeyCache(ctx, flags, label, label_len, buffer,
-                                 buffer_len, &key_id);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
+                                 &key_id, WH_NVM_ACCESS_ANY, flags,
+                                 buffer, buffer_len, label, label_len);
         if ((ret == WH_ERROR_OK) && (inout_keyId != NULL)) {
             *inout_keyId = key_id;
         }
@@ -1542,7 +1544,7 @@ int wh_Client_EccExportKey(whClientContext* ctx, whKeyId keyId, ecc_key* key,
 
     /* Now export the key from the server */
     ret =
-        wh_Client_KeyExport(ctx, keyId, label, label_len, buffer, &buffer_len);
+        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label, label_len, buffer, &buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Update the key structure */
         ret = wh_Crypto_EccDeserializeKeyDer(buffer, buffer_len, key);
@@ -1808,10 +1810,10 @@ int wh_Client_EccSharedSecret(whClientContext* ctx, ecc_key* priv_key,
 
     /* Evict the keys manually on error */
     if (pub_evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, pub_key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, pub_key_id);
     }
     if (prv_evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, prv_key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, prv_key_id);
     }
     WH_DEBUG_CLIENT_VERBOSE("ret:%d\n", ret);
     return ret;
@@ -1950,7 +1952,7 @@ int wh_Client_EccSign(whClientContext* ctx, ecc_key* key, const uint8_t* hash,
     }
     /* Evict the key manually on error */
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
     WH_DEBUG_CLIENT_VERBOSE("ret:%d\n", ret);
     return ret;
@@ -2097,7 +2099,7 @@ int wh_Client_EccVerify(whClientContext* ctx, ecc_key* key, const uint8_t* sig,
     }
     /* Evict the key manually on error */
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
     WH_DEBUG_CLIENT_VERBOSE("ret:%d\n", ret);
     return ret;
@@ -2202,8 +2204,9 @@ int wh_Client_Curve25519ImportKey(whClientContext* ctx, curve25519_key* key,
     ret        = wh_Crypto_Curve25519SerializeKey(key, buffer, &buffer_len);
     if (ret == 0) {
         /* Cache the key and get the keyID */
-        ret = wh_Client_KeyCache(ctx, flags, label, label_len, buffer,
-                                 buffer_len, &key_id);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
+                                 &key_id, WH_NVM_ACCESS_ANY, flags,
+                                 buffer, buffer_len, label, label_len);
         if (inout_keyId != NULL) {
             *inout_keyId = key_id;
         }
@@ -2228,7 +2231,7 @@ int wh_Client_Curve25519ExportKey(whClientContext* ctx, whKeyId keyId,
 
     /* Now export the key from the server */
     ret =
-        wh_Client_KeyExport(ctx, keyId, label, label_len, buffer, &buffer_len);
+        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label, label_len, buffer, &buffer_len);
     if (ret == 0) {
         /* Update the key structure */
         ret = wh_Crypto_Curve25519DeserializeKey(buffer, buffer_len, key);
@@ -2481,10 +2484,10 @@ int wh_Client_Curve25519SharedSecret(whClientContext* ctx,
 
     /* Evict the keys manually on error */
     if (pub_evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, pub_key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, pub_key_id);
     }
     if (prv_evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, prv_key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, prv_key_id);
     }
     WH_DEBUG_CLIENT_VERBOSE("ret:%d\n", ret);
     return ret;
@@ -2531,8 +2534,9 @@ int wh_Client_Ed25519ImportKey(whClientContext* ctx, ed25519_key* key,
     ret =
         wh_Crypto_Ed25519SerializeKeyDer(key, buffer_len, buffer, &buffer_len);
     if (ret == WH_ERROR_OK) {
-        ret = wh_Client_KeyCache(ctx, flags, label, label_len, buffer,
-                                 buffer_len, &key_id);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
+                                 &key_id, WH_NVM_ACCESS_ANY, flags,
+                                 buffer, buffer_len, label, label_len);
         if ((ret == WH_ERROR_OK) && (inout_keyId != NULL)) {
             *inout_keyId = key_id;
         }
@@ -2554,7 +2558,7 @@ int wh_Client_Ed25519ExportKey(whClientContext* ctx, whKeyId keyId,
     }
 
     ret =
-        wh_Client_KeyExport(ctx, keyId, label, label_len, buffer, &buffer_len);
+        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label, label_len, buffer, &buffer_len);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_Ed25519DeserializeKeyDer(buffer, buffer_len, key);
         if (ret == 0) {
@@ -2800,7 +2804,7 @@ int wh_Client_Ed25519Sign(whClientContext* ctx, ed25519_key* key,
     }
 
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
 
     /* map ASN key decoding errors to WH_ERROR_BADARGS */
@@ -2927,7 +2931,7 @@ int wh_Client_Ed25519Verify(whClientContext* ctx, ed25519_key* key,
     }
 
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
 
     /* map ASN key decoding errors to WH_ERROR_BADARGS */
@@ -3075,7 +3079,7 @@ int wh_Client_Ed25519SignDma(whClientContext* ctx, ed25519_key* key,
     }
 
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
 
     /* map ASN key decoding errors to WH_ERROR_BADARGS */
@@ -3220,7 +3224,7 @@ int wh_Client_Ed25519VerifyDma(whClientContext* ctx, ed25519_key* key,
     }
 
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
 
     /* map ASN key decoding errors to WH_ERROR_BADARGS */
@@ -3271,8 +3275,9 @@ int wh_Client_RsaImportKey(whClientContext* ctx, const RsaKey* key,
     ret = wh_Crypto_RsaSerializeKeyDer(key, sizeof(keyDer), keyDer, &derSize);
     if (ret == WH_ERROR_OK) {
         /* Cache the key and get the keyID */
-        ret = wh_Client_KeyCache(ctx, flags, label, label_len, keyDer, derSize,
-                                 &key_id);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
+                                 &key_id, WH_NVM_ACCESS_ANY, flags,
+                                 keyDer, derSize, label, label_len);
         if (inout_keyId != NULL) {
             *inout_keyId = key_id;
         }
@@ -3294,7 +3299,7 @@ int wh_Client_RsaExportKey(whClientContext* ctx, whKeyId keyId, RsaKey* key,
     }
 
     /* Now export the key from the server */
-    ret = wh_Client_KeyExport(ctx, keyId, keyLabel, sizeof(keyLabel), keyDer,
+    ret = wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, keyLabel, sizeof(keyLabel), keyDer,
                               &derSize);
     if (ret == WH_ERROR_OK) {
         ret = wh_Crypto_RsaDeserializeKeyDer(derSize, keyDer, key);
@@ -3573,7 +3578,7 @@ int wh_Client_RsaFunction(whClientContext* ctx, RsaKey* key, int rsa_type,
     }
     /* Evict the key manually on error */
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
     WH_DEBUG_CLIENT_VERBOSE("ret:%d\n", ret);
     return ret;
@@ -3673,7 +3678,7 @@ int wh_Client_RsaGetSize(whClientContext* ctx, const RsaKey* key, int* out_size)
     /* Evict the key manually on error */
     if (evict != 0) {
         WH_DEBUG_CLIENT_VERBOSE("Evicting temp key %x\n", key_id);
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
     WH_DEBUG_CLIENT_VERBOSE("ret:%d\n", ret);
     return ret;
@@ -5500,8 +5505,9 @@ int wh_Client_MlDsaImportKey(whClientContext* ctx, MlDsaKey* key,
            buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Cache the key and get the keyID */
-        ret = wh_Client_KeyCache(ctx, flags, label, label_len, buffer,
-                                 buffer_len, &key_id);
+        ret = wh_Client_ObjectCacheAdd(ctx, WH_KEYTYPE_CRYPTO,
+                                 &key_id, WH_NVM_ACCESS_ANY, flags,
+                                 buffer, buffer_len, label, label_len);
         if ((ret == WH_ERROR_OK) && (inout_keyId != NULL)) {
             *inout_keyId = key_id;
         }
@@ -5526,7 +5532,7 @@ int wh_Client_MlDsaExportKey(whClientContext* ctx, whKeyId keyId, MlDsaKey* key,
 
     /* Now export the DER key from the server */
     ret =
-        wh_Client_KeyExport(ctx, keyId, label, label_len, buffer, &buffer_len);
+        wh_Client_ObjectCacheExport(ctx, WH_KEYTYPE_CRYPTO, keyId, label, label_len, buffer, &buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Update the key structure */
         ret = wh_Crypto_MlDsaDeserializeKeyDer(buffer, buffer_len, key);
@@ -5801,7 +5807,7 @@ int wh_Client_MlDsaSign(whClientContext* ctx, const byte* in, word32 in_len,
         }
     } /* Evict the key manually on error */
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
     WH_DEBUG_CLIENT_VERBOSE("ret:%d\n", ret);
     return ret;
@@ -5932,7 +5938,7 @@ int wh_Client_MlDsaVerify(whClientContext* ctx, const byte* sig, word32 sig_len,
     }
     /* Evict the key manually on error */
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
     WH_DEBUG_CLIENT_VERBOSE("ret:%d\n", ret);
     return ret;
@@ -5975,8 +5981,10 @@ int wh_Client_MlDsaImportKeyDma(whClientContext* ctx, MlDsaKey* key,
                                          &buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Cache the key using DMA and get the keyID */
-        ret = wh_Client_KeyCacheDma(ctx, flags, label, label_len, buffer,
-                                    buffer_len, &key_id);
+        ret = wh_Client_ObjectCacheAddDma(ctx, WH_KEYTYPE_CRYPTO,
+                                    key_id, WH_NVM_ACCESS_ANY, flags,
+                                    buffer, buffer_len, label, label_len,
+                                    &key_id);
         if ((ret == WH_ERROR_OK) && (inout_keyId != NULL)) {
             *inout_keyId = key_id;
         }
@@ -5998,7 +6006,7 @@ int wh_Client_MlDsaExportKeyDma(whClientContext* ctx, whKeyId keyId,
     }
 
     /* Export the key from server using DMA */
-    ret = wh_Client_KeyExportDma(ctx, keyId, buffer, buffer_len, label,
+    ret = wh_Client_ObjectCacheExportDma(ctx, WH_KEYTYPE_CRYPTO, keyId, buffer, buffer_len, label,
                                  label_len, &buffer_len);
     if (ret == WH_ERROR_OK) {
         /* Deserialize the key */
@@ -6277,7 +6285,7 @@ int wh_Client_MlDsaSignDma(whClientContext* ctx, const byte* in, word32 in_len,
     }
     /* Evict the key manually on error if needed */
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
 
     return ret;
@@ -6421,7 +6429,7 @@ int wh_Client_MlDsaVerifyDma(whClientContext* ctx, const byte* sig,
 
     /* Evict the key manually on error if needed */
     if (evict != 0) {
-        (void)wh_Client_KeyEvict(ctx, key_id);
+        (void)wh_Client_ObjectCacheEvict(ctx, WH_KEYTYPE_CRYPTO, key_id);
     }
 
     return ret;
