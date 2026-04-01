@@ -37,7 +37,6 @@ enum WH_MESSAGE_ENUM {
 
     WH_MESSAGE_GROUP_COMM       = 0x0100, /* Messages used for comms */
     WH_MESSAGE_GROUP_NVM        = 0x0200, /* NVM functions */
-    WH_MESSAGE_GROUP_KEY        = 0x0300, /* Key/counter management */
     WH_MESSAGE_GROUP_CRYPTO     = 0x0400, /* wolfCrypt CryptoCb */
     WH_MESSAGE_GROUP_IMAGE      = 0x0500, /* Image/boot management */
     WH_MESSAGE_GROUP_PKCS11     = 0x0600, /* PKCS11 protocol */
@@ -51,23 +50,6 @@ enum WH_MESSAGE_ENUM {
 
     WH_MESSAGE_ACTION_MASK = 0x00FF, /* 255 subtypes per group*/
     WH_MESSAGE_ACTION_NONE = 0x0000, /* No action. Invalid. */
-};
-
-/* keystore actions */
-enum WH_KEY_ENUM {
-    WH_KEY_CACHE,
-    WH_KEY_EVICT,
-    WH_KEY_EXPORT,
-    WH_KEY_COMMIT,
-    WH_KEY_ERASE,
-    WH_KEY_REVOKE,
-    WH_KEY_CACHE_DMA,
-    WH_KEY_EXPORT_DMA,
-    WH_KEY_KEYWRAP,
-    WH_KEY_KEYUNWRAPEXPORT,
-    WH_KEY_KEYUNWRAPCACHE,
-    WH_KEY_DATAWRAP,
-    WH_KEY_DATAUNWRAP,
 };
 
 /* SHE actions */

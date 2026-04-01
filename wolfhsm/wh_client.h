@@ -441,7 +441,11 @@ int wh_Client_EchoResponse(whClientContext* c, uint16_t* out_size, void* data);
 int wh_Client_Echo(whClientContext* c, uint16_t snd_len, const void* snd_data,
                    uint16_t* out_rcv_len, void* rcv_data);
 
-/** Key functions
+#ifdef WOLFHSM_CFG_API_LEGACY_KEYSTORE
+/** Legacy Key functions
+ *
+ * These functions are thin shims over the new Object API, provided for
+ * backwards compatibility.  Define WOLFHSM_CFG_API_LEGACY_KEYSTORE to enable.
  *
  * For client-side key data to be used, it must first be brought into the key
  * cache (RAM) of the HSM server.  Key cache requests instruct the server to
@@ -1097,6 +1101,7 @@ int wh_Client_DataUnwrap(whClientContext* ctx, enum wc_CipherType cipherType,
                          uint16_t serverKeyId, void* wrappedDataIn,
                          uint32_t wrappedDataInSz, void* dataOut,
                          uint32_t* dataInOutSz);
+#endif /* WOLFHSM_CFG_API_LEGACY_KEYSTORE */
 
 /* Counter functions */
 int wh_Client_CounterInitRequest(whClientContext* c, whNvmId counterId,
@@ -2574,10 +2579,14 @@ int wh_Client_CertVerifyAcertDma(whClientContext* c, const void* cert,
  */
 #define WH_CLIENT_KEYID_MAKE_GLOBAL(_id) ((_id) | WH_KEYID_CLIENT_GLOBAL_FLAG)
 
+#ifdef WOLFHSM_CFG_API_LEGACY_KEYSTORE
 /* Deprecated: Wrapped key ID macros (used by legacy keywrap API) */
 #define WH_CLIENT_KEYID_MAKE_WRAPPED(_id) ((_id) | WH_KEYID_CLIENT_WRAPPED_FLAG)
 #define WH_CLIENT_KEYID_MAKE_WRAPPED_GLOBAL(_id) \
     ((_id) | WH_KEYID_CLIENT_GLOBAL_FLAG | WH_KEYID_CLIENT_WRAPPED_FLAG)
+#endif /* WOLFHSM_CFG_API_LEGACY_KEYSTORE */
+
+/* Construct a wrapped key metadata ID with the given client/owner and ID */
 #define WH_CLIENT_KEYID_MAKE_WRAPPED_META(_clientId, _id) \
     WH_MAKE_KEYID(WH_KEYTYPE_WRAPPED, (_clientId), (_id))
 

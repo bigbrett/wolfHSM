@@ -43,6 +43,12 @@
  *  WOLFHSM_CFG_KEYWRAP - If defined, include the key wrap functionality
  *      Default: Not defined
  *
+ *  WOLFHSM_CFG_API_LEGACY_KEYSTORE - If defined, include the legacy
+ *  wh_Client_Key* / wh_Client_DataWrap / wh_Client_DataUnwrap API as thin
+ *  shims over the new Object API.  Enables source compatibility for existing
+ *  client code.
+ *      Default: Not defined
+ *
  *  WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE - The maximum size (in bytes) of a key that
  *  can be wrapped
  *      Default: 512

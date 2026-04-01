@@ -46,6 +46,7 @@
 #include "wh_test_timeout.h"
 #include "wh_test_dma.h"
 #include "wh_test_object.h"
+#include "wh_test_legacy_keystore.h"
 
 #if defined(WOLFHSM_CFG_CERTIFICATE_MANAGER)
 #include "wh_test_cert.h"
@@ -135,6 +136,10 @@ int whTest_Unit(void)
 
 #endif /* !WOLFHSM_CFG_NO_CRYPTO */
 
+#if defined(WOLFHSM_CFG_API_LEGACY_KEYSTORE)
+    WH_TEST_ASSERT(0 == whTest_LegacyKeystore());
+#endif
+
 #if defined(WOLFHSM_CFG_ENABLE_TIMEOUT) && defined(WOLFHSM_CFG_TEST_POSIX)
     WH_TEST_ASSERT(0 == whTest_TimeoutPosix());
 #endif
@@ -163,6 +168,10 @@ int whTest_ClientConfig(whClientConfig* clientCfg)
 #endif /*WOLFHSM_CFG_KEYWRAP */
 
 #endif /* !WOLFHSM_CFG_NO_CRYPTO */
+
+#if defined(WOLFHSM_CFG_API_LEGACY_KEYSTORE)
+    WH_TEST_RETURN_ON_FAIL(whTest_LegacyKeystoreClientConfig(clientCfg));
+#endif /* WOLFHSM_CFG_API_LEGACY_KEYSTORE */
 
 #if defined(WOLFHSM_CFG_SHE_EXTENSION)
     WH_TEST_RETURN_ON_FAIL(whTest_SheClientConfig(clientCfg));

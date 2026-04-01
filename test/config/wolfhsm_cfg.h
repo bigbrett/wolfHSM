@@ -59,6 +59,9 @@
 #define WOLFHSM_CFG_KEYWRAP
 #endif
 
+/* Enable legacy keystore client API shims */
+#define WOLFHSM_CFG_API_LEGACY_KEYSTORE
+
 /* Test log-based NVM flash backend */
 #define WOLFHSM_CFG_SERVER_NVM_FLASH_LOG
 

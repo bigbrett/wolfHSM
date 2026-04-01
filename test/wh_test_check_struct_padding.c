@@ -56,19 +56,6 @@ whMessageNvm_AddObjectDmaRequest whMessageNvm_AddObjectDmaRequest_test;
 whMessageNvm_ReadDmaRequest      whMessageNvm_ReadDmaRequest_test;
 #endif
 
-/* Include keystore message header for new keystore message structures */
-#include "wolfhsm/wh_message_keystore.h"
-whMessageKeystore_CacheRequest   keyCacheReq;
-whMessageKeystore_EvictRequest   keyEvictReq;
-whMessageKeystore_CommitRequest  keyCommitReq;
-whMessageKeystore_ExportRequest  keyExportReq;
-whMessageKeystore_EraseRequest   keyEraseReq;
-whMessageKeystore_CacheResponse  keyCacheRes;
-whMessageKeystore_EvictResponse  keyEvictRes;
-whMessageKeystore_CommitResponse keyCommitRes;
-whMessageKeystore_ExportResponse keyExportRes;
-whMessageKeystore_EraseResponse  keyEraseRes;
-
 /* Include counter message header for new counter message structures */
 #include "wolfhsm/wh_message_counter.h"
 whMessageCounter_InitRequest       counterInitReq;
@@ -79,12 +66,6 @@ whMessageCounter_InitResponse      counterInitRes;
 whMessageCounter_IncrementResponse counterIncrementRes;
 whMessageCounter_ReadResponse      counterReadRes;
 whMessageCounter_DestroyResponse   counterDestroyRes;
-
-/* DMA keystore messages */
-whMessageKeystore_CacheDmaRequest   keyCacheDmaReq;
-whMessageKeystore_CacheDmaResponse  keyCacheDmaRes;
-whMessageKeystore_ExportDmaRequest  keyExportDmaReq;
-whMessageKeystore_ExportDmaResponse keyExportDmaRes;
 
 #ifndef WOLFHSM_CFG_NO_CRYPTO
 /* Include crypto message header for new crypto message structures */

@@ -43,7 +43,6 @@
 #include "wolfhsm/wh_client.h"
 #include "wolfhsm/wh_client_object.h"
 #include "wolfhsm/wh_server.h"
-#include "wolfhsm/wh_server_keystore.h"
 #include "wolfhsm/wh_nvm.h"
 #include "wolfhsm/wh_nvm_flash.h"
 #include "wolfhsm/wh_flash_ramsim.h"

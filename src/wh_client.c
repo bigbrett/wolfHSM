@@ -55,9 +55,9 @@
 #include "wolfhsm/wh_message.h"
 #include "wolfhsm/wh_message_comm.h"
 #include "wolfhsm/wh_message_customcb.h"
-#include "wolfhsm/wh_message_keystore.h"
 #include "wolfhsm/wh_message_counter.h"
 #include "wolfhsm/wh_client.h"
+#include "wolfhsm/wh_client_object.h"
 
 #ifndef WOLFHSM_CFG_NO_CRYPTO
 const int WH_DEV_IDS_ARRAY[WH_NUM_DEVIDS] = {
@@ -676,50 +676,27 @@ int wh_Client_CustomCbCheckRegistered(whClientContext* c, uint16_t id, int* resp
 }
 
 
+#ifdef WOLFHSM_CFG_API_LEGACY_KEYSTORE
+/*
+ * Legacy keystore client API shims.
+ *
+ * These functions delegate to the new Object API while preserving the old
+ * function signatures for backwards compatibility.
+ */
+
 int wh_Client_KeyCacheRequest_ex(whClientContext* c, uint32_t flags,
-                                 uint8_t* label, uint16_t labelSz, const uint8_t* in,
-                                 uint16_t inSz, uint16_t keyId)
+                                 uint8_t* label, uint16_t labelSz,
+                                 const uint8_t* in, uint16_t inSz,
+                                 uint16_t keyId)
 {
-    whMessageKeystore_CacheRequest* req = NULL;
-    uint8_t*                        packIn;
-    uint16_t                        capSz;
-
-    if (c == NULL || in == NULL || inSz == 0 ||
-        sizeof(*req) + inSz > WOLFHSM_CFG_COMM_DATA_LEN) {
-        return WH_ERROR_BADARGS;
-    }
-
-    req = (whMessageKeystore_CacheRequest*)wh_CommClient_GetDataPtr(c->comm);
-    if (req == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-    memset(req, 0, sizeof(*req));
-    packIn = (uint8_t*)(req + 1);
-    req->id    = keyId;
-    req->flags = flags;
-    req->sz    = inSz;
-
-    if (label == NULL) {
-        req->labelSz = 0;
-    }
-    else {
-        /* write label */
-        capSz = (labelSz > WH_NVM_LABEL_LEN) ? WH_NVM_LABEL_LEN : labelSz;
-        req->labelSz = capSz;
-        memcpy(req->label, label, capSz);
-    }
-
-    /* write in */
-    memcpy(packIn, in, inSz);
-
-    /* write request */
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_KEY, WH_KEY_CACHE,
-                                 sizeof(*req) + inSz, (uint8_t*)req);
+    return wh_Client_ObjectCacheAddRequest(c, WH_KEYTYPE_CRYPTO, keyId,
+                                           WH_NVM_ACCESS_ANY, flags, in, inSz,
+                                           label, labelSz);
 }
 
 int wh_Client_KeyCacheRequest(whClientContext* c, uint32_t flags,
-                              uint8_t* label, uint16_t labelSz, const uint8_t* in,
-                              uint16_t inSz)
+                              uint8_t* label, uint16_t labelSz,
+                              const uint8_t* in, uint16_t inSz)
 {
     return wh_Client_KeyCacheRequest_ex(c, flags, label, labelSz, in, inSz,
                                         WH_KEYID_ERASED);
@@ -727,355 +704,252 @@ int wh_Client_KeyCacheRequest(whClientContext* c, uint32_t flags,
 
 int wh_Client_KeyCacheResponse(whClientContext* c, uint16_t* keyId)
 {
-    uint16_t                        group;
-    uint16_t                        action;
-    uint16_t                        size;
-    int                             ret;
-    whMessageKeystore_CacheResponse *resp = NULL;
-
-    if (c == NULL || keyId == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    resp = (whMessageKeystore_CacheResponse*)wh_CommClient_GetDataPtr(c->comm);
-    if (resp == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
-    if (ret == WH_ERROR_OK) {
-        if (resp->rc != 0) {
-            ret = resp->rc;
-        }
-        else {
-            *keyId = resp->id;
-        }
-    }
-
-    return ret;
+    return wh_Client_ObjectCacheAddResponse(c, keyId);
 }
 
 int wh_Client_KeyCache(whClientContext* c, uint32_t flags, uint8_t* label,
                        uint16_t labelSz, const uint8_t* in, uint16_t inSz,
                        uint16_t* keyId)
 {
-    int ret = WH_ERROR_OK;
-
-    ret = wh_Client_KeyCacheRequest_ex(c, flags, label, labelSz, in, inSz,
-                                       *keyId);
-
-    if (ret == 0) {
-        do {
-            ret = wh_Client_KeyCacheResponse(c, keyId);
-        } while (ret == WH_ERROR_NOTREADY);
-    }
-
-    WH_DEBUG_CLIENT_VERBOSE("label:%.*s key_id:%x ret:%d \n", labelSz,
-           label, *keyId, ret);
+    uint16_t id = (keyId != NULL) ? *keyId : WH_KEYID_ERASED;
+    int ret = wh_Client_ObjectCacheAdd(c, WH_KEYTYPE_CRYPTO, &id,
+                                       WH_NVM_ACCESS_ANY, flags, in, inSz,
+                                       label, labelSz);
+    if (ret == WH_ERROR_OK && keyId != NULL)
+        *keyId = id;
     return ret;
 }
 
 int wh_Client_KeyEvictRequest(whClientContext* c, uint16_t keyId)
 {
-    whMessageKeystore_EvictRequest* req = NULL;
-
-    if (c == NULL || keyId == WH_KEYID_ERASED) {
-        return WH_ERROR_BADARGS;
-    }
-
-    req = (whMessageKeystore_EvictRequest*)wh_CommClient_GetDataPtr(c->comm);
-    if (req == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-    req->id = keyId;
-
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_KEY, WH_KEY_EVICT,
-                                 sizeof(*req), (uint8_t*)req);
+    return wh_Client_ObjectCacheEvictRequest(c, WH_KEYTYPE_CRYPTO, keyId);
 }
 
 int wh_Client_KeyEvictResponse(whClientContext* c)
 {
-    uint16_t                         group;
-    uint16_t                         action;
-    uint16_t                         size;
-    int                              ret;
-    whMessageKeystore_EvictResponse resp;
-
-    if (c == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)&resp);
-
-    if (ret == 0) {
-        if (resp.rc != 0) {
-            ret = resp.rc;
-        }
-    }
-
-    return ret;
+    return wh_Client_ObjectCacheEvictResponse(c, NULL);
 }
 
 int wh_Client_KeyEvict(whClientContext* c, uint16_t keyId)
 {
-    int ret;
-    ret = wh_Client_KeyEvictRequest(c, keyId);
-    if (ret == 0) {
-        do {
-            ret = wh_Client_KeyEvictResponse(c);
-        } while (ret == WH_ERROR_NOTREADY);
-    }
-
-    WH_DEBUG_CLIENT_VERBOSE("key_id:%x ret:%d \n", keyId, ret);
-    return ret;
+    return wh_Client_ObjectCacheEvict(c, WH_KEYTYPE_CRYPTO, keyId);
 }
 
 int wh_Client_KeyExportRequest(whClientContext* c, whKeyId keyId)
 {
-    whMessageKeystore_ExportRequest* req = NULL;
-
-    if (c == NULL || keyId == WH_KEYID_ERASED) {
-        return WH_ERROR_BADARGS;
-    }
-
-    req = (whMessageKeystore_ExportRequest*)wh_CommClient_GetDataPtr(c->comm);
-    if (req == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-    req->id = keyId;
-
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_KEY, WH_KEY_EXPORT,
-                                 sizeof(*req), (uint8_t*)req);
+    return wh_Client_ObjectCacheExportRequest(c, WH_KEYTYPE_CRYPTO, keyId);
 }
 
 int wh_Client_KeyExportResponse(whClientContext* c, uint8_t* label,
-                                uint16_t labelSz, uint8_t* out, uint16_t* outSz)
+                                uint16_t labelSz, uint8_t* out,
+                                uint16_t* outSz)
 {
-    uint16_t                          group;
-    uint16_t                          action;
-    uint16_t                          size;
-    int                               ret;
-    whMessageKeystore_ExportResponse *resp = NULL;
-    uint8_t*                          packOut;
-
-    if (c == NULL || outSz == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    resp = (whMessageKeystore_ExportResponse*)wh_CommClient_GetDataPtr(c->comm);
-    if (resp == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-    packOut = (uint8_t*)(resp + 1);
-
-    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
-    if (ret == WH_ERROR_OK) {
-        if (resp->rc != 0) {
-            ret = resp->rc;
-        }
-        else {
-            if (out == NULL) {
-                *outSz = resp->len;
-            }
-            else if (*outSz < resp->len) {
-                ret = WH_ERROR_ABORTED;
-            }
-            else {
-                memcpy(out, packOut, resp->len);
-                *outSz = resp->len;
-            }
-            if (label != NULL) {
-                if (labelSz > sizeof(resp->label)) {
-                    memcpy(label, resp->label, WH_NVM_LABEL_LEN);
-                }
-                else
-                    memcpy(label, resp->label, labelSz);
-            }
-        }
-    }
-    return ret;
+    return wh_Client_ObjectCacheExportResponse(c, NULL, label, labelSz, out,
+                                               outSz);
 }
 
 int wh_Client_KeyExport(whClientContext* c, whKeyId keyId, uint8_t* label,
                         uint16_t labelSz, uint8_t* out, uint16_t* outSz)
 {
-    int ret;
-    ret = wh_Client_KeyExportRequest(c, keyId);
-    if (ret == 0) {
-        do {
-            ret = wh_Client_KeyExportResponse(c, label, labelSz, out, outSz);
-        } while (ret == WH_ERROR_NOTREADY);
-    }
-    return ret;
+    return wh_Client_ObjectCacheExport(c, WH_KEYTYPE_CRYPTO, keyId, label,
+                                       labelSz, out, outSz);
 }
 
 int wh_Client_KeyCommitRequest(whClientContext* c, whNvmId keyId)
 {
-    whMessageKeystore_CommitRequest* req = NULL;
-
-    if (c == NULL || keyId == WH_KEYID_ERASED) {
-        return WH_ERROR_BADARGS;
-    }
-
-    req = (whMessageKeystore_CommitRequest*)wh_CommClient_GetDataPtr(c->comm);
-    if (req == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-    req->id = keyId;
-
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_KEY, WH_KEY_COMMIT,
-                                 sizeof(*req), (uint8_t*)req);
+    return wh_Client_ObjectCacheCommitRequest(c, WH_KEYTYPE_CRYPTO, keyId);
 }
 
 int wh_Client_KeyCommitResponse(whClientContext* c)
 {
-    uint16_t                          group;
-    uint16_t                          action;
-    uint16_t                          size;
-    int                               ret;
-    whMessageKeystore_CommitResponse* resp = NULL;
-
-    if (c == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    resp = (whMessageKeystore_CommitResponse*)wh_CommClient_GetDataPtr(c->comm);
-    if (resp == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    ret  = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
-    if (ret == WH_ERROR_OK) {
-        if (resp->rc != 0) {
-            ret = resp->rc;
-        }
-    }
-    return ret;
+    return wh_Client_ObjectCacheCommitResponse(c, NULL);
 }
 
 int wh_Client_KeyCommit(whClientContext* c, whNvmId keyId)
 {
-    int ret;
-    ret = wh_Client_KeyCommitRequest(c, keyId);
-    if (ret == 0) {
-        do {
-            ret = wh_Client_KeyCommitResponse(c);
-        } while (ret == WH_ERROR_NOTREADY);
-    }
-    return ret;
+    return wh_Client_ObjectCacheCommit(c, WH_KEYTYPE_CRYPTO, keyId);
 }
 
 int wh_Client_KeyEraseRequest(whClientContext* c, whNvmId keyId)
 {
-    whMessageKeystore_EraseRequest* req = NULL;
-
-    if (c == NULL || keyId == WH_KEYID_ERASED) {
-        return WH_ERROR_BADARGS;
-    }
-
-    req = (whMessageKeystore_EraseRequest*)wh_CommClient_GetDataPtr(c->comm);
-    if (req == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-    req->id = keyId;
-
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_KEY, WH_KEY_ERASE,
-                                 sizeof(*req), (uint8_t*)req);
+    return wh_Client_ObjectNvmDestroyRequest(c, WH_KEYTYPE_CRYPTO, keyId);
 }
 
 int wh_Client_KeyEraseResponse(whClientContext* c)
 {
-    uint16_t                         group;
-    uint16_t                         action;
-    uint16_t                         size;
-    int                              ret;
-    whMessageKeystore_EraseResponse* resp = NULL;
-
-    if (c == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    resp = (whMessageKeystore_EraseResponse*)wh_CommClient_GetDataPtr(c->comm);
-    if (resp == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    ret  = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
-    if (ret == 0) {
-        if (resp->rc != 0) {
-            ret = resp->rc;
-        }
-    }
-    return ret;
+    return wh_Client_ObjectNvmDestroyResponse(c, NULL);
 }
 
 int wh_Client_KeyErase(whClientContext* c, whNvmId keyId)
 {
-    int ret;
-    ret = wh_Client_KeyEraseRequest(c, keyId);
-    if (ret == 0) {
-        do {
-            ret = wh_Client_KeyEraseResponse(c);
-        } while (ret == WH_ERROR_NOTREADY);
-    }
-    return ret;
+    return wh_Client_ObjectNvmDestroy(c, WH_KEYTYPE_CRYPTO, keyId, NULL);
 }
 
 int wh_Client_KeyRevokeRequest(whClientContext* c, whNvmId keyId)
 {
-    whMessageKeystore_RevokeRequest* req = NULL;
-
-    if (c == NULL || keyId == WH_KEYID_ERASED) {
-        return WH_ERROR_BADARGS;
-    }
-
-    req = (whMessageKeystore_RevokeRequest*)wh_CommClient_GetDataPtr(c->comm);
-    if (req == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-    req->id = keyId;
-
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_KEY, WH_KEY_REVOKE,
-                                 sizeof(*req), (uint8_t*)req);
+    return wh_Client_ObjectCacheRevokeRequest(c, WH_KEYTYPE_CRYPTO, keyId);
 }
 
 int wh_Client_KeyRevokeResponse(whClientContext* c)
 {
-    uint16_t                          group;
-    uint16_t                          action;
-    uint16_t                          size;
-    int                               ret;
-    whMessageKeystore_RevokeResponse* resp = NULL;
-
-    if (c == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    resp = (whMessageKeystore_RevokeResponse*)wh_CommClient_GetDataPtr(c->comm);
-    if (resp == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
-    if (ret == 0) {
-        if (resp->rc != 0) {
-            ret = resp->rc;
-        }
-    }
-    return ret;
+    return wh_Client_ObjectCacheRevokeResponse(c, NULL);
 }
 
 int wh_Client_KeyRevoke(whClientContext* c, whKeyId keyId)
 {
-    int ret;
-    ret = wh_Client_KeyRevokeRequest(c, keyId);
-    if (ret == 0) {
-        do {
-            ret = wh_Client_KeyRevokeResponse(c);
-        } while (ret == WH_ERROR_NOTREADY);
-    }
+    return wh_Client_ObjectCacheRevoke(c, WH_KEYTYPE_CRYPTO, keyId);
+}
+
+#ifdef WOLFHSM_CFG_KEYWRAP
+
+int wh_Client_KeyWrapRequest(whClientContext* ctx,
+                             enum wc_CipherType cipherType,
+                             uint16_t serverKeyId, void* key, uint16_t keySz,
+                             whNvmMetadata* metadata)
+{
+    if (ctx == NULL || metadata == NULL)
+        return WH_ERROR_BADARGS;
+    return wh_Client_ObjectWrapRequest(ctx, WH_KEYTYPE_CRYPTO, serverKeyId,
+                                       cipherType, key, keySz,
+                                       metadata->access, metadata->flags,
+                                       WH_KEYID_USER(metadata->id),
+                                       metadata->label,
+                                       sizeof(metadata->label));
+}
+
+int wh_Client_KeyWrapResponse(whClientContext* ctx,
+                              enum wc_CipherType cipherType,
+                              void* wrappedKeyOut,
+                              uint16_t* wrappedKeyInOutSz)
+{
+    (void)cipherType;
+    return wh_Client_ObjectWrapResponse(ctx, NULL, wrappedKeyOut,
+                                        wrappedKeyInOutSz);
+}
+
+int wh_Client_KeyWrap(whClientContext* ctx, enum wc_CipherType cipherType,
+                      uint16_t serverKeyId, void* keyIn, uint16_t keySz,
+                      whNvmMetadata* metadataIn, void* wrappedKeyOut,
+                      uint16_t* wrappedKeyInOutSz)
+{
+    if (ctx == NULL || metadataIn == NULL)
+        return WH_ERROR_BADARGS;
+    return wh_Client_ObjectWrap(ctx, WH_KEYTYPE_CRYPTO, serverKeyId,
+                                cipherType, keyIn, keySz, metadataIn->access,
+                                metadataIn->flags,
+                                WH_KEYID_USER(metadataIn->id),
+                                metadataIn->label, sizeof(metadataIn->label),
+                                wrappedKeyOut, wrappedKeyInOutSz);
+}
+
+int wh_Client_KeyUnwrapAndExportRequest(whClientContext* ctx,
+                                        enum wc_CipherType cipherType,
+                                        uint16_t serverKeyId,
+                                        void* wrappedKeyIn,
+                                        uint16_t wrappedKeySz)
+{
+    return wh_Client_ObjectUnwrapExportRequest(ctx, WH_KEYTYPE_CRYPTO,
+                                               serverKeyId, cipherType,
+                                               wrappedKeyIn, wrappedKeySz);
+}
+
+int wh_Client_KeyUnwrapAndExportResponse(whClientContext* ctx,
+                                         enum wc_CipherType cipherType,
+                                         whNvmMetadata* metadataOut,
+                                         void* keyOut, uint16_t* keyInOutSz)
+{
+    (void)cipherType;
+    return wh_Client_ObjectUnwrapExportResponse(
+        ctx, NULL, keyOut, keyInOutSz,
+        metadataOut != NULL ? &metadataOut->access : NULL,
+        metadataOut != NULL ? &metadataOut->flags : NULL,
+        metadataOut != NULL ? metadataOut->label : NULL,
+        metadataOut != NULL ? (uint16_t)sizeof(metadataOut->label) : 0);
+}
+
+int wh_Client_KeyUnwrapAndExport(whClientContext* ctx,
+                                 enum wc_CipherType cipherType,
+                                 uint16_t serverKeyId, void* wrappedKeyIn,
+                                 uint16_t wrappedKeySz,
+                                 whNvmMetadata* metadataOut, void* keyOut,
+                                 uint16_t* keyInOutSz)
+{
+    return wh_Client_ObjectUnwrapExport(
+        ctx, WH_KEYTYPE_CRYPTO, serverKeyId, cipherType, wrappedKeyIn,
+        wrappedKeySz, keyOut, keyInOutSz,
+        metadataOut != NULL ? &metadataOut->access : NULL,
+        metadataOut != NULL ? &metadataOut->flags : NULL,
+        metadataOut != NULL ? metadataOut->label : NULL,
+        metadataOut != NULL ? (uint16_t)sizeof(metadataOut->label) : 0);
+}
+
+int wh_Client_KeyUnwrapAndCacheRequest(whClientContext* ctx,
+                                       enum wc_CipherType cipherType,
+                                       uint16_t serverKeyId,
+                                       void* wrappedKeyIn,
+                                       uint16_t wrappedKeySz)
+{
+    return wh_Client_ObjectUnwrapCacheRequest(ctx, WH_KEYTYPE_CRYPTO,
+                                              serverKeyId, cipherType,
+                                              wrappedKeyIn, wrappedKeySz,
+                                              WH_KEYID_ERASED);
+}
+
+int wh_Client_KeyUnwrapAndCacheResponse(whClientContext* ctx,
+                                        enum wc_CipherType cipherType,
+                                        uint16_t* keyIdOut)
+{
+    (void)cipherType;
+    return wh_Client_ObjectUnwrapCacheResponse(ctx, NULL, keyIdOut);
+}
+
+int wh_Client_KeyUnwrapAndCache(whClientContext* ctx,
+                                enum wc_CipherType cipherType,
+                                uint16_t serverKeyId, void* wrappedKeyIn,
+                                uint16_t wrappedKeySz, uint16_t* keyIdOut)
+{
+    return wh_Client_ObjectUnwrapCache(ctx, WH_KEYTYPE_CRYPTO, serverKeyId,
+                                       cipherType, wrappedKeyIn, wrappedKeySz,
+                                       WH_KEYID_ERASED, keyIdOut);
+}
+
+int wh_Client_DataWrap(whClientContext* ctx, enum wc_CipherType cipherType,
+                       uint16_t serverKeyId, void* dataIn, uint32_t dataInSz,
+                       void* wrappedDataOut, uint32_t* wrappedDataInOutSz)
+{
+    uint16_t outSz16;
+    int      ret;
+    if (wrappedDataInOutSz == NULL)
+        return WH_ERROR_BADARGS;
+    outSz16 = (uint16_t)*wrappedDataInOutSz;
+    ret = wh_Client_ObjectWrap(ctx, WH_KEYTYPE_CRYPTO, serverKeyId, cipherType,
+                               dataIn, (uint16_t)dataInSz, 0, 0, 0, NULL, 0,
+                               wrappedDataOut, &outSz16);
+    *wrappedDataInOutSz = outSz16;
     return ret;
 }
+
+int wh_Client_DataUnwrap(whClientContext* ctx, enum wc_CipherType cipherType,
+                         uint16_t serverKeyId, void* wrappedDataIn,
+                         uint32_t wrappedDataInSz, void* dataOut,
+                         uint32_t* dataInOutSz)
+{
+    uint16_t outSz16;
+    int      ret;
+    if (dataInOutSz == NULL)
+        return WH_ERROR_BADARGS;
+    outSz16 = (uint16_t)*dataInOutSz;
+    ret = wh_Client_ObjectUnwrapExport(ctx, WH_KEYTYPE_CRYPTO, serverKeyId,
+                                       cipherType, wrappedDataIn,
+                                       (uint16_t)wrappedDataInSz, dataOut,
+                                       &outSz16, NULL, NULL, NULL, 0);
+    *dataInOutSz = outSz16;
+    return ret;
+}
+
+#endif /* WOLFHSM_CFG_KEYWRAP */
+#endif /* WOLFHSM_CFG_API_LEGACY_KEYSTORE */
+
 
 int wh_Client_CounterInitRequest(whClientContext* c, whNvmId counterId,
     uint32_t counter)
@@ -1334,193 +1208,58 @@ int wh_Client_CounterDestroy(whClientContext* c, whNvmId counterId)
 }
 
 #ifdef WOLFHSM_CFG_DMA
+#ifdef WOLFHSM_CFG_API_LEGACY_KEYSTORE
 
 int wh_Client_KeyCacheDmaRequest(whClientContext* c, uint32_t flags,
                                  uint8_t* label, uint16_t labelSz,
                                  const void* keyAddr, uint16_t keySz,
                                  uint16_t keyId)
 {
-    int                                ret;
-    whMessageKeystore_CacheDmaRequest* req = NULL;
-    uintptr_t                          keyAddrPtr = 0;
-    uint16_t                           capSz = 0;
-
-    if (c == NULL || (labelSz > 0 && label == NULL)) {
-        return WH_ERROR_BADARGS;
-    }
-
-    req = (whMessageKeystore_CacheDmaRequest*)wh_CommClient_GetDataPtr(c->comm);
-    if (req == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-    memset(req, 0, sizeof(*req));
-    req->id      = keyId;
-    req->flags   = flags;
-    req->labelSz = 0;
-
-    /* Set up DMA buffer info */
-    req->key.sz   = keySz;
-    ret           = wh_Client_DmaProcessClientAddress(
-        c, (uintptr_t)keyAddr, (void**)&keyAddrPtr, keySz,
-        WH_DMA_OPER_CLIENT_READ_PRE, (whDmaFlags){0});
-    req->key.addr = keyAddrPtr;
-
-    /* Copy label if provided, truncate if necessary */
-    if (labelSz > 0 && label != NULL)  {
-        capSz = (labelSz > WH_NVM_LABEL_LEN) ? WH_NVM_LABEL_LEN : labelSz;
-        req->labelSz = capSz;
-        memcpy(req->label, label, capSz);
-    }
-
-    if (ret == WH_ERROR_OK) {
-        ret = wh_Client_SendRequest(c, WH_MESSAGE_GROUP_KEY, WH_KEY_CACHE_DMA,
-                                    sizeof(*req), (uint8_t*)req);
-    }
-
-    (void)wh_Client_DmaProcessClientAddress(
-        c, (uintptr_t)keyAddr, (void**)&keyAddrPtr, keySz,
-        WH_DMA_OPER_CLIENT_READ_POST, (whDmaFlags){0});
-    return ret;
+    return wh_Client_ObjectCacheAddDmaRequest(c, WH_KEYTYPE_CRYPTO, keyId,
+                                              WH_NVM_ACCESS_ANY, flags,
+                                              keyAddr, keySz, label, labelSz);
 }
 
 int wh_Client_KeyCacheDmaResponse(whClientContext* c, uint16_t* keyId)
 {
-    uint16_t                            group;
-    uint16_t                            action;
-    uint16_t                            size;
-    int                                 ret;
-    whMessageKeystore_CacheDmaResponse* resp = NULL;
-
-    if (c == NULL || keyId == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    resp =
-        (whMessageKeystore_CacheDmaResponse*)wh_CommClient_GetDataPtr(c->comm);
-    if (resp == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
-
-    if (ret == 0) {
-        /* Validate response */
-        if ((group != WH_MESSAGE_GROUP_KEY) || (action != WH_KEY_CACHE_DMA) ||
-            (size != sizeof(*resp))) {
-            /* Invalid message */
-            ret = WH_ERROR_ABORTED;
-        }
-        else {
-            /* Valid message */
-            if (resp->rc != 0) {
-                ret = resp->rc;
-            }
-            else {
-                *keyId = resp->id;
-            }
-        }
-    }
-    return ret;
+    return wh_Client_ObjectCacheAddDmaResponse(c, keyId);
 }
 
 int wh_Client_KeyCacheDma(whClientContext* c, uint32_t flags, uint8_t* label,
                           uint16_t labelSz, const void* keyAddr, uint16_t keySz,
                           uint16_t* keyId)
 {
-    int ret;
-    ret = wh_Client_KeyCacheDmaRequest(c, flags, label, labelSz, keyAddr, keySz,
-                                       *keyId);
-    if (ret == 0) {
-        do {
-            ret = wh_Client_KeyCacheDmaResponse(c, keyId);
-        } while (ret == WH_ERROR_NOTREADY);
-    }
+    uint16_t id = (keyId != NULL) ? *keyId : WH_KEYID_ERASED;
+    int ret = wh_Client_ObjectCacheAddDma(c, WH_KEYTYPE_CRYPTO, id,
+                                          WH_NVM_ACCESS_ANY, flags, keyAddr,
+                                          keySz, label, labelSz, &id);
+    if (ret == WH_ERROR_OK && keyId != NULL)
+        *keyId = id;
     return ret;
 }
 
 int wh_Client_KeyExportDmaRequest(whClientContext* c, uint16_t keyId,
                                   const void* keyAddr, uint16_t keySz)
 {
-    whMessageKeystore_ExportDmaRequest* req = NULL;
-
-    if (c == NULL || keyId == WH_KEYID_ERASED) {
-        return WH_ERROR_BADARGS;
-    }
-
-    req =
-        (whMessageKeystore_ExportDmaRequest*)wh_CommClient_GetDataPtr(c->comm);
-    if (req == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-    req->id       = keyId;
-    req->key.addr = (uint64_t)((uintptr_t)keyAddr);
-    req->key.sz   = keySz;
-
-    return wh_Client_SendRequest(c, WH_MESSAGE_GROUP_KEY, WH_KEY_EXPORT_DMA,
-                                 sizeof(*req), (uint8_t*)req);
+    return wh_Client_ObjectCacheExportDmaRequest(c, WH_KEYTYPE_CRYPTO, keyId,
+                                                 keyAddr, keySz);
 }
 
 int wh_Client_KeyExportDmaResponse(whClientContext* c, uint8_t* label,
                                    uint16_t labelSz, uint16_t* outSz)
 {
-    uint16_t                             resp_group;
-    uint16_t                             resp_action;
-    uint16_t                             resp_size;
-    int                                  rc;
-    whMessageKeystore_ExportDmaResponse* resp = NULL;
-
-    if (c == NULL || outSz == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    resp =
-        (whMessageKeystore_ExportDmaResponse*)wh_CommClient_GetDataPtr(c->comm);
-    if (resp == NULL) {
-        return WH_ERROR_BADARGS;
-    }
-
-    rc = wh_Client_RecvResponse(c, &resp_group, &resp_action, &resp_size,
-                                (uint8_t*)resp);
-    if (rc == 0) {
-        /* Validate response */
-        if ((resp_group != WH_MESSAGE_GROUP_KEY) ||
-            (resp_action != WH_KEY_EXPORT_DMA) ||
-            (resp_size != sizeof(*resp))) {
-            /* Invalid message */
-            rc = WH_ERROR_ABORTED;
-        }
-        else {
-            /* Valid message */
-            if (resp->rc != 0) {
-                rc = resp->rc;
-            }
-            else {
-                *outSz = resp->len;
-                if (label != NULL) {
-                    if (labelSz > WH_NVM_LABEL_LEN) {
-                        labelSz = WH_NVM_LABEL_LEN;
-                    }
-                    memcpy(label, resp->label, labelSz);
-                }
-            }
-        }
-    }
-    return rc;
+    return wh_Client_ObjectCacheExportDmaResponse(c, label, labelSz, outSz);
 }
 
 int wh_Client_KeyExportDma(whClientContext* c, uint16_t keyId,
                            const void* keyAddr, uint16_t keySz, uint8_t* label,
                            uint16_t labelSz, uint16_t* outSz)
 {
-    int ret;
-    ret = wh_Client_KeyExportDmaRequest(c, keyId, keyAddr, keySz);
-    if (ret == 0) {
-        do {
-            ret = wh_Client_KeyExportDmaResponse(c, label, labelSz, outSz);
-        } while (ret == WH_ERROR_NOTREADY);
-    }
-    return ret;
+    return wh_Client_ObjectCacheExportDma(c, WH_KEYTYPE_CRYPTO, keyId, keyAddr,
+                                          keySz, label, labelSz, outSz);
 }
+
+#endif /* WOLFHSM_CFG_API_LEGACY_KEYSTORE */
 #endif /* WOLFHSM_CFG_DMA */
 
 #endif /* WOLFHSM_CFG_ENABLE_CLIENT */
