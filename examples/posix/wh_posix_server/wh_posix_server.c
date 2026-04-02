@@ -20,7 +20,7 @@
 #include "wolfhsm/wh_utils.h"
 #include "wolfhsm/wh_message.h"
 #include "wolfhsm/wh_server.h"
-#include "wolfhsm/wh_server_keystore.h"
+#include "wolfhsm/wh_server_object.h"
 
 #ifndef WOLFHSM_CFG_NO_CRYPTO
 /* included to print out the version of wolfSSL linked with */
@@ -97,7 +97,7 @@ static int loadAndStoreKeys(whServerContext* server, whKeyId* outKeyId,
 
     /* Get HSM assigned keyId if not set */
     if (keyId == WH_KEYID_ERASED) {
-        ret = wh_Server_KeystoreGetUniqueId(server, &meta.id);
+        ret = wh_Server_ObjectGetUniqueId(server, &meta.id);
         WOLFHSM_CFG_PRINTF("got unique ID = 0x%02X\n", meta.id & WH_KEYID_MASK);
     }
     WOLFHSM_CFG_PRINTF("key NVM ID = "
@@ -107,14 +107,14 @@ static int loadAndStoreKeys(whServerContext* server, whKeyId* outKeyId,
                        WH_KEYID_ID(meta.id), meta.flags);
 
     if (ret == 0) {
-        ret = wh_Server_KeystoreCacheKey(server, &meta, keyBuf);
+        ret = wh_Server_ObjectCacheAdd(server, &meta, keyBuf);
         if (ret != 0) {
-            WOLFHSM_CFG_PRINTF("Failed to wh_Server_KeystoreCacheKey, ret=%d\n", ret);
+            WOLFHSM_CFG_PRINTF("Failed to wh_Server_ObjectCacheAdd, ret=%d\n", ret);
             return ret;
         }
     }
     else {
-        WOLFHSM_CFG_PRINTF("Failed to wh_Server_KeystoreGetUniqueId, ret=%d\n", ret);
+        WOLFHSM_CFG_PRINTF("Failed to wh_Server_ObjectGetUniqueId, ret=%d\n", ret);
         return ret;
     }
 
