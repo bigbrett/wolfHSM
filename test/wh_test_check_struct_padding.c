@@ -67,6 +67,35 @@ whMessageCounter_IncrementResponse counterIncrementRes;
 whMessageCounter_ReadResponse      counterReadRes;
 whMessageCounter_DestroyResponse   counterDestroyRes;
 
+#include "wolfhsm/wh_message_object.h"
+whMessageObject_SimpleResponse       whMessageObject_SimpleResponse_test;
+whMessageObject_TypeIdRequest        whMessageObject_TypeIdRequest_test;
+whMessageObject_NvmAddRequest        whMessageObject_NvmAddRequest_test;
+whMessageObject_NvmReadRequest       whMessageObject_NvmReadRequest_test;
+whMessageObject_NvmReadResponse      whMessageObject_NvmReadResponse_test;
+whMessageObject_NvmGetAvailRequest   whMessageObject_NvmGetAvailRequest_test;
+whMessageObject_NvmGetAvailResponse  whMessageObject_NvmGetAvailResponse_test;
+whMessageObject_NvmIterateRequest    whMessageObject_NvmIterateRequest_test;
+whMessageObject_NvmIterateResponse   whMessageObject_NvmIterateResponse_test;
+whMessageObject_CacheAddRequest      whMessageObject_CacheAddRequest_test;
+whMessageObject_CacheAddResponse     whMessageObject_CacheAddResponse_test;
+whMessageObject_CacheExportResponse  whMessageObject_CacheExportResponse_test;
+whMessageObject_WrapRequest          whMessageObject_WrapRequest_test;
+whMessageObject_WrapResponse         whMessageObject_WrapResponse_test;
+whMessageObject_UnwrapCacheRequest   whMessageObject_UnwrapCacheRequest_test;
+whMessageObject_UnwrapCacheResponse  whMessageObject_UnwrapCacheResponse_test;
+whMessageObject_UnwrapExportRequest  whMessageObject_UnwrapExportRequest_test;
+whMessageObject_UnwrapExportResponse whMessageObject_UnwrapExportResponse_test;
+
+#ifdef WOLFHSM_CFG_DMA
+whMessageObject_DmaBuffer              whMessageObject_DmaBuffer_test;
+whMessageObject_DmaAddrStatus          whMessageObject_DmaAddrStatus_test;
+whMessageObject_CacheAddDmaRequest     whMessageObject_CacheAddDmaRequest_test;
+whMessageObject_CacheAddDmaResponse    whMessageObject_CacheAddDmaResponse_test;
+whMessageObject_CacheExportDmaRequest  whMessageObject_CacheExportDmaRequest_test;
+whMessageObject_CacheExportDmaResponse whMessageObject_CacheExportDmaResponse_test;
+#endif /* WOLFHSM_CFG_DMA */
+
 #ifndef WOLFHSM_CFG_NO_CRYPTO
 /* Include crypto message header for new crypto message structures */
 #include "wolfhsm/wh_message_crypto.h"
