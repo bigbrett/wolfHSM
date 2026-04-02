@@ -812,8 +812,7 @@ int wh_Client_KeyWrapRequest(whClientContext* ctx,
     return wh_Client_ObjectWrapRequest(ctx, WH_KEYTYPE_CRYPTO, serverKeyId,
                                        cipherType, key, keySz,
                                        metadata->access, metadata->flags,
-                                       WH_KEYID_USER(metadata->id),
-                                       metadata->label,
+                                       metadata->id, metadata->label,
                                        sizeof(metadata->label));
 }
 
@@ -836,8 +835,7 @@ int wh_Client_KeyWrap(whClientContext* ctx, enum wc_CipherType cipherType,
         return WH_ERROR_BADARGS;
     return wh_Client_ObjectWrap(ctx, WH_KEYTYPE_CRYPTO, serverKeyId,
                                 cipherType, keyIn, keySz, metadataIn->access,
-                                metadataIn->flags,
-                                WH_KEYID_USER(metadataIn->id),
+                                metadataIn->flags, metadataIn->id,
                                 metadataIn->label, sizeof(metadataIn->label),
                                 wrappedKeyOut, wrappedKeyInOutSz);
 }
@@ -858,13 +856,20 @@ int wh_Client_KeyUnwrapAndExportResponse(whClientContext* ctx,
                                          whNvmMetadata* metadataOut,
                                          void* keyOut, uint16_t* keyInOutSz)
 {
+    int ret;
     (void)cipherType;
-    return wh_Client_ObjectUnwrapExportResponse(
+    ret = wh_Client_ObjectUnwrapExportResponse(
         ctx, NULL, keyOut, keyInOutSz,
         metadataOut != NULL ? &metadataOut->access : NULL,
         metadataOut != NULL ? &metadataOut->flags : NULL,
         metadataOut != NULL ? metadataOut->label : NULL,
         metadataOut != NULL ? (uint16_t)sizeof(metadataOut->label) : 0);
+
+    /* Fill in id and len fields that the legacy API expects */
+    if (ret == WH_ERROR_OK && metadataOut != NULL && keyInOutSz != NULL) {
+        metadataOut->len = *keyInOutSz;
+    }
+    return ret;
 }
 
 int wh_Client_KeyUnwrapAndExport(whClientContext* ctx,
