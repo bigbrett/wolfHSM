@@ -139,7 +139,11 @@ static int _ObjectCheckPolicy(whServerContext* server, whObjOp op,
     int            foundInCache = 0;
     int            foundInNvm   = 0;
 
-    if ((server == NULL) || WH_KEYID_ISERASED(keyId)) {
+    if ((server == NULL) || (WH_KEYID_ISERASED(keyId)
+#ifdef WOLFHSM_CFG_SHE_EXTENSION
+                            && (WH_KEYID_TYPE(keyId) != WH_KEYTYPE_SHE)
+#endif
+                                )) {
         return WH_ERROR_BADARGS;
     }
 
@@ -535,7 +539,11 @@ static int _ObjectCacheAdd(whServerContext* server, whNvmMetadata* meta,
 
     /* make sure id is valid */
     if ((server == NULL) || (meta == NULL) || (in == NULL) ||
-        WH_KEYID_ISERASED(meta->id) ||
+        (WH_KEYID_ISERASED(meta->id)
+#ifdef WOLFHSM_CFG_SHE_EXTENSION
+         && (WH_KEYID_TYPE(meta->id) != WH_KEYTYPE_SHE)
+#endif
+             ) ||
         ((meta->len > WOLFHSM_CFG_SERVER_KEYCACHE_BUFSIZE) &&
          (meta->len > WOLFHSM_CFG_SERVER_KEYCACHE_BIG_BUFSIZE))) {
         return WH_ERROR_BADARGS;
@@ -590,7 +598,11 @@ int wh_Server_ObjectCacheLoad(whServerContext* server, whKeyId objId,
     whNvmMetadata** cacheMetaOut;
     whNvmMetadata   tmpMeta[1];
 
-    if ((server == NULL) || WH_KEYID_ISERASED(objId)) {
+    if ((server == NULL) || (WH_KEYID_ISERASED(objId)
+#ifdef WOLFHSM_CFG_SHE_EXTENSION
+                            && (WH_KEYID_TYPE(objId) != WH_KEYTYPE_SHE)
+#endif
+                                )) {
         return WH_ERROR_BADARGS;
     }
 
@@ -668,6 +680,9 @@ int wh_Server_ObjectCacheExport(whServerContext* server, whKeyId objId,
     /* Not in cache, try to read the metadata from NVM */
     ret = wh_Nvm_GetMetadata(server->nvm, objId, meta);
     if (ret == 0) {
+        /* Check buffer capacity before reading (matching cache path) */
+        if (meta->len > *outSz)
+            return WH_ERROR_NOSPACE;
         /* set outSz */
         *outSz = meta->len;
         /* read meta */
@@ -720,7 +735,11 @@ int wh_Server_ObjectCacheEvict(whServerContext* server, whNvmId objId)
     int                ret = 0;
     whKeyCacheContext* ctx;
 
-    if ((server == NULL) || WH_KEYID_ISERASED(objId)) {
+    if ((server == NULL) || (WH_KEYID_ISERASED(objId)
+#ifdef WOLFHSM_CFG_SHE_EXTENSION
+                            && (WH_KEYID_TYPE(objId) != WH_KEYTYPE_SHE)
+#endif
+                                )) {
         return WH_ERROR_BADARGS;
     }
 
@@ -757,7 +776,11 @@ int wh_Server_ObjectCacheCommit(whServerContext* server, whNvmId objId)
     int                ret;
     whKeyCacheContext* ctx;
 
-    if ((server == NULL) || WH_KEYID_ISERASED(objId)) {
+    if ((server == NULL) || (WH_KEYID_ISERASED(objId)
+#ifdef WOLFHSM_CFG_SHE_EXTENSION
+                            && (WH_KEYID_TYPE(objId) != WH_KEYTYPE_SHE)
+#endif
+                                )) {
         return WH_ERROR_BADARGS;
     }
 
@@ -793,7 +816,11 @@ int wh_Server_ObjectCacheCommitChecked(whServerContext* server, whNvmId objId)
 
 int wh_Server_ObjectCacheErase(whServerContext* server, whNvmId objId)
 {
-    if ((server == NULL) || (WH_KEYID_ISERASED(objId))) {
+    if ((server == NULL) || (WH_KEYID_ISERASED(objId)
+#ifdef WOLFHSM_CFG_SHE_EXTENSION
+                            && (WH_KEYID_TYPE(objId) != WH_KEYTYPE_SHE)
+#endif
+                                )) {
         return WH_ERROR_BADARGS;
     }
 
@@ -806,7 +833,11 @@ int wh_Server_ObjectCacheErase(whServerContext* server, whNvmId objId)
 
 int wh_Server_ObjectCacheEraseChecked(whServerContext* server, whNvmId objId)
 {
-    if ((server == NULL) || (WH_KEYID_ISERASED(objId))) {
+    if ((server == NULL) || (WH_KEYID_ISERASED(objId)
+#ifdef WOLFHSM_CFG_SHE_EXTENSION
+                            && (WH_KEYID_TYPE(objId) != WH_KEYTYPE_SHE)
+#endif
+                                )) {
         return WH_ERROR_BADARGS;
     }
 
@@ -824,7 +855,11 @@ int wh_Server_ObjectCacheRevoke(whServerContext* server, whKeyId objId)
     uint8_t*       cacheBuf  = NULL;
     whNvmMetadata* cacheMeta = NULL;
 
-    if ((server == NULL) || WH_KEYID_ISERASED(objId)) {
+    if ((server == NULL) || (WH_KEYID_ISERASED(objId)
+#ifdef WOLFHSM_CFG_SHE_EXTENSION
+                            && (WH_KEYID_TYPE(objId) != WH_KEYTYPE_SHE)
+#endif
+                                )) {
         return WH_ERROR_BADARGS;
     }
 
@@ -1047,7 +1082,7 @@ static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
     ret = wh_Server_ObjectCacheLoad(server, serverKeyId, &serverKey,
                                     &serverKeyMetadata);
     if (ret != WH_ERROR_OK) {
-        return ret;
+        goto wrap_cleanup;
     }
     serverKeySz = serverKeyMetadata->len;
 
@@ -1055,26 +1090,26 @@ static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
     ret = wh_Server_ObjectEnforceUsage(serverKeyMetadata,
                                        WH_NVM_FLAGS_USAGE_WRAP);
     if (ret != WH_ERROR_OK) {
-        return ret;
+        goto wrap_cleanup;
     }
 
     /* Initialize AES context and set it to use the server side key */
     ret = wc_AesInit(aes, NULL, server->devId);
     if (ret != 0) {
-        return ret;
+        goto wrap_cleanup;
     }
 
     ret = wc_AesGcmSetKey(aes, serverKey, serverKeySz);
     if (ret != 0) {
         wc_AesFree(aes);
-        return ret;
+        goto wrap_cleanup;
     }
 
     /* Generate the IV */
     ret = wc_RNG_GenerateBlock(server->crypto->rng, iv, sizeof(iv));
     if (ret != 0) {
         wc_AesFree(aes);
-        return ret;
+        goto wrap_cleanup;
     }
 
     /* Combine key and metadata into one blob */
@@ -1089,7 +1124,7 @@ static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
                            authTag, sizeof(authTag), NULL, 0);
     if (ret != 0) {
         wc_AesFree(aes);
-        return ret;
+        goto wrap_cleanup;
     }
 
     /* Prepend IV + authTag to encrypted blob */
@@ -1098,7 +1133,12 @@ static int _AesGcmObjectWrap(whServerContext* server, whKeyId serverKeyId,
 
     wc_AesFree(aes);
 
-    return WH_ERROR_OK;
+wrap_cleanup:
+    wc_ForceZero(plainBlob, sizeof(plainBlob));
+    wc_ForceZero(iv, sizeof(iv));
+    wc_ForceZero(authTag, sizeof(authTag));
+
+    return ret;
 }
 
 static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
@@ -1133,7 +1173,7 @@ static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
     ret = wh_Server_ObjectCacheLoad(server, serverKeyId, &serverKey,
                                     &serverKeyMetadata);
     if (ret != WH_ERROR_OK) {
-        return ret;
+        goto unwrap_cleanup;
     }
     serverKeySz = serverKeyMetadata->len;
 
@@ -1141,19 +1181,19 @@ static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
     ret = wh_Server_ObjectEnforceUsage(serverKeyMetadata,
                                        WH_NVM_FLAGS_USAGE_WRAP);
     if (ret != WH_ERROR_OK) {
-        return ret;
+        goto unwrap_cleanup;
     }
 
     /* Initialize AES context and set it to use the server side key */
     ret = wc_AesInit(aes, NULL, server->devId);
     if (ret != 0) {
-        return ret;
+        goto unwrap_cleanup;
     }
 
     ret = wc_AesGcmSetKey(aes, serverKey, serverKeySz);
     if (ret != 0) {
         wc_AesFree(aes);
-        return ret;
+        goto unwrap_cleanup;
     }
 
     /* Extract IV and authTag from wrappedKeyIn */
@@ -1165,7 +1205,7 @@ static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
                            authTag, sizeof(authTag), NULL, 0);
     if (ret != 0) {
         wc_AesFree(aes);
-        return ret;
+        goto unwrap_cleanup;
     }
 
     /* Extract metadata and key from the decrypted blob */
@@ -1173,7 +1213,13 @@ static int _AesGcmObjectUnwrap(whServerContext* server, uint16_t serverKeyId,
     memcpy(keyOut, plainBlob + sizeof(*metadataOut), keySz);
 
     wc_AesFree(aes);
-    return WH_ERROR_OK;
+
+unwrap_cleanup:
+    wc_ForceZero(plainBlob, sizeof(plainBlob));
+    wc_ForceZero(iv, sizeof(iv));
+    wc_ForceZero(authTag, sizeof(authTag));
+
+    return ret;
 }
 
 #endif /* HAVE_AESGCM */
@@ -1205,6 +1251,9 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
         case WH_OBJECT_CACHE_ADD: {
             whMessageObject_CacheAddRequest  req;
             whMessageObject_CacheAddResponse resp;
+            uint16_t                         availableSz;
+
+            memset(&resp, 0, sizeof(resp));
 
             /* translate request */
             (void)wh_MessageObject_TranslateCacheAddRequest(
@@ -1212,6 +1261,18 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             /* in is after fixed size fields */
             in = (uint8_t*)req_packet + sizeof(req);
+
+            /* Validate client-controlled size against actual packet size */
+            availableSz =
+                (req_size > sizeof(req)) ? (req_size - sizeof(req)) : 0;
+            if (req.sz > availableSz) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateCacheAddResponse(
+                    magic, &resp,
+                    (whMessageObject_CacheAddResponse*)resp_packet);
+                break;
+            }
 
             /* set the metadata fields */
             meta->id = wh_KeyId_TranslateFromClient(
@@ -1456,6 +1517,11 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             if (ret == WH_ERROR_OK) {
                 ret = wh_Nvm_DestroyObjectsChecked(server->nvm, 1, &keyId);
 
+                /* Evict the destroyed object from cache if present */
+                if (ret == WH_ERROR_OK) {
+                    (void)wh_Server_ObjectCacheEvict(server, keyId);
+                }
+
                 (void)WH_SERVER_NVM_UNLOCK(server);
             } /* WH_SERVER_NVM_LOCK() */
             resp.rc = ret;
@@ -1560,6 +1626,20 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             kekId = wh_KeyId_TranslateFromClient(
                 WH_KEYTYPE_CRYPTO, server->comm->client_id, req.serverKekId);
 
+            /* Validate client-controlled keySz against actual packet size */
+            {
+                uint16_t availableSz =
+                    (req_size > sizeof(req)) ? (req_size - sizeof(req)) : 0;
+                if (req.keySz > availableSz) {
+                    resp.rc        = WH_ERROR_BADARGS;
+                    *out_resp_size = sizeof(resp);
+                    (void)wh_MessageObject_TranslateWrapResponse(
+                        magic, &resp,
+                        (whMessageObject_WrapResponse*)resp_packet);
+                    break;
+                }
+            }
+
             /* Build metadata from request fields. Embed the wrapping
              * client's identity in the metadata ID for ownership validation
              * during unwrap. Use the KEK's translated ID to determine if
@@ -1587,10 +1667,11 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             if (req.cipherType == WC_CIPHER_AES_GCM) {
                 uint16_t wrappedBufSz =
                     WOLFHSM_CFG_COMM_DATA_LEN - sizeof(resp);
-                uint16_t expectedSz = WH_KEYWRAP_AES_GCM_HEADER_SIZE +
+                /* Use uint32_t to prevent overflow on large req.keySz */
+                uint32_t expectedSz = (uint32_t)WH_KEYWRAP_AES_GCM_HEADER_SIZE +
                                       sizeof(wrapMeta) + req.keySz;
 
-                if (wrappedBufSz < expectedSz) {
+                if (expectedSz > wrappedBufSz) {
                     resp.rc = WH_ERROR_BUFFER_SIZE;
                 }
                 else {
@@ -1598,12 +1679,13 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                     if (ret == WH_ERROR_OK) {
                         ret = _AesGcmObjectWrap(server, kekId, keyData,
                                                 req.keySz, &wrapMeta,
-                                                wrappedOut, expectedSz);
+                                                wrappedOut,
+                                                (uint16_t)expectedSz);
                         (void)WH_SERVER_NVM_UNLOCK(server);
                     }
                     resp.rc = ret;
                     if (ret == WH_ERROR_OK) {
-                        resp.wrappedSz = expectedSz;
+                        resp.wrappedSz = (uint16_t)expectedSz;
                     }
                 }
             }
@@ -1641,6 +1723,21 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
              */
             kekId = wh_KeyId_TranslateFromClient(
                 WH_KEYTYPE_CRYPTO, server->comm->client_id, req.serverKekId);
+
+            /* Validate client-controlled wrappedSz against actual packet size
+             */
+            {
+                uint16_t availableSz =
+                    (req_size > sizeof(req)) ? (req_size - sizeof(req)) : 0;
+                if (req.wrappedSz > availableSz) {
+                    resp.rc        = WH_ERROR_BADARGS;
+                    *out_resp_size = sizeof(resp);
+                    (void)wh_MessageObject_TranslateUnwrapCacheResponse(
+                        magic, &resp,
+                        (whMessageObject_UnwrapCacheResponse*)resp_packet);
+                    break;
+                }
+            }
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
@@ -1709,6 +1806,9 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                 resp.rc = WH_ERROR_BADARGS;
             }
 
+            /* Zero key material before returning */
+            wc_ForceZero(keyBuf, sizeof(keyBuf));
+
             (void)wh_MessageObject_TranslateUnwrapCacheResponse(
                 magic, &resp,
                 (whMessageObject_UnwrapCacheResponse*)resp_packet);
@@ -1737,6 +1837,21 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
              */
             kekId = wh_KeyId_TranslateFromClient(
                 WH_KEYTYPE_CRYPTO, server->comm->client_id, req.serverKekId);
+
+            /* Validate client-controlled wrappedSz against actual packet size
+             */
+            {
+                uint16_t availableSz =
+                    (req_size > sizeof(req)) ? (req_size - sizeof(req)) : 0;
+                if (req.wrappedSz > availableSz) {
+                    resp.rc        = WH_ERROR_BADARGS;
+                    *out_resp_size = sizeof(resp);
+                    (void)wh_MessageObject_TranslateUnwrapExportResponse(
+                        magic, &resp,
+                        (whMessageObject_UnwrapExportResponse*)resp_packet);
+                    break;
+                }
+            }
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
@@ -1802,6 +1917,9 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             {
                 resp.rc = WH_ERROR_BADARGS;
             }
+
+            /* Zero key material before returning */
+            wc_ForceZero(keyBuf, sizeof(keyBuf));
 
             (void)wh_MessageObject_TranslateUnwrapExportResponse(
                 magic, &resp,
