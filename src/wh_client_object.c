@@ -257,6 +257,9 @@ int wh_Client_ObjectNvmReadDataResponse(whClientContext* c, int32_t* out_rc,
         if (resp->rc != 0) {
             ret = resp->rc;
         }
+        else if (size < sizeof(*resp)) {
+            ret = WH_ERROR_BADARGS;
+        }
         else {
             /* Data length is total message size minus the response header */
             dataLen = size - sizeof(*resp);
@@ -1027,32 +1030,49 @@ int wh_Client_ObjectUnwrapExportResponse(whClientContext* c, int32_t* out_rc,
     packOut = (uint8_t*)(resp + 1);
 
     ret = wh_Client_RecvResponse(c, &group, &action, &size, (uint8_t*)resp);
+
+    if (ret == WH_ERROR_OK && resp->rc != 0) {
+        ret = resp->rc;
+    }
+
+    if (ret == WH_ERROR_OK && size < sizeof(*resp)) {
+        ret = WH_ERROR_BADARGS;
+    }
+
+    /* Validate keySz against actual message payload */
     if (ret == WH_ERROR_OK) {
-        if (resp->rc != 0) {
-            ret = resp->rc;
+        uint16_t maxKeySz = size - sizeof(*resp);
+        if (resp->keySz > maxKeySz) {
+            ret = WH_ERROR_BADARGS;
+        }
+    }
+
+    /* Copy key data or report size */
+    if (ret == WH_ERROR_OK) {
+        if (out == NULL) {
+            *outSz = resp->keySz;
+        }
+        else if (*outSz < resp->keySz) {
+            ret = WH_ERROR_BUFFER_SIZE;
         }
         else {
-            if (out == NULL) {
-                *outSz = resp->keySz;
-            }
-            else if (*outSz < resp->keySz) {
-                ret = WH_ERROR_BUFFER_SIZE;
-            }
-            else {
-                memcpy(out, packOut, resp->keySz);
-                *outSz = resp->keySz;
-            }
-            if (outAccess != NULL) {
-                *outAccess = resp->access;
-            }
-            if (outFlags != NULL) {
-                *outFlags = resp->flags;
-            }
-            if (outLabel != NULL) {
-                capSz = (outLabelSz > sizeof(resp->label)) ? sizeof(resp->label)
-                                                           : outLabelSz;
-                memcpy(outLabel, resp->label, capSz);
-            }
+            memcpy(out, packOut, resp->keySz);
+            *outSz = resp->keySz;
+        }
+    }
+
+    /* Copy metadata */
+    if (ret == WH_ERROR_OK) {
+        if (outAccess != NULL) {
+            *outAccess = resp->access;
+        }
+        if (outFlags != NULL) {
+            *outFlags = resp->flags;
+        }
+        if (outLabel != NULL) {
+            capSz = (outLabelSz > sizeof(resp->label)) ? sizeof(resp->label)
+                                                        : outLabelSz;
+            memcpy(outLabel, resp->label, capSz);
         }
     }
 
