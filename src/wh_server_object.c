@@ -267,8 +267,10 @@ static int _FindInKeyCache(whKeyCacheContext* ctx, whKeyId keyId,
 
 static int _EvictSlot(uint8_t* buf, whNvmMetadata* meta)
 {
+    uint16_t len = meta->len;
+    memset(meta, 0, sizeof(*meta));
     meta->id = WH_KEYID_ERASED;
-    memset(buf, 0, meta->len);
+    memset(buf, 0, len);
     return WH_ERROR_OK;
 }
 
@@ -1255,6 +1257,16 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             memset(&resp, 0, sizeof(resp));
 
+            /* Validate request packet is at least as large as fixed header */
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateCacheAddResponse(
+                    magic, &resp,
+                    (whMessageObject_CacheAddResponse*)resp_packet);
+                break;
+            }
+
             /* translate request */
             (void)wh_MessageObject_TranslateCacheAddRequest(
                 magic, (whMessageObject_CacheAddRequest*)req_packet, &req);
@@ -1263,8 +1275,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             in = (uint8_t*)req_packet + sizeof(req);
 
             /* Validate client-controlled size against actual packet size */
-            availableSz =
-                (req_size > sizeof(req)) ? (req_size - sizeof(req)) : 0;
+            availableSz = req_size - sizeof(req);
             if (req.sz > availableSz) {
                 resp.rc        = WH_ERROR_BADARGS;
                 *out_resp_size = sizeof(resp);
@@ -1279,7 +1290,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                 req.type, server->comm->client_id, req.id);
             meta->access = req.access;
             meta->flags  = req.flags;
-            meta->len    = req.sz;
+            meta->len    = (uint16_t)req.sz;
             /* truncate label if it's too large */
             if (req.labelSz > WH_NVM_LABEL_LEN) {
                 req.labelSz = WH_NVM_LABEL_LEN;
@@ -1319,6 +1330,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             memset(&resp, 0, sizeof(resp));
 
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateSimpleResponse(
+                    magic, &resp,
+                    (whMessageObject_SimpleResponse*)resp_packet);
+                break;
+            }
+
             (void)wh_MessageObject_TranslateTypeIdRequest(
                 magic, (whMessageObject_TypeIdRequest*)req_packet, &req);
 
@@ -1344,6 +1364,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             whKeyId                        keyId;
 
             memset(&resp, 0, sizeof(resp));
+
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateSimpleResponse(
+                    magic, &resp,
+                    (whMessageObject_SimpleResponse*)resp_packet);
+                break;
+            }
 
             (void)wh_MessageObject_TranslateTypeIdRequest(
                 magic, (whMessageObject_TypeIdRequest*)req_packet, &req);
@@ -1371,6 +1400,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             memset(&resp, 0, sizeof(resp));
 
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateSimpleResponse(
+                    magic, &resp,
+                    (whMessageObject_SimpleResponse*)resp_packet);
+                break;
+            }
+
             (void)wh_MessageObject_TranslateTypeIdRequest(
                 magic, (whMessageObject_TypeIdRequest*)req_packet, &req);
 
@@ -1397,6 +1435,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             uint32_t                            keySz;
 
             memset(&resp, 0, sizeof(resp));
+
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateCacheExportResponse(
+                    magic, &resp,
+                    (whMessageObject_CacheExportResponse*)resp_packet);
+                break;
+            }
 
             /* translate request */
             (void)wh_MessageObject_TranslateTypeIdRequest(
@@ -1440,6 +1487,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             memset(&resp, 0, sizeof(resp));
 
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateSimpleResponse(
+                    magic, &resp,
+                    (whMessageObject_SimpleResponse*)resp_packet);
+                break;
+            }
+
             (void)wh_MessageObject_TranslateTypeIdRequest(
                 magic, (whMessageObject_TypeIdRequest*)req_packet, &req);
 
@@ -1465,6 +1521,16 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             whNvmSize                      dataSz;
 
             memset(&resp, 0, sizeof(resp));
+
+            /* Validate packet size against fixed header */
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateSimpleResponse(
+                    magic, &resp,
+                    (whMessageObject_SimpleResponse*)resp_packet);
+                break;
+            }
 
             (void)wh_MessageObject_TranslateNvmAddRequest(
                 magic, (whMessageObject_NvmAddRequest*)req_packet, &req);
@@ -1507,6 +1573,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             memset(&resp, 0, sizeof(resp));
 
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateSimpleResponse(
+                    magic, &resp,
+                    (whMessageObject_SimpleResponse*)resp_packet);
+                break;
+            }
+
             (void)wh_MessageObject_TranslateTypeIdRequest(
                 magic, (whMessageObject_TypeIdRequest*)req_packet, &req);
 
@@ -1538,6 +1613,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             uint16_t                        data_len;
 
             memset(&resp, 0, sizeof(resp));
+
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateNvmReadResponse(
+                    magic, &resp,
+                    (whMessageObject_NvmReadResponse*)resp_packet);
+                break;
+            }
 
             (void)wh_MessageObject_TranslateNvmReadRequest(
                 magic, (whMessageObject_NvmReadRequest*)req_packet, &req);
@@ -1615,6 +1699,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             memset(&resp, 0, sizeof(resp));
 
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateWrapResponse(
+                    magic, &resp,
+                    (whMessageObject_WrapResponse*)resp_packet);
+                break;
+            }
+
             (void)wh_MessageObject_TranslateWrapRequest(
                 magic, (whMessageObject_WrapRequest*)req_packet, &req);
 
@@ -1628,8 +1721,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             /* Validate client-controlled keySz against actual packet size */
             {
-                uint16_t availableSz =
-                    (req_size > sizeof(req)) ? (req_size - sizeof(req)) : 0;
+                uint16_t availableSz = req_size - sizeof(req);
                 if (req.keySz > availableSz) {
                     resp.rc        = WH_ERROR_BADARGS;
                     *out_resp_size = sizeof(resp);
@@ -1714,6 +1806,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             memset(&resp, 0, sizeof(resp));
             resp.id = WH_KEYID_ERASED;
 
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateUnwrapCacheResponse(
+                    magic, &resp,
+                    (whMessageObject_UnwrapCacheResponse*)resp_packet);
+                break;
+            }
+
             (void)wh_MessageObject_TranslateUnwrapCacheRequest(
                 magic, (whMessageObject_UnwrapCacheRequest*)req_packet, &req);
 
@@ -1727,8 +1828,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             /* Validate client-controlled wrappedSz against actual packet size
              */
             {
-                uint16_t availableSz =
-                    (req_size > sizeof(req)) ? (req_size - sizeof(req)) : 0;
+                uint16_t availableSz = req_size - sizeof(req);
                 if (req.wrappedSz > availableSz) {
                     resp.rc        = WH_ERROR_BADARGS;
                     *out_resp_size = sizeof(resp);
@@ -1755,6 +1855,12 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                         ret = _AesGcmObjectUnwrap(server, kekId, wrappedIn,
                                                   req.wrappedSz, &unwrapMeta,
                                                   keyBuf, keySz);
+                        /* Validate decrypted metadata length matches
+                         * expected key size derived from packet structure */
+                        if (ret == WH_ERROR_OK &&
+                            unwrapMeta.len != keySz) {
+                            ret = WH_ERROR_BADARGS;
+                        }
                         /* Validate ownership */
                         if (ret == WH_ERROR_OK) {
                             wrappedUser = WH_KEYID_USER(unwrapMeta.id);
@@ -1827,6 +1933,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
 
             memset(&resp, 0, sizeof(resp));
 
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateUnwrapExportResponse(
+                    magic, &resp,
+                    (whMessageObject_UnwrapExportResponse*)resp_packet);
+                break;
+            }
+
             (void)wh_MessageObject_TranslateUnwrapExportRequest(
                 magic, (whMessageObject_UnwrapExportRequest*)req_packet, &req);
 
@@ -1841,8 +1956,7 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             /* Validate client-controlled wrappedSz against actual packet size
              */
             {
-                uint16_t availableSz =
-                    (req_size > sizeof(req)) ? (req_size - sizeof(req)) : 0;
+                uint16_t availableSz = req_size - sizeof(req);
                 if (req.wrappedSz > availableSz) {
                     resp.rc        = WH_ERROR_BADARGS;
                     *out_resp_size = sizeof(resp);
@@ -1874,6 +1988,13 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
                             ret = _AesGcmObjectUnwrap(
                                 server, kekId, wrappedIn, req.wrappedSz,
                                 &unwrapMeta, keyBuf, keySz);
+                            /* Validate decrypted metadata length matches
+                             * expected key size derived from packet
+                             * structure */
+                            if (ret == WH_ERROR_OK &&
+                                unwrapMeta.len != keySz) {
+                                ret = WH_ERROR_BADARGS;
+                            }
                             /* Validate ownership */
                             if (ret == WH_ERROR_OK) {
                                 uint16_t wrappedUser =
@@ -1934,6 +2055,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             whMessageObject_CacheAddDmaResponse resp;
 
             memset(&resp, 0, sizeof(resp));
+
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateCacheAddDmaResponse(
+                    magic, &resp,
+                    (whMessageObject_CacheAddDmaResponse*)resp_packet);
+                break;
+            }
 
             /* translate request */
             (void)wh_MessageObject_TranslateCacheAddDmaRequest(
@@ -2000,6 +2130,15 @@ int wh_Server_HandleObjectRequest(whServerContext* server, uint16_t magic,
             whKeyId                                keyId;
 
             memset(&resp, 0, sizeof(resp));
+
+            if (req_size < sizeof(req)) {
+                resp.rc        = WH_ERROR_BADARGS;
+                *out_resp_size = sizeof(resp);
+                (void)wh_MessageObject_TranslateCacheExportDmaResponse(
+                    magic, &resp,
+                    (whMessageObject_CacheExportDmaResponse*)resp_packet);
+                break;
+            }
 
             /* translate request */
             (void)wh_MessageObject_TranslateCacheExportDmaRequest(
