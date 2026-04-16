@@ -852,13 +852,14 @@ int wh_Server_ImgMgrVerifyMethodWolfBootRsa4096WithSha256(
 
     (void)sig;
     (void)sigSz;
+    (void)context;
 
     if (img == NULL || key == NULL || keySz == 0) {
         return WH_ERROR_BADARGS;
     }
 
 #ifdef WOLFHSM_CFG_DMA
-    if (context == NULL || contex->server == NULL) {
+    if (context == NULL || context->server == NULL) {
         return WH_ERROR_BADARGS;
     }
 
