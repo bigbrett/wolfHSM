@@ -1209,6 +1209,436 @@ static int whTest_CryptoEccCrossVerify(whClientContext* ctx, WC_RNG* rng)
 
     return ret;
 }
+
+/**
+ * Test the async Request/Response API for ECC sign and verify.
+ *
+ * For each curve:
+ * 1. Generate a HSM ECC key (server-cached with an assigned keyId).
+ * 2. Call wh_Client_EccSignRequest + poll wh_Client_EccSignResponse; verify
+ *    the resulting signature in software.
+ * 3. Import the public key as a separate cache slot; call
+ *    wh_Client_EccVerifyRequest + poll wh_Client_EccVerifyResponse; assert
+ *    res == 1.
+ * 4. Assert that *Request() with an erased keyId returns WH_ERROR_BADARGS.
+ */
+static int whTest_CryptoEccSignVerifyAsync_OneCurve(whClientContext* ctx,
+                                                    WC_RNG* rng, int keySize,
+                                                    int         curveId,
+                                                    const char* name)
+{
+    ecc_key  hsmKey[1]                   = {0};
+    ecc_key  swKey[1]                    = {0};
+    uint8_t  hash[WH_TEST_ECC_HASH_SIZE] = {0};
+    uint8_t  sig[ECC_MAX_SIG_SIZE]       = {0};
+    uint8_t  pubX[ECC_MAXSIZE]           = {0};
+    uint8_t  pubY[ECC_MAXSIZE]           = {0};
+    word32   pubXLen                     = 0;
+    word32   pubYLen                     = 0;
+    uint16_t sigLen                      = 0;
+    int      res                         = 0;
+    whKeyId  signKeyId                   = WH_KEYID_ERASED;
+    whKeyId  verifyKeyId                 = WH_KEYID_ERASED;
+    int      hsmKeyInit                  = 0;
+    int      swKeyInit                   = 0;
+    int      ret                         = WH_ERROR_OK;
+    int      i;
+
+    /* Use non-repeating pattern to detect hash truncation bugs */
+    for (i = 0; i < WH_TEST_ECC_HASH_SIZE; i++) {
+        hash[i] = (uint8_t)i;
+    }
+
+    WH_TEST_PRINT("  Testing async Sign/Verify %s curve...\n", name);
+
+    pubXLen = keySize;
+    pubYLen = keySize;
+
+    ret = wc_ecc_init_ex(hsmKey, NULL, WH_DEV_ID);
+    if (ret == 0) {
+        hsmKeyInit = 1;
+        ret        = wc_ecc_make_key(rng, keySize, hsmKey);
+    }
+    if (ret == 0) {
+        uint8_t signLabel[] = "TestEccAsyncSign";
+        signKeyId           = WH_KEYID_ERASED;
+        ret                 = wh_Client_EccImportKey(ctx, hsmKey, &signKeyId,
+                                                     WH_NVM_FLAGS_USAGE_SIGN, sizeof(signLabel),
+                                                     signLabel);
+    }
+
+    /* Async sign */
+    if (ret == 0) {
+        sigLen = sizeof(sig);
+        ret    = wh_Client_EccSignRequest(ctx, signKeyId, hash, sizeof(hash));
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("%s: EccSignRequest failed: %d\n", name, ret);
+        }
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_EccSignResponse(ctx, sig, &sigLen);
+        } while (ret == WH_ERROR_NOTREADY);
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("%s: EccSignResponse failed: %d\n", name, ret);
+        }
+    }
+
+    /* Precondition: erased keyId must return BADARGS from Request */
+    if (ret == 0) {
+        int badret =
+            wh_Client_EccSignRequest(ctx, WH_KEYID_ERASED, hash, sizeof(hash));
+        if (badret != WH_ERROR_BADARGS) {
+            WH_ERROR_PRINT("%s: EccSignRequest with erased keyId returned %d "
+                           "(want BADARGS)\n",
+                           name, badret);
+            ret = -1;
+        }
+    }
+
+    /* Export public key from HSM for verify path */
+    if (ret == 0) {
+        ret = wc_ecc_export_public_raw(hsmKey, pubX, &pubXLen, pubY, &pubYLen);
+    }
+
+    /* Software verify as an independent sanity check */
+    if (ret == 0) {
+        ret = wc_ecc_init_ex(swKey, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            swKeyInit = 1;
+            ret = wc_ecc_import_unsigned(swKey, pubX, pubY, NULL, curveId);
+        }
+    }
+    if (ret == 0) {
+        res = 0;
+        ret = wc_ecc_verify_hash(sig, sigLen, hash, sizeof(hash), &res, swKey);
+        if (ret == 0 && res != 1) {
+            WH_ERROR_PRINT("%s: async sign produced invalid signature\n", name);
+            ret = -1;
+        }
+    }
+
+    /* Import the public key into a second HSM cache slot and async-verify */
+    if (ret == 0) {
+        ecc_key pubOnly[1] = {0};
+        uint8_t label[]    = "TestEccAsyncVerify";
+
+        ret = wc_ecc_init_ex(pubOnly, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            ret = wc_ecc_import_unsigned(pubOnly, pubX, pubY, NULL, curveId);
+        }
+        if (ret == 0) {
+            verifyKeyId = WH_KEYID_ERASED;
+            ret         = wh_Client_EccImportKey(ctx, pubOnly, &verifyKeyId,
+                                                 WH_NVM_FLAGS_USAGE_VERIFY,
+                                                 sizeof(label), label);
+        }
+        wc_ecc_free(pubOnly);
+    }
+    if (ret == 0) {
+        ret = wh_Client_EccVerifyRequest(ctx, verifyKeyId, sig, sigLen, hash,
+                                         sizeof(hash));
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("%s: EccVerifyRequest failed: %d\n", name, ret);
+        }
+    }
+    if (ret == 0) {
+        res = 0;
+        do {
+            ret = wh_Client_EccVerifyResponse(ctx, &res);
+        } while (ret == WH_ERROR_NOTREADY);
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("%s: EccVerifyResponse failed: %d\n", name, ret);
+        }
+        else if (res != 1) {
+            WH_ERROR_PRINT("%s: async verify returned res=%d (want 1)\n", name,
+                           res);
+            ret = -1;
+        }
+    }
+    if (ret == 0) {
+        int badret = wh_Client_EccVerifyRequest(ctx, WH_KEYID_ERASED, sig,
+                                                sigLen, hash, sizeof(hash));
+        if (badret != WH_ERROR_BADARGS) {
+            WH_ERROR_PRINT("%s: EccVerifyRequest with erased keyId returned %d "
+                           "(want BADARGS)\n",
+                           name, badret);
+            ret = -1;
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("    async Sign/Verify %s: PASS\n", name);
+    }
+
+    /* Cleanup: evict any cached keys, free wolfCrypt structs */
+    if (!WH_KEYID_ISERASED(verifyKeyId)) {
+        (void)wh_Client_KeyEvict(ctx, verifyKeyId);
+    }
+    if (!WH_KEYID_ISERASED(signKeyId)) {
+        (void)wh_Client_KeyEvict(ctx, signKeyId);
+    }
+    if (swKeyInit) {
+        wc_ecc_free(swKey);
+    }
+    if (hsmKeyInit) {
+        wc_ecc_free(hsmKey);
+    }
+    return ret;
+}
+
+#ifdef HAVE_ECC_DHE
+/**
+ * Test the async Request/Response API for ECDH.
+ *
+ * For each curve:
+ * 1. Generate two HSM ECC keys (both server-cached).
+ * 2. Export public bytes from each, import each into the opposite side as a
+ *    separate cache slot so we have a (private_A, public_B) and
+ *    (private_B, public_A) pair for cross-verification.
+ * 3. Call wh_Client_EccSharedSecretRequest + poll
+ *    wh_Client_EccSharedSecretResponse with (privA, pubB) and (privB, pubA).
+ * 4. Assert both shared secrets are equal.
+ * 5. Assert that *Request() with an erased keyId returns WH_ERROR_BADARGS.
+ */
+static int whTest_CryptoEccSharedSecretAsync_OneCurve(whClientContext* ctx,
+                                                      WC_RNG* rng, int keySize,
+                                                      int         curveId,
+                                                      const char* name)
+{
+    ecc_key  keyA[1]                = {0};
+    ecc_key  keyB[1]                = {0};
+    ecc_key  pubA[1]                = {0};
+    ecc_key  pubB[1]                = {0};
+    uint8_t  pubAx[ECC_MAXSIZE]     = {0};
+    uint8_t  pubAy[ECC_MAXSIZE]     = {0};
+    uint8_t  pubBx[ECC_MAXSIZE]     = {0};
+    uint8_t  pubBy[ECC_MAXSIZE]     = {0};
+    word32   pubAxLen               = 0;
+    word32   pubAyLen               = 0;
+    word32   pubBxLen               = 0;
+    word32   pubByLen               = 0;
+    uint8_t  secret_AB[ECC_MAXSIZE] = {0};
+    uint8_t  secret_BA[ECC_MAXSIZE] = {0};
+    uint16_t secret_AB_len          = sizeof(secret_AB);
+    uint16_t secret_BA_len          = sizeof(secret_BA);
+    whKeyId  privAId                = WH_KEYID_ERASED;
+    whKeyId  privBId                = WH_KEYID_ERASED;
+    whKeyId  pubAId                 = WH_KEYID_ERASED;
+    whKeyId  pubBId                 = WH_KEYID_ERASED;
+    int      keyAInit               = 0;
+    int      keyBInit               = 0;
+    int      pubAInit               = 0;
+    int      pubBInit               = 0;
+    uint8_t  labelA[]               = "TestEccDhAsyncA";
+    uint8_t  labelB[]               = "TestEccDhAsyncB";
+    int      ret                    = WH_ERROR_OK;
+
+    WH_TEST_PRINT("  Testing async ECDH %s curve...\n", name);
+
+    pubAxLen = pubAyLen = pubBxLen = pubByLen = keySize;
+
+    /* Generate two local ECC keys, then import each to the server cache so
+     * that both private keys have valid keyIds usable by the async API. */
+    ret = wc_ecc_init_ex(keyA, NULL, WH_DEV_ID);
+    if (ret == 0) {
+        keyAInit = 1;
+        ret      = wc_ecc_make_key(rng, keySize, keyA);
+    }
+    if (ret == 0) {
+        uint8_t privLabelA[] = "TestEccDhAsyncPrivA";
+        privAId              = WH_KEYID_ERASED;
+        ret                  = wh_Client_EccImportKey(ctx, keyA, &privAId,
+                                                      WH_NVM_FLAGS_USAGE_DERIVE,
+                                                      sizeof(privLabelA), privLabelA);
+    }
+    if (ret == 0) {
+        ret = wc_ecc_init_ex(keyB, NULL, WH_DEV_ID);
+    }
+    if (ret == 0) {
+        keyBInit = 1;
+        ret      = wc_ecc_make_key(rng, keySize, keyB);
+    }
+    if (ret == 0) {
+        uint8_t privLabelB[] = "TestEccDhAsyncPrivB";
+        privBId              = WH_KEYID_ERASED;
+        ret                  = wh_Client_EccImportKey(ctx, keyB, &privBId,
+                                                      WH_NVM_FLAGS_USAGE_DERIVE,
+                                                      sizeof(privLabelB), privLabelB);
+    }
+
+    /* Export raw public bytes so we can import into independent cache slots */
+    if (ret == 0) {
+        ret =
+            wc_ecc_export_public_raw(keyA, pubAx, &pubAxLen, pubAy, &pubAyLen);
+    }
+    if (ret == 0) {
+        ret =
+            wc_ecc_export_public_raw(keyB, pubBx, &pubBxLen, pubBy, &pubByLen);
+    }
+
+    /* Build public-only keys and import each as a distinct cache slot */
+    if (ret == 0) {
+        ret = wc_ecc_init_ex(pubA, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            pubAInit = 1;
+            ret = wc_ecc_import_unsigned(pubA, pubAx, pubAy, NULL, curveId);
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_EccImportKey(ctx, pubA, &pubAId,
+                                     WH_NVM_FLAGS_USAGE_DERIVE, sizeof(labelA),
+                                     labelA);
+    }
+    if (ret == 0) {
+        ret = wc_ecc_init_ex(pubB, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            pubBInit = 1;
+            ret = wc_ecc_import_unsigned(pubB, pubBx, pubBy, NULL, curveId);
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_EccImportKey(ctx, pubB, &pubBId,
+                                     WH_NVM_FLAGS_USAGE_DERIVE, sizeof(labelB),
+                                     labelB);
+    }
+
+    /* Async ECDH: A_priv * B_pub */
+    if (ret == 0) {
+        ret = wh_Client_EccSharedSecretRequest(ctx, privAId, pubBId);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_EccSharedSecretResponse(ctx, secret_AB,
+                                                    &secret_AB_len);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+
+    /* Async ECDH: B_priv * A_pub */
+    if (ret == 0) {
+        ret = wh_Client_EccSharedSecretRequest(ctx, privBId, pubAId);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_EccSharedSecretResponse(ctx, secret_BA,
+                                                    &secret_BA_len);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+
+    if (ret == 0) {
+        if (secret_AB_len != secret_BA_len ||
+            memcmp(secret_AB, secret_BA, secret_AB_len) != 0) {
+            WH_ERROR_PRINT("%s: async ECDH secrets differ across sides\n",
+                           name);
+            ret = -1;
+        }
+    }
+
+    /* Precondition: erased keyId on either side must return BADARGS */
+    if (ret == 0) {
+        int badret =
+            wh_Client_EccSharedSecretRequest(ctx, WH_KEYID_ERASED, pubBId);
+        if (badret != WH_ERROR_BADARGS) {
+            WH_ERROR_PRINT(
+                "%s: ECDH Request with erased priv keyId returned %d\n", name,
+                badret);
+            ret = -1;
+        }
+    }
+    if (ret == 0) {
+        int badret =
+            wh_Client_EccSharedSecretRequest(ctx, privAId, WH_KEYID_ERASED);
+        if (badret != WH_ERROR_BADARGS) {
+            WH_ERROR_PRINT(
+                "%s: ECDH Request with erased pub keyId returned %d\n", name,
+                badret);
+            ret = -1;
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("    async ECDH %s: PASS\n", name);
+    }
+
+    /* Cleanup */
+    if (!WH_KEYID_ISERASED(pubBId)) {
+        (void)wh_Client_KeyEvict(ctx, pubBId);
+    }
+    if (!WH_KEYID_ISERASED(pubAId)) {
+        (void)wh_Client_KeyEvict(ctx, pubAId);
+    }
+    if (!WH_KEYID_ISERASED(privBId)) {
+        (void)wh_Client_KeyEvict(ctx, privBId);
+    }
+    if (!WH_KEYID_ISERASED(privAId)) {
+        (void)wh_Client_KeyEvict(ctx, privAId);
+    }
+    if (pubBInit) {
+        wc_ecc_free(pubB);
+    }
+    if (pubAInit) {
+        wc_ecc_free(pubA);
+    }
+    if (keyBInit) {
+        wc_ecc_free(keyB);
+    }
+    if (keyAInit) {
+        wc_ecc_free(keyA);
+    }
+    return ret;
+}
+#endif /* HAVE_ECC_DHE */
+
+static int whTest_CryptoEccAsync(whClientContext* ctx, WC_RNG* rng)
+{
+    int ret = WH_ERROR_OK;
+
+    WH_TEST_PRINT("Testing ECC async API...\n");
+
+#if !defined(NO_ECC256)
+    if (ret == 0) {
+        ret = whTest_CryptoEccSignVerifyAsync_OneCurve(
+            ctx, rng, WH_TEST_ECC_P256_KEY_SIZE, ECC_SECP256R1, "P-256");
+    }
+#ifdef HAVE_ECC_DHE
+    if (ret == 0) {
+        ret = whTest_CryptoEccSharedSecretAsync_OneCurve(
+            ctx, rng, WH_TEST_ECC_P256_KEY_SIZE, ECC_SECP256R1, "P-256");
+    }
+#endif
+#endif
+
+#if (defined(HAVE_ECC384) || defined(HAVE_ALL_CURVES)) && ECC_MIN_KEY_SZ <= 384
+    if (ret == 0) {
+        ret = whTest_CryptoEccSignVerifyAsync_OneCurve(
+            ctx, rng, WH_TEST_ECC_P384_KEY_SIZE, ECC_SECP384R1, "P-384");
+    }
+#ifdef HAVE_ECC_DHE
+    if (ret == 0) {
+        ret = whTest_CryptoEccSharedSecretAsync_OneCurve(
+            ctx, rng, WH_TEST_ECC_P384_KEY_SIZE, ECC_SECP384R1, "P-384");
+    }
+#endif
+#endif
+
+#if (defined(HAVE_ECC521) || defined(HAVE_ALL_CURVES)) && ECC_MIN_KEY_SZ <= 521
+    if (ret == 0) {
+        ret = whTest_CryptoEccSignVerifyAsync_OneCurve(
+            ctx, rng, WH_TEST_ECC_P521_KEY_SIZE, ECC_SECP521R1, "P-521");
+    }
+#ifdef HAVE_ECC_DHE
+    if (ret == 0) {
+        ret = whTest_CryptoEccSharedSecretAsync_OneCurve(
+            ctx, rng, WH_TEST_ECC_P521_KEY_SIZE, ECC_SECP521R1, "P-521");
+    }
+#endif
+#endif
+
+    if (ret == 0) {
+        WH_TEST_PRINT("ECC async API SUCCESS\n");
+    }
+    return ret;
+}
 #endif /* HAVE_ECC_SIGN && HAVE_ECC_VERIFY && !WOLF_CRYPTO_CB_ONLY_ECC */
 #endif /* HAVE_ECC */
 
@@ -7733,6 +8163,9 @@ int whTest_CryptoClientConfig(whClientConfig* config)
     !defined(WOLF_CRYPTO_CB_ONLY_ECC)
     if (ret == 0) {
         ret = whTest_CryptoEccCrossVerify(client, rng);
+    }
+    if (ret == 0) {
+        ret = whTest_CryptoEccAsync(client, rng);
     }
 #endif
 #endif /* HAVE_ECC */

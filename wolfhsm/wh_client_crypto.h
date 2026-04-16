@@ -332,10 +332,13 @@ int wh_Client_EccMakeCacheKey(whClientContext* ctx,
         whKeyId *inout_key_id, whNvmFlags flags,
         uint16_t label_len, uint8_t* label);
 
-/* TODO: Perform shared secret computation (ECDH) */
-int wh_Client_EccSharedSecret(whClientContext* ctx,
-                                ecc_key* priv_key, ecc_key* pub_key,
-                                uint8_t* out, uint16_t *out_size);
+/* TODO: Perform shared secret computation (ECDH).
+ * *inout_size is in/out: callers must initialize it to the capacity of the
+ * out buffer; if the server-reported secret is larger, it is silently
+ * truncated. */
+int wh_Client_EccSharedSecret(whClientContext* ctx, ecc_key* priv_key,
+                              ecc_key* pub_key, uint8_t* out,
+                              uint16_t* inout_size);
 
 /* TODO: Server generates signature of input hash */
 int wh_Client_EccSign(whClientContext* ctx,
@@ -348,6 +351,102 @@ int wh_Client_EccVerify(whClientContext* ctx, ecc_key* key,
         const uint8_t* sig, uint16_t sig_len,
         const uint8_t* hash, uint16_t hash_len,
         int *out_res);
+
+/**
+ * @brief Async request half of an ECC sign operation.
+ *
+ * Serializes and sends a sign request for the hash using the server-cached
+ * private key identified by keyId. Does NOT wait for a reply. The key must
+ * already be cached on the server; auto-import is only available via the
+ * blocking wrapper wh_Client_EccSign.
+ *
+ * Contract: at most one outstanding async request may be in flight per
+ * whClientContext. The caller MUST call wh_Client_EccSignResponse before
+ * issuing any other async Request on the same ctx.
+ *
+ * @param[in] ctx      Client context.
+ * @param[in] keyId    Key ID of a cached ECC private key. Must not be erased.
+ * @param[in] hash     Hash data to sign (may be NULL only if hash_len == 0).
+ * @param[in] hash_len Length of hash in bytes.
+ * @return WH_ERROR_OK on success, WH_ERROR_BADARGS for invalid args or erased
+ *         keyId, or a negative error from the transport.
+ */
+int wh_Client_EccSignRequest(whClientContext* ctx, whKeyId keyId,
+                             const uint8_t* hash, uint16_t hash_len);
+
+/**
+ * @brief Async response half of an ECC sign operation.
+ *
+ * Single-shot RecvResponse; returns WH_ERROR_NOTREADY if the server has not
+ * yet replied. On success, copies the signature into sig and updates
+ * *inout_sig_len. If the server signature is larger than *inout_sig_len, it
+ * is silently truncated (matching the blocking wrapper's behavior).
+ */
+int wh_Client_EccSignResponse(whClientContext* ctx, uint8_t* sig,
+                              uint16_t* inout_sig_len);
+
+/**
+ * @brief Async request half of an ECC verify operation.
+ *
+ * Serializes and sends a verify request for (sig, hash) using the server-cached
+ * public key identified by keyId. Does NOT wait for a reply. The key must
+ * already be cached on the server; auto-import is only available via the
+ * blocking wrapper wh_Client_EccVerify.
+ *
+ * Note: the async API does not support the EXPORTPUB convenience (deriving
+ * a public key from a private-only key) — that stays a blocking-wrapper
+ * convenience.
+ *
+ * @param[in] ctx      Client context.
+ * @param[in] keyId    Key ID of a cached ECC public key. Must not be erased.
+ * @param[in] sig      Signature bytes.
+ * @param[in] sig_len  Length of sig.
+ * @param[in] hash     Hash bytes.
+ * @param[in] hash_len Length of hash.
+ * @return WH_ERROR_OK on success, WH_ERROR_BADARGS for invalid args or erased
+ *         keyId, or a negative error from the transport.
+ */
+int wh_Client_EccVerifyRequest(whClientContext* ctx, whKeyId keyId,
+                               const uint8_t* sig, uint16_t sig_len,
+                               const uint8_t* hash, uint16_t hash_len);
+
+/**
+ * @brief Async response half of an ECC verify operation.
+ *
+ * Single-shot RecvResponse; returns WH_ERROR_NOTREADY if the server has not
+ * yet replied. On success, writes the verify result (1 = valid, 0 = invalid)
+ * to *out_res.
+ */
+int wh_Client_EccVerifyResponse(whClientContext* ctx, int* out_res);
+
+/**
+ * @brief Async request half of an ECDH shared-secret operation.
+ *
+ * Serializes and sends a shared-secret request using two server-cached keys
+ * (private and public). Does NOT wait for a reply. Both keys must already be
+ * cached on the server; auto-import is only available via the blocking
+ * wrapper wh_Client_EccSharedSecret.
+ *
+ * @param[in] ctx        Client context.
+ * @param[in] prv_key_id Key ID of the cached private key. Must not be erased.
+ * @param[in] pub_key_id Key ID of the cached public key. Must not be erased.
+ * @return WH_ERROR_OK on success, WH_ERROR_BADARGS for invalid args or erased
+ *         keyIds, or a negative error from the transport.
+ */
+int wh_Client_EccSharedSecretRequest(whClientContext* ctx, whKeyId prv_key_id,
+                                     whKeyId pub_key_id);
+
+/**
+ * @brief Async response half of an ECDH shared-secret operation.
+ *
+ * Single-shot RecvResponse; returns WH_ERROR_NOTREADY if the server has not
+ * yet replied. On success, copies the shared secret into out and updates
+ * *inout_size. *inout_size is in/out: callers must initialize it to the
+ * capacity of the out buffer; if the server-reported secret is larger, it
+ * is silently truncated (matching wh_Client_EccSignResponse's behavior).
+ */
+int wh_Client_EccSharedSecretResponse(whClientContext* ctx, uint8_t* out,
+                                      uint16_t* inout_size);
 
 #endif /* HAVE_ECC */
 
