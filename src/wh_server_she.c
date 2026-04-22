@@ -1142,7 +1142,7 @@ static int _EncEcb(whServerContext* server, uint16_t magic, uint16_t req_size,
                    void* resp_packet)
 {
     int      ret = 0;
-    uint32_t field;
+    uint32_t field = 0;
     uint32_t keySz;
     uint8_t* in;
     uint8_t* out;
@@ -1218,7 +1218,7 @@ static int _EncCbc(whServerContext* server, uint16_t magic, uint16_t req_size,
                    void* resp_packet)
 {
     int                         ret = 0;
-    uint32_t                    field;
+    uint32_t                    field = 0;
     uint32_t                    keySz;
     uint8_t*                    in;
     uint8_t*                    out;
@@ -1301,7 +1301,7 @@ static int _DecEcb(whServerContext* server, uint16_t magic, uint16_t req_size,
                    void* resp_packet)
 {
     int      ret = 0;
-    uint32_t field;
+    uint32_t field = 0;
     uint32_t keySz;
     uint8_t* in;
     uint8_t* out;
@@ -1384,7 +1384,7 @@ static int _DecCbc(whServerContext* server, uint16_t magic, uint16_t req_size,
                    void* resp_packet)
 {
     int                         ret = 0;
-    uint32_t                    field;
+    uint32_t                    field = 0;
     uint32_t                    keySz;
     uint8_t*                    in;
     uint8_t*                    out;
