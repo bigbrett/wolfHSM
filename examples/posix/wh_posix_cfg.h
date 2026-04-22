@@ -23,9 +23,11 @@
  * DMA AND BUFFER SIZES
  * =========================================== */
 
-/* Request and Response Buffer Sizes */
-#define WH_POSIX_REQ_SIZE 2048
-#define WH_POSIX_RESP_SIZE 2048
+/* Request and Response Buffer Sizes. Must be at least
+ * sizeof(whTransportMemCsr) + sizeof(whCommHeader) + WOLFHSM_CFG_COMM_DATA_LEN
+ * to carry a full comm packet through the SHM transport. */
+#define WH_POSIX_REQ_SIZE (16 + (1024 * 8))
+#define WH_POSIX_RESP_SIZE (16 + (1024 * 8))
 #define WH_POSIX_DMA_SIZE 8000
 
 /* Data Buffer Sizes */

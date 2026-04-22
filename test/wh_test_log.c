@@ -1311,6 +1311,18 @@ enum {
 
 static int _clientServerLogSmokeTest(whClientContext* client)
 {
+    FILE*  log_file        = NULL;
+    size_t entry_count     = 0;
+    char   line[1024];
+    size_t expected_entries = 3;
+
+#ifdef WOLFHSM_CFG_ENABLE_AUTHENTICATION
+    /* When authentication is compiled in but no auth context is configured,
+     * server init emits an extra SECEVENT warning after the startup INFO log */
+
+    expected_entries++;
+#endif
+
     /* Connect to the server, which should trigger an info log entry */
     WH_TEST_ASSERT(WH_ERROR_OK == wh_Client_CommInit(client, NULL, NULL));
 
@@ -1318,16 +1330,9 @@ static int _clientServerLogSmokeTest(whClientContext* client)
     WH_TEST_RETURN_ON_FAIL(wh_Client_CommClose(client));
 
     /* Now read the log file and verify that the log entries are present */
-    FILE* log_file = fopen(WH_LOG_TEST_SERVER_LOG_FILE, "r");
+    log_file = fopen(WH_LOG_TEST_SERVER_LOG_FILE, "r");
     WH_TEST_ASSERT(log_file != NULL);
 
-    /* Basic smoke test: Check that there is at least one log entry in server
-     * log file */
-    size_t entry_count = 0;
-    char   line[1024];
-
-    /* Ensure there are at least 3 log entries and that they are somewhat sanely
-     * ordered */
     while (fgets(line, sizeof(line), log_file) != NULL) {
         entry_count++;
         WH_TEST_PRINT("Log entry: %s", line);
@@ -1336,6 +1341,18 @@ static int _clientServerLogSmokeTest(whClientContext* client)
         if (entry_count == 1) {
             WH_TEST_ASSERT(strstr(line, "INFO") != NULL);
         }
+#ifdef WOLFHSM_CFG_ENABLE_AUTHENTICATION
+        else if (entry_count == 2) {
+            /* Auth enabled with no auth context triggers a SECEVENT */
+            WH_TEST_ASSERT(strstr(line, "SECEVENT") != NULL);
+        }
+        else if (entry_count == 3) {
+            WH_TEST_ASSERT(strstr(line, "INFO") != NULL);
+        }
+        else if (entry_count == 4) {
+            WH_TEST_ASSERT(strstr(line, "INFO") != NULL);
+        }
+#else
         else if (entry_count == 2) {
             /* Second log entry should the connect INFO log */
             WH_TEST_ASSERT(strstr(line, "INFO") != NULL);
@@ -1344,6 +1361,7 @@ static int _clientServerLogSmokeTest(whClientContext* client)
             /* Third log entry should be another INFO from comm close */
             WH_TEST_ASSERT(strstr(line, "INFO") != NULL);
         }
+#endif
         else {
             break;
         }
@@ -1351,7 +1369,7 @@ static int _clientServerLogSmokeTest(whClientContext* client)
     fclose(log_file);
 
     /* Ensure we have at least the number of expected log entries */
-    WH_TEST_ASSERT(entry_count >= 3);
+    WH_TEST_ASSERT(entry_count >= expected_entries);
 
     return WH_ERROR_OK;
 }

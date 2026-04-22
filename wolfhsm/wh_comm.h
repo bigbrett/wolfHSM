@@ -169,6 +169,9 @@ typedef struct {
 
 /* Context structure for a client.  Note the client context will track the
  * request sequence number and provide a buffer for at least 1 packet.
+ *
+ * Not internally thread-safe: a single whCommClient must not be shared
+ * between threads without external synchronization.
  */
 typedef struct {
     uint64_t WH_ALIGN; /* Ensure following is 64-bit aligned */
@@ -178,13 +181,13 @@ typedef struct {
     whCommSetConnectedCb connect_cb;
     whCommHeader* hdr;
     uint8_t* data;
-    int initialized;
-    uint16_t reqid;
+    uint32_t initialized;
+    uint32_t pending; /* request sent but response not yet consumed */
     uint16_t seq;
     uint16_t size;
     uint8_t client_id;
     uint8_t server_id;
-    uint8_t WH_PAD[4];
+    uint8_t  WH_PAD[2];
 #ifdef WOLFHSM_CFG_ENABLE_TIMEOUT
     whTimeout respTimeout;
 #endif
@@ -219,6 +222,24 @@ uint8_t* wh_CommClient_GetDataPtr(whCommClient* context);
  * unfinished requests can be ignored.
  */
 int wh_CommClient_Cleanup(whCommClient* context);
+
+/* Report whether a request has been sent whose matching response has not yet
+ * been consumed. Does not mutate any context state.
+ *
+ * Returns: 1 if a request is outstanding, 0 if idle,
+ *          WH_ERROR_BADARGS on NULL or uninitialized context.
+ */
+int wh_CommClient_IsRequestPending(const whCommClient* context);
+
+/* Clear the pending-request flag without touching the sequence counter.
+ * Intended as a recovery path after WH_ERROR_TIMEOUT or any other case where
+ * the caller decides to give up on a response. Because the sequence counter is
+ * left advanced, any late straggler still fails the seq check on the next
+ * RecvResponse cycle.
+ *
+ * Returns: 0 on success, WH_ERROR_BADARGS on NULL or uninitialized context.
+ */
+int wh_CommClient_AbortPending(whCommClient* context);
 
 
 /** CommServer component types */

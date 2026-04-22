@@ -45,6 +45,9 @@
 #include "wh_test_crypto_affinity.h"
 #include "wh_test_timeout.h"
 #include "wh_test_dma.h"
+#ifdef WOLFHSM_CFG_ENABLE_AUTHENTICATION
+#include "wh_test_auth.h"
+#endif /* WOLFHSM_CFG_ENABLE_AUTHENTICATION */
 
 #if defined(WOLFHSM_CFG_CERTIFICATE_MANAGER)
 #include "wh_test_cert.h"
@@ -95,6 +98,11 @@ int whTest_Unit(void)
     /* Comm tests */
     WH_TEST_ASSERT(0 == whTest_Comm());
     WH_TEST_ASSERT(0 == whTest_ClientServer());
+
+#ifdef WOLFHSM_CFG_ENABLE_AUTHENTICATION
+    /* Auth tests */
+    WH_TEST_ASSERT(0 == whTest_AuthMEM());
+#endif /* WOLFHSM_CFG_ENABLE_AUTHENTICATION */
 
 #ifndef WOLFHSM_CFG_NO_CRYPTO
     /* Crypto Tests */
@@ -171,6 +179,10 @@ int whTest_ClientConfig(whClientConfig* clientCfg)
 #if defined(WOLFHSM_CFG_ENABLE_TIMEOUT)
     WH_TEST_RETURN_ON_FAIL(whTest_TimeoutClientConfig(clientCfg));
 #endif /* WOLFHSM_CFG_ENABLE_TIMEOUT */
+
+#ifdef WOLFHSM_CFG_ENABLE_AUTHENTICATION
+    WH_TEST_RETURN_ON_FAIL(whTest_AuthTCP(clientCfg));
+#endif /* WOLFHSM_CFG_ENABLE_AUTHENTICATION */
 
     return WH_ERROR_OK;
 }

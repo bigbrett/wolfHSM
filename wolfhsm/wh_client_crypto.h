@@ -30,6 +30,7 @@
 
 /* System libraries */
 #include <stdint.h>
+#include <stdbool.h>
 
 /* Common WolfHSM types and defines shared with the server */
 #include "wolfhsm/wh_common.h"
@@ -910,6 +911,63 @@ int wh_Client_Sha256(whClientContext* ctx, wc_Sha256* sha, const uint8_t* in,
 
 
 /**
+ * @brief Async request half of a non-DMA SHA-256 Update.
+ *
+ * Serializes and sends an Update request carrying as many full blocks as
+ * fit in the comm buffer (up to WH_MESSAGE_CRYPTO_SHA256_MAX_INLINE_UPDATE_SZ
+ * bytes), absorbing any leading bytes already buffered in sha->buffer. Any
+ * tail (<64 bytes) remaining after this call is stored in sha->buffer for the
+ * next call. Does NOT wait for a reply.
+ *
+ * Contract: at most one outstanding async request may be in flight per
+ * whClientContext (enforced by the comm layer's pending-request tracking).
+ * If *requestSent is true, the caller MUST call wh_Client_Sha256UpdateResponse
+ * before issuing any other async Request on the same ctx, including a Request
+ * using a different wc_Sha256 instance or a different algorithm.
+ *
+ * @param[in] ctx          Client context.
+ * @param[in,out] sha      SHA-256 context (buffer/buffLen updated on success).
+ * @param[in] in           Input data (may be NULL only if inLen == 0).
+ * @param[in] inLen        Input length. Must not exceed the per-call capacity
+ *                         (max inline + remaining buffer slack); use the
+ *                         blocking wrapper for arbitrary lengths.
+ * @param[out] requestSent Set to true if a server request was sent and a
+ *                         matching Response call is required; false if the
+ *                         input was fully absorbed into sha->buffer and no
+ *                         round-trip was issued.
+ * @return WH_ERROR_OK on success, WH_ERROR_BADARGS if inLen exceeds the
+ *         per-call capacity (sha is left unchanged in that case).
+ */
+int wh_Client_Sha256UpdateRequest(whClientContext* ctx, wc_Sha256* sha,
+                                  const uint8_t* in, uint32_t inLen,
+                                  bool* requestSent);
+
+/**
+ * @brief Async response half of a non-DMA SHA-256 Update.
+ *
+ * Single-shot RecvResponse; returns WH_ERROR_NOTREADY if the server has not
+ * yet replied. On success, updates sha->digest/hiLen/loLen from the reply.
+ * MUST only be called if the matching Request returned requestSent == true.
+ */
+int wh_Client_Sha256UpdateResponse(whClientContext* ctx, wc_Sha256* sha);
+
+/**
+ * @brief Async request half of a non-DMA SHA-256 Final.
+ *
+ * Sends the current sha->buffer (0..63 bytes) as the last block.
+ */
+int wh_Client_Sha256FinalRequest(whClientContext* ctx, wc_Sha256* sha);
+
+/**
+ * @brief Async response half of a non-DMA SHA-256 Final.
+ *
+ * Single-shot RecvResponse. Copies final digest into out, then resets sha
+ * state via wc_InitSha256_ex (preserving devId).
+ */
+int wh_Client_Sha256FinalResponse(whClientContext* ctx, wc_Sha256* sha,
+                                  uint8_t* out);
+
+/**
  * @brief Performs a SHA-256 hash operation on the input data using DMA.
  *
  * This function performs a SHA-256 hash operation on the input data and stores
@@ -924,6 +982,44 @@ int wh_Client_Sha256(whClientContext* ctx, wc_Sha256* sha, const uint8_t* in,
  */
 int wh_Client_Sha256Dma(whClientContext* ctx, wc_Sha256* sha, const uint8_t* in,
                         uint32_t inLen, uint8_t* out);
+
+#ifdef WOLFHSM_CFG_DMA
+/**
+ * @brief Async request half of a DMA SHA-256 Update.
+ *
+ * Buffers partial blocks on the client. Sends whole blocks via DMA to the
+ * server, with any assembled first block (from the partial buffer) as inline
+ * trailing data. Sets *requestSent to indicate whether a message was sent
+ * (false when all input was absorbed into the partial-block buffer).
+ */
+int wh_Client_Sha256DmaUpdateRequest(whClientContext* ctx, wc_Sha256* sha,
+                                     const uint8_t* in, uint32_t inLen,
+                                     bool* requestSent);
+
+/**
+ * @brief Async response half of a DMA SHA-256 Update.
+ *
+ * Receives the server response and restores the updated SHA state from the
+ * inline response. Runs POST DMA cleanup for the input buffer.
+ */
+int wh_Client_Sha256DmaUpdateResponse(whClientContext* ctx, wc_Sha256* sha);
+
+/**
+ * @brief Async request half of a DMA SHA-256 Final.
+ *
+ * Sends the partial-block tail as inline data with the resume state. No DMA
+ * addresses are used (the final hash is returned inline in the response).
+ */
+int wh_Client_Sha256DmaFinalRequest(whClientContext* ctx, wc_Sha256* sha);
+
+/**
+ * @brief Async response half of a DMA SHA-256 Final.
+ *
+ * Receives the final hash from the inline response and copies it to out.
+ */
+int wh_Client_Sha256DmaFinalResponse(whClientContext* ctx, wc_Sha256* sha,
+                                     uint8_t* out);
+#endif /* WOLFHSM_CFG_DMA */
 
 #endif /* !NO_SHA256 */
 
@@ -943,6 +1039,64 @@ int wh_Client_Sha256Dma(whClientContext* ctx, wc_Sha256* sha, const uint8_t* in,
  */
 int wh_Client_Sha224(whClientContext* ctx, wc_Sha224* sha, const uint8_t* in,
                      uint32_t inLen, uint8_t* out);
+
+/**
+ * @brief Async request half of a non-DMA SHA-224 Update.
+ *
+ * Serializes and sends an Update request carrying as many full blocks as
+ * fit in the comm buffer (up to WH_MESSAGE_CRYPTO_SHA224_MAX_INLINE_UPDATE_SZ
+ * bytes), absorbing any leading bytes already buffered in sha->buffer. Any
+ * tail (<64 bytes) remaining after this call is stored in sha->buffer for the
+ * next call. Does NOT wait for a reply.
+ *
+ * Contract: at most one outstanding async request may be in flight per
+ * whClientContext (enforced by the comm layer's pending-request tracking).
+ * If *requestSent is true, the caller MUST call wh_Client_Sha224UpdateResponse
+ * before issuing any other async Request on the same ctx, including a Request
+ * using a different wc_Sha224 instance or a different algorithm.
+ *
+ * @param[in] ctx          Client context.
+ * @param[in,out] sha      SHA-224 context (buffer/buffLen updated on success).
+ * @param[in] in           Input data (may be NULL only if inLen == 0).
+ * @param[in] inLen        Input length. Must not exceed the per-call capacity
+ *                         (max inline + remaining buffer slack); use the
+ *                         blocking wrapper for arbitrary lengths.
+ * @param[out] requestSent Set to true if a server request was sent and a
+ *                         matching Response call is required; false if the
+ *                         input was fully absorbed into sha->buffer and no
+ *                         round-trip was issued.
+ * @return WH_ERROR_OK on success, WH_ERROR_BADARGS if inLen exceeds the
+ *         per-call capacity (sha is left unchanged in that case).
+ */
+int wh_Client_Sha224UpdateRequest(whClientContext* ctx, wc_Sha224* sha,
+                                  const uint8_t* in, uint32_t inLen,
+                                  bool* requestSent);
+
+/**
+ * @brief Async response half of a non-DMA SHA-224 Update.
+ *
+ * Single-shot RecvResponse; returns WH_ERROR_NOTREADY if the server has not
+ * yet replied. On success, updates sha->digest/hiLen/loLen from the reply.
+ * MUST only be called if the matching Request returned requestSent == true.
+ */
+int wh_Client_Sha224UpdateResponse(whClientContext* ctx, wc_Sha224* sha);
+
+/**
+ * @brief Async request half of a non-DMA SHA-224 Final.
+ *
+ * Sends the current sha->buffer (0..63 bytes) as the last block.
+ */
+int wh_Client_Sha224FinalRequest(whClientContext* ctx, wc_Sha224* sha);
+
+/**
+ * @brief Async response half of a non-DMA SHA-224 Final.
+ *
+ * Single-shot RecvResponse. Copies final digest into out, then resets sha
+ * state via wc_InitSha224_ex (preserving devId).
+ */
+int wh_Client_Sha224FinalResponse(whClientContext* ctx, wc_Sha224* sha,
+                                  uint8_t* out);
+
 /**
  * @brief Performs a SHA-224 hash operation on the input data using DMA.
  *
@@ -958,6 +1112,17 @@ int wh_Client_Sha224(whClientContext* ctx, wc_Sha224* sha, const uint8_t* in,
  */
 int wh_Client_Sha224Dma(whClientContext* ctx, wc_Sha224* sha, const uint8_t* in,
                         uint32_t inLen, uint8_t* out);
+
+#ifdef WOLFHSM_CFG_DMA
+int wh_Client_Sha224DmaUpdateRequest(whClientContext* ctx, wc_Sha224* sha,
+                                     const uint8_t* in, uint32_t inLen,
+                                     bool* requestSent);
+int wh_Client_Sha224DmaUpdateResponse(whClientContext* ctx, wc_Sha224* sha);
+int wh_Client_Sha224DmaFinalRequest(whClientContext* ctx, wc_Sha224* sha);
+int wh_Client_Sha224DmaFinalResponse(whClientContext* ctx, wc_Sha224* sha,
+                                     uint8_t* out);
+#endif /* WOLFHSM_CFG_DMA */
+
 #endif /* WOLFSSL_SHA224 */
 
 #if defined(WOLFSSL_SHA384)
@@ -976,6 +1141,64 @@ int wh_Client_Sha224Dma(whClientContext* ctx, wc_Sha224* sha, const uint8_t* in,
  */
 int wh_Client_Sha384(whClientContext* ctx, wc_Sha384* sha, const uint8_t* in,
                      uint32_t inLen, uint8_t* out);
+
+/**
+ * @brief Async request half of a non-DMA SHA-384 Update.
+ *
+ * Serializes and sends an Update request carrying as many full blocks as
+ * fit in the comm buffer (up to WH_MESSAGE_CRYPTO_SHA384_MAX_INLINE_UPDATE_SZ
+ * bytes), absorbing any leading bytes already buffered in sha->buffer. Any
+ * tail (<128 bytes) remaining after this call is stored in sha->buffer for
+ * the next call. Does NOT wait for a reply.
+ *
+ * Contract: at most one outstanding async request may be in flight per
+ * whClientContext (enforced by the comm layer's pending-request tracking).
+ * If *requestSent is true, the caller MUST call wh_Client_Sha384UpdateResponse
+ * before issuing any other async Request on the same ctx, including a Request
+ * using a different wc_Sha384 instance or a different algorithm.
+ *
+ * @param[in] ctx          Client context.
+ * @param[in,out] sha      SHA-384 context (buffer/buffLen updated on success).
+ * @param[in] in           Input data (may be NULL only if inLen == 0).
+ * @param[in] inLen        Input length. Must not exceed the per-call capacity
+ *                         (max inline + remaining buffer slack); use the
+ *                         blocking wrapper for arbitrary lengths.
+ * @param[out] requestSent Set to true if a server request was sent and a
+ *                         matching Response call is required; false if the
+ *                         input was fully absorbed into sha->buffer and no
+ *                         round-trip was issued.
+ * @return WH_ERROR_OK on success, WH_ERROR_BADARGS if inLen exceeds the
+ *         per-call capacity (sha is left unchanged in that case).
+ */
+int wh_Client_Sha384UpdateRequest(whClientContext* ctx, wc_Sha384* sha,
+                                  const uint8_t* in, uint32_t inLen,
+                                  bool* requestSent);
+
+/**
+ * @brief Async response half of a non-DMA SHA-384 Update.
+ *
+ * Single-shot RecvResponse; returns WH_ERROR_NOTREADY if the server has not
+ * yet replied. On success, updates sha->digest/hiLen/loLen from the reply.
+ * MUST only be called if the matching Request returned requestSent == true.
+ */
+int wh_Client_Sha384UpdateResponse(whClientContext* ctx, wc_Sha384* sha);
+
+/**
+ * @brief Async request half of a non-DMA SHA-384 Final.
+ *
+ * Sends the current sha->buffer (0..127 bytes) as the last block.
+ */
+int wh_Client_Sha384FinalRequest(whClientContext* ctx, wc_Sha384* sha);
+
+/**
+ * @brief Async response half of a non-DMA SHA-384 Final.
+ *
+ * Single-shot RecvResponse. Copies final digest into out, then resets sha
+ * state via wc_InitSha384_ex (preserving devId).
+ */
+int wh_Client_Sha384FinalResponse(whClientContext* ctx, wc_Sha384* sha,
+                                  uint8_t* out);
+
 /**
  * @brief Performs a SHA-384 hash operation on the input data using DMA.
  *
@@ -991,6 +1214,16 @@ int wh_Client_Sha384(whClientContext* ctx, wc_Sha384* sha, const uint8_t* in,
  */
 int wh_Client_Sha384Dma(whClientContext* ctx, wc_Sha384* sha, const uint8_t* in,
                         uint32_t inLen, uint8_t* out);
+
+#ifdef WOLFHSM_CFG_DMA
+int wh_Client_Sha384DmaUpdateRequest(whClientContext* ctx, wc_Sha384* sha,
+                                     const uint8_t* in, uint32_t inLen,
+                                     bool* requestSent);
+int wh_Client_Sha384DmaUpdateResponse(whClientContext* ctx, wc_Sha384* sha);
+int wh_Client_Sha384DmaFinalRequest(whClientContext* ctx, wc_Sha384* sha);
+int wh_Client_Sha384DmaFinalResponse(whClientContext* ctx, wc_Sha384* sha,
+                                     uint8_t* out);
+#endif /* WOLFHSM_CFG_DMA */
 
 #endif /* WOLFSSL_SHA384 */
 
@@ -1010,6 +1243,64 @@ int wh_Client_Sha384Dma(whClientContext* ctx, wc_Sha384* sha, const uint8_t* in,
  */
 int wh_Client_Sha512(whClientContext* ctx, wc_Sha512* sha, const uint8_t* in,
                      uint32_t inLen, uint8_t* out);
+
+/**
+ * @brief Async request half of a non-DMA SHA-512 Update.
+ *
+ * Serializes and sends an Update request carrying as many full blocks as
+ * fit in the comm buffer (up to WH_MESSAGE_CRYPTO_SHA512_MAX_INLINE_UPDATE_SZ
+ * bytes), absorbing any leading bytes already buffered in sha->buffer. Any
+ * tail (<128 bytes) remaining after this call is stored in sha->buffer for
+ * the next call. Does NOT wait for a reply.
+ *
+ * Contract: at most one outstanding async request may be in flight per
+ * whClientContext (enforced by the comm layer's pending-request tracking).
+ * If *requestSent is true, the caller MUST call wh_Client_Sha512UpdateResponse
+ * before issuing any other async Request on the same ctx, including a Request
+ * using a different wc_Sha512 instance or a different algorithm.
+ *
+ * @param[in] ctx          Client context.
+ * @param[in,out] sha      SHA-512 context (buffer/buffLen updated on success).
+ * @param[in] in           Input data (may be NULL only if inLen == 0).
+ * @param[in] inLen        Input length. Must not exceed the per-call capacity
+ *                         (max inline + remaining buffer slack); use the
+ *                         blocking wrapper for arbitrary lengths.
+ * @param[out] requestSent Set to true if a server request was sent and a
+ *                         matching Response call is required; false if the
+ *                         input was fully absorbed into sha->buffer and no
+ *                         round-trip was issued.
+ * @return WH_ERROR_OK on success, WH_ERROR_BADARGS if inLen exceeds the
+ *         per-call capacity (sha is left unchanged in that case).
+ */
+int wh_Client_Sha512UpdateRequest(whClientContext* ctx, wc_Sha512* sha,
+                                  const uint8_t* in, uint32_t inLen,
+                                  bool* requestSent);
+
+/**
+ * @brief Async response half of a non-DMA SHA-512 Update.
+ *
+ * Single-shot RecvResponse; returns WH_ERROR_NOTREADY if the server has not
+ * yet replied. On success, updates sha->digest/hiLen/loLen from the reply.
+ * MUST only be called if the matching Request returned requestSent == true.
+ */
+int wh_Client_Sha512UpdateResponse(whClientContext* ctx, wc_Sha512* sha);
+
+/**
+ * @brief Async request half of a non-DMA SHA-512 Final.
+ *
+ * Sends the current sha->buffer (0..127 bytes) as the last block.
+ */
+int wh_Client_Sha512FinalRequest(whClientContext* ctx, wc_Sha512* sha);
+
+/**
+ * @brief Async response half of a non-DMA SHA-512 Final.
+ *
+ * Single-shot RecvResponse. Copies final digest into out, then resets sha
+ * state via wc_InitSha512_ex (preserving devId and hashType).
+ */
+int wh_Client_Sha512FinalResponse(whClientContext* ctx, wc_Sha512* sha,
+                                  uint8_t* out);
+
 /**
  * @brief Performs a SHA-512 hash operation on the input data using DMA.
  *
@@ -1025,6 +1316,17 @@ int wh_Client_Sha512(whClientContext* ctx, wc_Sha512* sha, const uint8_t* in,
  */
 int wh_Client_Sha512Dma(whClientContext* ctx, wc_Sha512* sha, const uint8_t* in,
                         uint32_t inLen, uint8_t* out);
+
+#ifdef WOLFHSM_CFG_DMA
+int wh_Client_Sha512DmaUpdateRequest(whClientContext* ctx, wc_Sha512* sha,
+                                     const uint8_t* in, uint32_t inLen,
+                                     bool* requestSent);
+int wh_Client_Sha512DmaUpdateResponse(whClientContext* ctx, wc_Sha512* sha);
+int wh_Client_Sha512DmaFinalRequest(whClientContext* ctx, wc_Sha512* sha);
+int wh_Client_Sha512DmaFinalResponse(whClientContext* ctx, wc_Sha512* sha,
+                                     uint8_t* out);
+#endif /* WOLFHSM_CFG_DMA */
+
 #endif /* WOLFSSL_SHA512 */
 
 #ifdef HAVE_DILITHIUM

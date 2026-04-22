@@ -627,7 +627,9 @@ int wh_MessageCrypto_TranslateEd25519VerifyResponse(
     return 0;
 }
 
-/* SHA256 Request translation */
+/* SHA256 Request translation. Only the fixed-size header is translated; any
+ * trailing variable-length input bytes (uint8_t in[inSz]) are raw bytes that
+ * do not need endian translation. */
 int wh_MessageCrypto_TranslateSha256Request(
     uint16_t magic, const whMessageCrypto_Sha256Request* src,
     whMessageCrypto_Sha256Request* dest)
@@ -643,16 +645,14 @@ int wh_MessageCrypto_TranslateSha256Request(
                sizeof(src->resumeState.hash));
     }
     WH_T32(magic, dest, src, isLastBlock);
-    WH_T32(magic, dest, src, lastBlockLen);
-    /* Input block is just a byte array, no translation needed */
-    if (src != dest) {
-        memcpy(dest->inBlock, src->inBlock, sizeof(src->inBlock));
-    }
+    WH_T32(magic, dest, src, inSz);
     return 0;
 }
 
 #if defined(WOLFSSL_SHA512) || defined(WOLFSSL_SHA384)
-/* SHA512 Request translation */
+/* SHA512 Request translation. Only the fixed-size header is translated; any
+ * trailing variable-length input bytes (uint8_t in[inSz]) are raw bytes that
+ * do not need endian translation. */
 int wh_MessageCrypto_TranslateSha512Request(
     uint16_t magic, const whMessageCrypto_Sha512Request* src,
     whMessageCrypto_Sha512Request* dest)
@@ -669,11 +669,7 @@ int wh_MessageCrypto_TranslateSha512Request(
                sizeof(src->resumeState.hash));
     }
     WH_T32(magic, dest, src, isLastBlock);
-    WH_T32(magic, dest, src, lastBlockLen);
-    /* Input block is just a byte array, no translation needed */
-    if (src != dest) {
-        memcpy(dest->inBlock, src->inBlock, sizeof(src->inBlock));
-    }
+    WH_T32(magic, dest, src, inSz);
     return 0;
 }
 #endif /* WOLFSSL_SHA512 || WOLFSSL_SHA384 */
@@ -865,10 +861,10 @@ static int wh_MessageCrypto_TranslateDmaAddrStatus(
                                                &dest->badAddr);
 }
 
-/* SHA224 DMA Request translation */
-int wh_MessageCrypto_TranslateSha2DmaRequest(
-    uint16_t magic, const whMessageCrypto_Sha2DmaRequest* src,
-    whMessageCrypto_Sha2DmaRequest* dest)
+/* SHA256/SHA224 DMA Request translation */
+int wh_MessageCrypto_TranslateSha256DmaRequest(
+    uint16_t magic, const whMessageCrypto_Sha256DmaRequest* src,
+    whMessageCrypto_Sha256DmaRequest* dest)
 {
     int ret;
 
@@ -876,23 +872,50 @@ int wh_MessageCrypto_TranslateSha2DmaRequest(
         return WH_ERROR_BADARGS;
     }
 
-    WH_T64(magic, dest, src, finalize);
+    WH_T32(magic, dest, src, resumeState.hiLen);
+    WH_T32(magic, dest, src, resumeState.loLen);
+    if (src != dest) {
+        memcpy(dest->resumeState.hash, src->resumeState.hash,
+               sizeof(src->resumeState.hash));
+    }
 
     ret = wh_MessageCrypto_TranslateDmaBuffer(magic, &src->input, &dest->input);
     if (ret != 0) {
         return ret;
     }
 
-    ret = wh_MessageCrypto_TranslateDmaBuffer(magic, &src->state, &dest->state);
+    WH_T32(magic, dest, src, isLastBlock);
+    WH_T32(magic, dest, src, inSz);
+
+    return 0;
+}
+
+/* SHA512/SHA384 DMA Request translation */
+int wh_MessageCrypto_TranslateSha512DmaRequest(
+    uint16_t magic, const whMessageCrypto_Sha512DmaRequest* src,
+    whMessageCrypto_Sha512DmaRequest* dest)
+{
+    int ret;
+
+    if ((src == NULL) || (dest == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+
+    WH_T32(magic, dest, src, resumeState.hiLen);
+    WH_T32(magic, dest, src, resumeState.loLen);
+    if (src != dest) {
+        memcpy(dest->resumeState.hash, src->resumeState.hash,
+               sizeof(src->resumeState.hash));
+    }
+    WH_T32(magic, dest, src, resumeState.hashType);
+
+    ret = wh_MessageCrypto_TranslateDmaBuffer(magic, &src->input, &dest->input);
     if (ret != 0) {
         return ret;
     }
 
-    ret =
-        wh_MessageCrypto_TranslateDmaBuffer(magic, &src->output, &dest->output);
-    if (ret != 0) {
-        return ret;
-    }
+    WH_T32(magic, dest, src, isLastBlock);
+    WH_T32(magic, dest, src, inSz);
 
     return 0;
 }
@@ -905,6 +928,14 @@ int wh_MessageCrypto_TranslateSha2DmaResponse(
     if ((src == NULL) || (dest == NULL)) {
         return WH_ERROR_BADARGS;
     }
+
+    WH_T32(magic, dest, src, hiLen);
+    WH_T32(magic, dest, src, loLen);
+    if (src != dest) {
+        memcpy(dest->hash, src->hash, sizeof(src->hash));
+    }
+    WH_T32(magic, dest, src, hashType);
+
     return wh_MessageCrypto_TranslateDmaAddrStatus(magic, &src->dmaAddrStatus,
                                                    &dest->dmaAddrStatus);
 }

@@ -34,6 +34,30 @@
 #include "wolfhsm/wh_common.h"
 #include "wolfhsm/wh_server.h"
 
+/* wolfBoot header constants */
+#define WH_IMG_MGR_WOLFBOOT_MAGIC 0x464C4F57 /* "WOLF" LE */
+#define WH_IMG_MGR_WOLFBOOT_HDR_OFFSET 8
+
+/* wolfBoot TLV types */
+#define WH_IMG_MGR_WOLFBOOT_HDR_SHA256 0x03
+#define WH_IMG_MGR_WOLFBOOT_HDR_IMG_TYPE 0x04
+#define WH_IMG_MGR_WOLFBOOT_HDR_PUBKEY 0x10
+#define WH_IMG_MGR_WOLFBOOT_HDR_SIGNATURE 0x20
+#define WH_IMG_MGR_WOLFBOOT_HDR_CERT_CHAIN 0x23
+#define WH_IMG_MGR_WOLFBOOT_HDR_PADDING 0xFF
+
+/* wolfBoot auth key types (from high byte of img_type) */
+#define WH_IMG_MGR_WOLFBOOT_AUTH_RSA4096 0x04
+#define WH_IMG_MGR_WOLFBOOT_HDR_IMG_TYPE_AUTH_MASK 0xFF00
+
+/* Image type enum controlling how the framework loads keys/signatures */
+typedef enum {
+    WH_IMG_MGR_IMG_TYPE_RAW = 0,       /* Key from keystore, sig from NVM */
+    WH_IMG_MGR_IMG_TYPE_WOLFBOOT,      /* Key from keystore, sig from header */
+    WH_IMG_MGR_IMG_TYPE_WOLFBOOT_CERT, /* Root CA from NVM, cert chain + sig
+                                          from header */
+} whServerImgMgrImgType;
+
 /* Forward declaration for callback function signatures */
 typedef struct whServerImgMgrContext_t whServerImgMgrContext;
 
@@ -86,10 +110,15 @@ typedef int (*whServerImgMgrVerifyAction)(whServerImgMgrContext* context,
  * and post-verification actions.
  */
 typedef struct whServerImgMgrImg {
-    uintptr_t                  addr;         /* Image address */
-    size_t                     size;         /* Image size */
-    whKeyId                    keyId;        /* Key ID for verification */
-    whNvmId                    sigNvmId;     /* NVM ID for signature */
+    uintptr_t addr;     /* RAW: image blob. WOLFBOOT: firmware payload */
+    size_t    size;     /* RAW: blob size. WOLFBOOT: max payload size, actual
+                            size obtained from manifest header */
+    uintptr_t hdrAddr;  /* wolfBoot header address (unused for RAW). Must be
+                            2-byte aligned for WOLFBOOT/WOLFBOOT_CERT. */
+    size_t    hdrSize;  /* wolfBoot header size (unused for RAW) */
+    whKeyId   keyId;    /* RAW/WOLFBOOT: verify key ID. WOLFBOOT_CERT: unused */
+    whNvmId   sigNvmId; /* RAW: sig NVM ID. WOLFBOOT_CERT: root CA NVM ID */
+    whServerImgMgrImgType imgType; /* Controls framework loading behavior */
     whServerImgMgrVerifyMethod verifyMethod; /* Verification callback */
     whServerImgMgrVerifyAction verifyAction; /* Post-verification action */
 } whServerImgMgrImg;
@@ -254,6 +283,49 @@ int wh_Server_ImgMgrVerifyMethodAesCmac(whServerImgMgrContext*   context,
  * failure
  */
 int wh_Server_ImgMgrVerifyMethodRsaSslWithSha256(
+    whServerImgMgrContext* context, const whServerImgMgrImg* img,
+    const uint8_t* key, size_t keySz, const uint8_t* sig, size_t sigSz);
+
+/**
+ * @brief wolfBoot RSA4096+SHA256 verification method
+ *
+ * Verifies a wolfBoot image using RSA4096 signature with SHA256 hash.
+ * The public key is provided by the framework (loaded from keystore).
+ * The signature is extracted from the wolfBoot header at img->hdrAddr.
+ *
+ * @param[in] context Image manager context
+ * @param[in] img Image structure with hdrAddr pointing to wolfBoot header
+ *                (must be 2-byte aligned) and addr pointing to firmware payload
+ * @param[in] key RSA4096 public key data (DER format)
+ * @param[in] keySz Size of key data
+ * @param[in] sig Unused (NULL), signature is read from wolfBoot header
+ * @param[in] sigSz Unused (0)
+ * @return WH_ERROR_OK on successful verification, negative error code on
+ * failure
+ */
+int wh_Server_ImgMgrVerifyMethodWolfBootRsa4096WithSha256(
+    whServerImgMgrContext* context, const whServerImgMgrImg* img,
+    const uint8_t* key, size_t keySz, const uint8_t* sig, size_t sigSz);
+
+/**
+ * @brief wolfBoot RSA4096+SHA256 cert chain verification method
+ *
+ * Verifies a wolfBoot image using RSA4096 signature with SHA256 hash,
+ * where the signing key is validated through a certificate chain.
+ * The root CA cert NVM ID is read from img->sigNvmId.
+ * The cert chain and signature are extracted from the wolfBoot header.
+ *
+ * @param[in] context Image manager context
+ * @param[in] img Image structure with hdrAddr pointing to wolfBoot header
+ *                (must be 2-byte aligned) and addr pointing to firmware payload
+ * @param[in] key Unused (NULL), leaf key is extracted from cert chain
+ * @param[in] keySz Unused (0)
+ * @param[in] sig Unused (NULL), signature is read from wolfBoot header
+ * @param[in] sigSz Unused (0)
+ * @return WH_ERROR_OK on successful verification, negative error code on
+ * failure
+ */
+int wh_Server_ImgMgrVerifyMethodWolfBootCertChainRsa4096WithSha256(
     whServerImgMgrContext* context, const whServerImgMgrImg* img,
     const uint8_t* key, size_t keySz, const uint8_t* sig, size_t sigSz);
 

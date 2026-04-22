@@ -34,8 +34,8 @@
 
 #define WOLFHSM_CFG_HEXDUMP
 
-/* Large enough for ML-DSA level 5 key */
-#define WOLFHSM_CFG_COMM_DATA_LEN 5000
+/* Must match client WOLFHSM_CFG_COMM_DATA_LEN */
+#define WOLFHSM_CFG_COMM_DATA_LEN (1024 * 8)
 
 #define WOLFHSM_CFG_NVM_OBJECT_COUNT 30
 #define WOLFHSM_CFG_SERVER_KEYCACHE_COUNT 9

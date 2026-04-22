@@ -32,6 +32,7 @@
 #include "wolfhsm/wh_utils.h"
 
 #include "wolfhsm/wh_comm.h"
+#include "wolfhsm/wh_message.h"
 
 
 /** Conditional byteswap functions */
@@ -114,6 +115,12 @@ int wh_CommClient_SendRequest(whCommClient* context, uint16_t magic,
         return WH_ERROR_BADARGS;
     }
 
+    /* Refuse to stack a new request while the previous one is still
+     * outstanding. Caller must drain the response (or call AbortPending) */
+    if (context->pending) {
+        return WH_ERROR_REQUEST_PENDING;
+    }
+
     /* Check if the data size is within allowed limits */
     if (data_size > WOLFHSM_CFG_COMM_DATA_LEN) {
         return WH_ERROR_BADARGS;
@@ -132,6 +139,7 @@ int wh_CommClient_SendRequest(whCommClient* context, uint16_t magic,
             context->packet);
     if (rc == 0) {
         context->seq++;
+        context->pending = 1;
         if (out_seq != NULL) *out_seq = context->seq;
     }
 #ifdef WOLFHSM_CFG_ENABLE_TIMEOUT
@@ -162,6 +170,12 @@ int wh_CommClient_RecvResponse(whCommClient* context,
         return WH_ERROR_BADARGS;
     }
 
+    /* Nothing outstanding: stay NOTREADY so pre-existing polling loops just
+     * keep spinning rather than consuming a stale packet. */
+    if (context->pending == 0) {
+        return WH_ERROR_NOTREADY;
+    }
+
     rc = context->transport_cb->Recv(context->transport_context,
             &size,
             context->packet);
@@ -170,7 +184,9 @@ int wh_CommClient_RecvResponse(whCommClient* context,
         (void)wh_Timeout_Stop(&context->respTimeout);
 #endif
         if (size < sizeof(*context->hdr)) {
-            /* Size is too small */
+            /* Size is too small - transport-level corruption; treat as fatal
+             * and clear pending since the caller must tear down anyway. */
+            context->pending = 0;
             rc = WH_ERROR_ABORTED;
         }
         if (rc == 0) {
@@ -178,6 +194,33 @@ int wh_CommClient_RecvResponse(whCommClient* context,
             magic = context->hdr->magic;
             kind = wh_Translate16(magic, context->hdr->kind);
             seq = wh_Translate16(magic, context->hdr->seq);
+
+            /* Magic mismatch indicates a corrupted message. Fail to caller,
+             * propagating received state as output for diagnosis */
+            if (magic != WH_COMM_MAGIC_NATIVE) {
+                if (out_magic != NULL) {
+                    *out_magic = magic;
+                }
+                if (out_kind != NULL) {
+                    *out_kind = WH_MESSAGE_KIND_NONE;
+                }
+                if (out_seq != NULL) {
+                    *out_seq = 0;
+                }
+                return WH_ERROR_ABORTED;
+            }
+
+            /* Validate sequence number. A sequence mismatch indicates a
+             * well-formatted but stale or unsolicited message (e.g. a request
+             * the caller abandoned). Since only one pending request is allowed
+             * at a time, and there is no way to reassociate a straggling
+             * response with an old request, we choose to simply drop the
+             * message silently so caller can keep polling for new messages in
+             * a loop. */
+            if (seq != context->seq) {
+                return WH_ERROR_NOTREADY;
+            }
+
             if (    (data != NULL) &&
                     (data_size != 0) &&
                     (data != context->data)) {
@@ -187,12 +230,23 @@ int wh_CommClient_RecvResponse(whCommClient* context,
             if (out_kind != NULL) *out_kind = kind;
             if (out_seq != NULL) *out_seq = seq;
             if (out_size != NULL) *out_size = data_size;
+            context->pending = 0;
         }
+    }
+    else if (rc == WH_ERROR_ABORTED) {
+        /* Transport fatal error - caller must Cleanup/Init, so clear pending
+         * to avoid trapping between incompatible recovery paths. */
+        context->pending = 0;
     }
 #ifdef WOLFHSM_CFG_ENABLE_TIMEOUT
     else if (rc == WH_ERROR_NOTREADY) {
         int expired = wh_Timeout_Expired(&context->respTimeout);
         if (expired > 0) {
+            /* Clear pending so sync client APIs that surface TIMEOUT to their
+             * caller leave the context usable. If the server eventually
+             * replies the stale seq will be dropped by the check above. */
+            context->pending = 0;
+            (void)wh_Timeout_Stop(&context->respTimeout);
             rc = WH_ERROR_TIMEOUT;
         }
         else if (expired < 0) {
@@ -238,7 +292,28 @@ int wh_CommClient_Cleanup(whCommClient* context)
 
     /* Mark as not initialized regardless of cleanup return */
     context->initialized = 0;
+    context->pending     = 0;
     return rc;
+}
+
+int wh_CommClient_IsRequestPending(const whCommClient* context)
+{
+    if ((context == NULL) || (context->initialized == 0)) {
+        return WH_ERROR_BADARGS;
+    }
+    return (context->pending != 0) ? 1 : 0;
+}
+
+int wh_CommClient_AbortPending(whCommClient* context)
+{
+    if ((context == NULL) || (context->initialized == 0)) {
+        return WH_ERROR_BADARGS;
+    }
+    context->pending = 0;
+#ifdef WOLFHSM_CFG_ENABLE_TIMEOUT
+    (void)wh_Timeout_Stop(&context->respTimeout);
+#endif
+    return WH_ERROR_OK;
 }
 
 #endif /* WOLFHSM_CFG_ENABLE_CLIENT */

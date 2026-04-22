@@ -54,6 +54,10 @@
 
 #include "wh_test_common.h"
 
+#ifndef NO_RSA
+#include "gen/wh_test_wolfboot_img_data.h"
+#endif
+
 #define FLASH_RAM_SIZE (1024 * 1024) /* 1MB */
 #define FLASH_SECTOR_SIZE (128 * 1024) /* 128KB */
 #define FLASH_PAGE_SIZE (8) /* 8B */
@@ -1192,6 +1196,240 @@ static int whTest_ServerImgMgrServerCfgRsa2048(whServerConfig* serverCfg)
 }
 #endif /* !NO_RSA */
 
+#ifndef NO_RSA
+static int
+whTest_ServerImgMgrServerCfgWolfBootRsa4096(whServerConfig* serverCfg)
+{
+    int                        ret          = 0;
+    whServerContext            server[1]    = {0};
+    whServerImgMgrConfig       imgMgrConfig = {0};
+    whServerImgMgrContext      imgMgr       = {0};
+    whServerImgMgrImg          testImage    = {0};
+    const whNvmId              testKeyId    = 1;
+    whServerImgMgrVerifyResult result;
+
+    /* Set up image manager config for wolfBoot verification */
+    testImage.addr    = (uintptr_t)wolfboot_test_firmware;
+    testImage.size    = sizeof(wolfboot_test_firmware);
+    testImage.hdrAddr = (uintptr_t)wolfboot_test_header;
+    testImage.hdrSize = sizeof(wolfboot_test_header);
+    testImage.keyId   = testKeyId;
+    testImage.imgType = WH_IMG_MGR_IMG_TYPE_WOLFBOOT;
+    testImage.verifyMethod =
+        wh_Server_ImgMgrVerifyMethodWolfBootRsa4096WithSha256;
+    testImage.verifyAction = wh_Server_ImgMgrVerifyActionDefault;
+
+    imgMgrConfig.images     = &testImage;
+    imgMgrConfig.imageCount = 1;
+    imgMgrConfig.server     = server;
+
+    /* Initialize server */
+    ret = wh_Server_Init(server, serverCfg);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("Failed to initialize server: %d\n", ret);
+        return ret;
+    }
+
+    /* Initialize the image manager */
+    ret = wh_Server_ImgMgrInit(&imgMgr, &imgMgrConfig);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("Failed to initialize image manager: %d\n", ret);
+        wh_Server_Cleanup(server);
+        return ret;
+    }
+
+    /* Cache the public key in the keystore */
+    {
+        whNvmMetadata keyMeta = {0};
+        keyMeta.id            = testKeyId;
+        keyMeta.access        = WH_NVM_ACCESS_ANY;
+        keyMeta.flags         = WH_NVM_FLAGS_NONE;
+        keyMeta.len           = sizeof(wolfboot_test_pubkey_der);
+        snprintf((char*)keyMeta.label, WH_NVM_LABEL_LEN, "WBPubKey");
+
+        ret = wh_Server_KeystoreCacheKey(server, &keyMeta,
+                                         (uint8_t*)wolfboot_test_pubkey_der);
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("Failed to cache key: %d\n", ret);
+            wh_Server_Cleanup(server);
+            return ret;
+        }
+
+        ret = wh_Server_KeystoreCommitKey(server, testKeyId);
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("Failed to commit key: %d\n", ret);
+            wh_Server_Cleanup(server);
+            return ret;
+        }
+    }
+
+    /* Positive test: verify wolfBoot image with correct key */
+    ret = wh_Server_ImgMgrVerifyImg(&imgMgr, &testImage, &result);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("wolfBoot verify failed: %d\n", ret);
+        wh_Server_Cleanup(server);
+        return ret;
+    }
+    if (result.verifyMethodResult != WH_ERROR_OK) {
+        WH_ERROR_PRINT("wolfBoot verify method failed: %d\n",
+                       result.verifyMethodResult);
+        wh_Server_Cleanup(server);
+        return result.verifyMethodResult;
+    }
+    if (result.verifyActionResult != WH_ERROR_OK) {
+        WH_ERROR_PRINT("wolfBoot verify action failed: %d\n",
+                       result.verifyActionResult);
+        wh_Server_Cleanup(server);
+        return result.verifyActionResult;
+    }
+
+    /* Negative test: flip a bit in firmware payload copy and verify fails */
+    {
+        /* Make a mutable copy of the firmware for corruption test */
+        uint8_t           corrupt_fw[sizeof(wolfboot_test_firmware)];
+        whServerImgMgrImg corruptImage = testImage;
+        memcpy(corrupt_fw, wolfboot_test_firmware,
+               sizeof(wolfboot_test_firmware));
+        corrupt_fw[0] ^= 0x01;
+        corruptImage.addr = (uintptr_t)corrupt_fw;
+
+        ret = wh_Server_ImgMgrVerifyImg(&imgMgr, &corruptImage, &result);
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT("wolfBoot corrupt verify call failed: %d\n", ret);
+            wh_Server_Cleanup(server);
+            return ret;
+        }
+        if (result.verifyMethodResult == WH_ERROR_OK) {
+            WH_ERROR_PRINT(
+                "wolfBoot corrupt verify should have failed but succeeded\n");
+            wh_Server_Cleanup(server);
+            return WH_ERROR_ABORTED;
+        }
+    }
+
+    wh_Server_Cleanup(server);
+    WH_TEST_PRINT("IMG_MGR wolfBoot RSA4096 Test completed successfully!\n");
+    return 0;
+}
+
+#ifdef WOLFHSM_CFG_CERTIFICATE_MANAGER
+static int
+whTest_ServerImgMgrServerCfgWolfBootCertChainRsa4096(whServerConfig* serverCfg)
+{
+    int                        ret          = 0;
+    whServerContext            server[1]    = {0};
+    whServerImgMgrConfig       imgMgrConfig = {0};
+    whServerImgMgrContext      imgMgr       = {0};
+    whServerImgMgrImg          testImage    = {0};
+    const whNvmId              rootCaNvmId  = 10;
+    whServerImgMgrVerifyResult result;
+    whNvmMetadata              rootCaMeta = {0};
+
+    /* Store root CA cert in NVM */
+    rootCaMeta.id     = rootCaNvmId;
+    rootCaMeta.access = WH_NVM_ACCESS_ANY;
+    rootCaMeta.flags  = WH_NVM_FLAGS_NONE;
+    rootCaMeta.len    = sizeof(wolfboot_test_root_ca_cert_der);
+    snprintf((char*)rootCaMeta.label, WH_NVM_LABEL_LEN, "RootCA");
+
+    ret = wh_Nvm_AddObject(serverCfg->nvm, &rootCaMeta,
+                           sizeof(wolfboot_test_root_ca_cert_der),
+                           wolfboot_test_root_ca_cert_der);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("Failed to add root CA to NVM: %d\n", ret);
+        return ret;
+    }
+
+    /* Set up image manager config for wolfBoot cert chain verification */
+    testImage.addr     = (uintptr_t)wolfboot_test_firmware;
+    testImage.size     = sizeof(wolfboot_test_firmware);
+    testImage.hdrAddr  = (uintptr_t)wolfboot_test_cert_chain_header;
+    testImage.hdrSize  = sizeof(wolfboot_test_cert_chain_header);
+    testImage.sigNvmId = rootCaNvmId;
+    testImage.imgType  = WH_IMG_MGR_IMG_TYPE_WOLFBOOT_CERT;
+    testImage.verifyMethod =
+        wh_Server_ImgMgrVerifyMethodWolfBootCertChainRsa4096WithSha256;
+    testImage.verifyAction = wh_Server_ImgMgrVerifyActionDefault;
+
+    imgMgrConfig.images     = &testImage;
+    imgMgrConfig.imageCount = 1;
+    imgMgrConfig.server     = server;
+
+    /* Initialize server */
+    ret = wh_Server_Init(server, serverCfg);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("Failed to initialize server: %d\n", ret);
+        return ret;
+    }
+
+    /* Initialize the image manager */
+    ret = wh_Server_ImgMgrInit(&imgMgr, &imgMgrConfig);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("Failed to initialize image manager: %d\n", ret);
+        wh_Server_Cleanup(server);
+        return ret;
+    }
+
+    /* Positive test: verify wolfBoot image with cert chain */
+    ret = wh_Server_ImgMgrVerifyImg(&imgMgr, &testImage, &result);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("wolfBoot cert chain verify failed: %d\n", ret);
+        wh_Server_Cleanup(server);
+        return ret;
+    }
+    if (result.verifyMethodResult != WH_ERROR_OK) {
+        WH_ERROR_PRINT("wolfBoot cert chain verify method failed: %d\n",
+                       result.verifyMethodResult);
+        wh_Server_Cleanup(server);
+        return result.verifyMethodResult;
+    }
+    if (result.verifyActionResult != WH_ERROR_OK) {
+        WH_ERROR_PRINT("wolfBoot cert chain verify action failed: %d\n",
+                       result.verifyActionResult);
+        wh_Server_Cleanup(server);
+        return result.verifyActionResult;
+    }
+
+    /* Negative test: flip a bit in firmware payload and verify fails */
+    {
+        uint8_t           corrupt_fw[sizeof(wolfboot_test_firmware)];
+        whServerImgMgrImg corruptImage = testImage;
+        memcpy(corrupt_fw, wolfboot_test_firmware,
+               sizeof(wolfboot_test_firmware));
+        corrupt_fw[0] ^= 0x01;
+        corruptImage.addr = (uintptr_t)corrupt_fw;
+
+        ret = wh_Server_ImgMgrVerifyImg(&imgMgr, &corruptImage, &result);
+        if (ret != WH_ERROR_OK) {
+            WH_ERROR_PRINT(
+                "wolfBoot cert chain corrupt verify call failed: %d\n", ret);
+            wh_Server_Cleanup(server);
+            return ret;
+        }
+        if (result.verifyMethodResult == WH_ERROR_OK) {
+            WH_ERROR_PRINT("wolfBoot cert chain corrupt verify should have "
+                           "failed but succeeded\n");
+            wh_Server_Cleanup(server);
+            return WH_ERROR_ABORTED;
+        }
+    }
+
+    /* Delete the root CA cert from NVM */
+    ret = wh_Nvm_DestroyObjects(serverCfg->nvm, 1, &rootCaNvmId);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("Failed to delete root CA cert: %d\n", ret);
+        wh_Server_Cleanup(server);
+        return ret;
+    }
+
+    wh_Server_Cleanup(server);
+    WH_TEST_PRINT(
+        "IMG_MGR wolfBoot Cert Chain RSA4096 Test completed successfully!\n");
+    return 0;
+}
+#endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER */
+#endif /* !NO_RSA */
+
 int whTest_ServerImgMgr(whTestNvmBackendType nvmType)
 {
     int            rc          = 0;
@@ -1282,6 +1520,25 @@ int whTest_ServerImgMgr(whTestNvmBackendType nvmType)
         wh_Nvm_Cleanup(nvm);
         return rc;
     }
+
+    /* wolfBoot RSA4096 verify method */
+    rc = whTest_ServerImgMgrServerCfgWolfBootRsa4096(s_conf);
+    if (rc != 0) {
+        WH_ERROR_PRINT("wolfBoot RSA4096 image manager tests failed: %d\n", rc);
+        wh_Nvm_Cleanup(nvm);
+        return rc;
+    }
+
+#ifdef WOLFHSM_CFG_CERTIFICATE_MANAGER
+    /* wolfBoot RSA4096 cert chain verify method */
+    rc = whTest_ServerImgMgrServerCfgWolfBootCertChainRsa4096(s_conf);
+    if (rc != 0) {
+        WH_ERROR_PRINT(
+            "wolfBoot cert chain RSA4096 image manager tests failed: %d\n", rc);
+        wh_Nvm_Cleanup(nvm);
+        return rc;
+    }
+#endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER */
 #endif /* !NO_RSA */
 
     /* Cleanup NVM */

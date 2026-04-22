@@ -43,6 +43,7 @@
 
 #include "wolfhsm/wh_comm.h"
 #include "wolfhsm/wh_message.h"
+#include "wolfhsm/wh_message_crypto.h"
 
 #ifdef WOLFHSM_CFG_ENABLE_CLIENT
 #include "wolfhsm/wh_client.h"
@@ -70,6 +71,13 @@
 #define FLASH_RAM_SIZE (1024 * 1024) /* 1MB */
 #define FLASH_SECTOR_SIZE (128 * 1024) /* 128KB */
 #define FLASH_PAGE_SIZE (8) /* 8B */
+
+#ifndef TEST_ADMIN_USERNAME
+#define TEST_ADMIN_USERNAME "admin"
+#endif
+#ifndef TEST_ADMIN_PIN
+#define TEST_ADMIN_PIN "1234"
+#endif
 
 #define ALT_CLIENT_ID (2)
 
@@ -695,10 +703,8 @@ static int whTest_CryptoEccCacheDuplicate(whClientContext* client)
 #define WH_TEST_ECC_HASH_SIZE WC_MAX_DIGEST_SIZE
 
 static int whTest_CryptoEccCrossVerify_OneCurve(whClientContext* ctx,
-                                                WC_RNG*          rng,
-                                                int              keySize,
-                                                int              curveId,
-                                                const char*      name)
+                                                WC_RNG* rng, int keySize,
+                                                int curveId, const char* name)
 {
     ecc_key hsmKey[1]                   = {0};
     ecc_key swKey[1]                    = {0};
@@ -837,7 +843,7 @@ static int whTest_CryptoEccCrossVerify_OneCurve(whClientContext* ctx,
     if (ret == 0) {
         /* Sign with software */
         sigLen = sizeof(sig);
-        ret = wc_ecc_sign_hash(hash, sizeof(hash), sig, &sigLen, rng, swKey);
+        ret    = wc_ecc_sign_hash(hash, sizeof(hash), sig, &sigLen, rng, swKey);
         if (ret != 0) {
             WH_ERROR_PRINT("%s: SW sign failed: %d\n", name, ret);
         }
@@ -1588,6 +1594,403 @@ static int whTest_CryptoSha256(whClientContext* ctx, int devId, WC_RNG* rng)
     }
     return ret;
 }
+
+/* Hash a buffer with a pure-software SHA256 (no devId) so we can compare. */
+static int whTest_Sha256Reference(const uint8_t* in, uint32_t inLen,
+                                  uint8_t out[WC_SHA256_DIGEST_SIZE])
+{
+    wc_Sha256 sw[1];
+    int       ret = wc_InitSha256_ex(sw, NULL, INVALID_DEVID);
+    if (ret == 0) {
+        ret = wc_Sha256Update(sw, in, inLen);
+    }
+    if (ret == 0) {
+        ret = wc_Sha256Final(sw, out);
+    }
+    (void)wc_Sha256Free(sw);
+    return ret;
+}
+
+/* Drive the new multi-block wire format through the blocking wrapper. Tests:
+ *  - large multi-request input,
+ *  - exact per-call inline capacity boundary,
+ *  - one-byte-over-capacity boundary (forces a tail in the client buffer),
+ *  - non-aligned chunked update sequence.
+ *
+ * Buffer is sized to comfortably exceed the per-call inline capacity at any
+ * reasonable comm-buffer size. We use a static buffer to keep stack pressure
+ * low under ASAN. */
+static uint8_t
+    whTest_Sha256BigBuf[2 *
+                        (WH_MESSAGE_CRYPTO_SHA256_MAX_INLINE_UPDATE_SZ + 64u)];
+
+static int whTest_CryptoSha256LargeInput(whClientContext* ctx, int devId,
+                                         WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha256 sha256[1];
+    uint8_t   out[WC_SHA256_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA256_DIGEST_SIZE];
+    uint8_t*  buf   = whTest_Sha256BigBuf;
+    uint32_t  BUFSZ = (uint32_t)sizeof(whTest_Sha256BigBuf);
+    uint32_t  i;
+
+    (void)ctx;
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)(i & 0xff);
+    }
+
+    /* Test 1: large single-update */
+    ret = wc_InitSha256_ex(sha256, NULL, devId);
+    if (ret == 0) {
+        ret = wc_Sha256Update(sha256, buf, BUFSZ);
+    }
+    if (ret == 0) {
+        ret = wc_Sha256Final(sha256, out);
+    }
+    (void)wc_Sha256Free(sha256);
+    if (ret == 0) {
+        ret = whTest_Sha256Reference(buf, BUFSZ, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA256_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("SHA256 large input mismatch\n");
+        ret = -1;
+    }
+
+    /* Test 2: exactly the per-call inline capacity in one shot */
+    if (ret == 0) {
+        const uint32_t cap = WH_MESSAGE_CRYPTO_SHA256_MAX_INLINE_UPDATE_SZ;
+        ret                = wc_InitSha256_ex(sha256, NULL, devId);
+        if (ret == 0) {
+            ret = wc_Sha256Update(sha256, buf, cap);
+        }
+        if (ret == 0) {
+            ret = wc_Sha256Final(sha256, out);
+        }
+        (void)wc_Sha256Free(sha256);
+        if (ret == 0) {
+            ret = whTest_Sha256Reference(buf, cap, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA256_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("SHA256 capacity-boundary mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Test 3: capacity + 1 byte (one full request, then a tail buffered) */
+    if (ret == 0) {
+        const uint32_t cap1 =
+            WH_MESSAGE_CRYPTO_SHA256_MAX_INLINE_UPDATE_SZ + 1u;
+        ret = wc_InitSha256_ex(sha256, NULL, devId);
+        if (ret == 0) {
+            ret = wc_Sha256Update(sha256, buf, cap1);
+        }
+        if (ret == 0) {
+            ret = wc_Sha256Final(sha256, out);
+        }
+        (void)wc_Sha256Free(sha256);
+        if (ret == 0) {
+            ret = whTest_Sha256Reference(buf, cap1, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA256_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("SHA256 capacity+1 mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Test 4: non-aligned chunk stress test */
+    if (ret == 0) {
+        const uint32_t chunks[] = {13, 17, 1280, 41, 1};
+        const size_t   nChunks  = sizeof(chunks) / sizeof(chunks[0]);
+        uint32_t       total    = 0;
+        size_t         k;
+        for (k = 0; k < nChunks; k++) {
+            total += chunks[k];
+        }
+        if (total > BUFSZ) {
+            WH_ERROR_PRINT("test buffer too small for chunked stress test\n");
+            ret = -1;
+        }
+        if (ret == 0) {
+            uint32_t off = 0;
+            ret          = wc_InitSha256_ex(sha256, NULL, devId);
+            for (k = 0; ret == 0 && k < nChunks; k++) {
+                ret = wc_Sha256Update(sha256, buf + off, chunks[k]);
+                off += chunks[k];
+            }
+            if (ret == 0) {
+                ret = wc_Sha256Final(sha256, out);
+            }
+            (void)wc_Sha256Free(sha256);
+            if (ret == 0) {
+                ret = whTest_Sha256Reference(buf, total, ref);
+            }
+            if (ret == 0 && memcmp(out, ref, WC_SHA256_DIGEST_SIZE) != 0) {
+                WH_ERROR_PRINT("SHA256 chunked stress mismatch\n");
+                ret = -1;
+            }
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA256 LARGE-INPUT DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+
+/* Direct exercise of the new async non-DMA SHA256 primitives. */
+static int whTest_CryptoSha256Async(whClientContext* ctx, int devId,
+                                    WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha256 sha256[1];
+    uint8_t   out[WC_SHA256_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA256_DIGEST_SIZE];
+    /* Use the same large static buffer as the LargeInput test. */
+    uint8_t* buf   = whTest_Sha256BigBuf;
+    uint32_t BUFSZ = (uint32_t)sizeof(whTest_Sha256BigBuf);
+    uint32_t i;
+    bool     sent;
+
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)((i * 31u + 7u) & 0xff);
+    }
+
+    /* Case A: basic UpdateRequest -> UpdateResponse -> Final */
+    ret = wc_InitSha256_ex(sha256, NULL, devId);
+    if (ret == 0) {
+        sent = false;
+        ret  = wh_Client_Sha256UpdateRequest(ctx, sha256, buf, 256, &sent);
+    }
+    if (ret == 0 && sent) {
+        do {
+            ret = wh_Client_Sha256UpdateResponse(ctx, sha256);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha256FinalRequest(ctx, sha256);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha256FinalResponse(ctx, sha256, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = whTest_Sha256Reference(buf, 256, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA256_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async SHA256 case A mismatch\n");
+        ret = -1;
+    }
+
+    /* Case B: pure-buffer-fill update (sent must be false), then finalize */
+    if (ret == 0) {
+        (void)wc_Sha256Free(sha256);
+        ret = wc_InitSha256_ex(sha256, NULL, devId);
+    }
+    if (ret == 0) {
+        sent = true; /* expect to be cleared to false */
+        ret  = wh_Client_Sha256UpdateRequest(ctx, sha256, buf, 10, &sent);
+        if (ret == 0 && sent != false) {
+            WH_ERROR_PRINT(
+                "Async SHA256: expected sent==false on small update\n");
+            ret = -1;
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha256FinalRequest(ctx, sha256);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha256FinalResponse(ctx, sha256, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = whTest_Sha256Reference(buf, 10, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA256_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async SHA256 case B mismatch\n");
+        ret = -1;
+    }
+
+    /* Case C: multi-round async updates that span more than the per-call
+     * inline capacity (forces multiple Request/Response pairs). */
+    if (ret == 0) {
+        uint32_t consumed = 0;
+        (void)wc_Sha256Free(sha256);
+        ret = wc_InitSha256_ex(sha256, NULL, devId);
+        while (ret == 0 && consumed < BUFSZ) {
+            uint32_t chunk = 700; /* arbitrary, less than max inline */
+            if (consumed + chunk > BUFSZ) {
+                chunk = BUFSZ - consumed;
+            }
+            sent = false;
+            ret  = wh_Client_Sha256UpdateRequest(ctx, sha256, buf + consumed,
+                                                 chunk, &sent);
+            if (ret == 0 && sent) {
+                do {
+                    ret = wh_Client_Sha256UpdateResponse(ctx, sha256);
+                } while (ret == WH_ERROR_NOTREADY);
+            }
+            consumed += chunk;
+        }
+        if (ret == 0) {
+            ret = wh_Client_Sha256FinalRequest(ctx, sha256);
+        }
+        if (ret == 0) {
+            do {
+                ret = wh_Client_Sha256FinalResponse(ctx, sha256, out);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+        if (ret == 0) {
+            ret = whTest_Sha256Reference(buf, BUFSZ, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA256_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("Async SHA256 case C mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Case D: oversized-input rejection. UpdateRequest with inLen > capacity
+     * must return BADARGS without mutating sha. */
+    if (ret == 0) {
+        uint8_t  savedDigest[WC_SHA256_DIGEST_SIZE];
+        word32   savedBuffLen;
+        uint32_t cap;
+        int      rc;
+        (void)wc_Sha256Free(sha256);
+        ret = wc_InitSha256_ex(sha256, NULL, devId);
+        if (ret == 0) {
+            memcpy(savedDigest, sha256->digest, WC_SHA256_DIGEST_SIZE);
+            savedBuffLen = sha256->buffLen;
+            cap          = WH_MESSAGE_CRYPTO_SHA256_MAX_INLINE_UPDATE_SZ +
+                  (uint32_t)(WC_SHA256_BLOCK_SIZE - 1u - sha256->buffLen);
+            sent = true;
+            rc   = wh_Client_Sha256UpdateRequest(ctx, sha256, buf, cap + 1u,
+                                                 &sent);
+            if (rc != WH_ERROR_BADARGS) {
+                WH_ERROR_PRINT("Async SHA256: expected BADARGS, got %d\n", rc);
+                ret = -1;
+            }
+            else if (sent != false) {
+                WH_ERROR_PRINT(
+                    "Async SHA256: sent should remain false on err\n");
+                ret = -1;
+            }
+            else if (sha256->buffLen != savedBuffLen ||
+                     memcmp(sha256->digest, savedDigest,
+                            WC_SHA256_DIGEST_SIZE) != 0) {
+                WH_ERROR_PRINT(
+                    "Async SHA256: state mutated on rejected call\n");
+                ret = -1;
+            }
+        }
+        (void)wc_Sha256Free(sha256);
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA256 ASYNC DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+
+#ifdef WOLFHSM_CFG_DMA
+/* Direct exercise of the new async DMA SHA256 primitives. */
+static int whTest_CryptoSha256DmaAsync(whClientContext* ctx, int devId,
+                                       WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha256 sha256[1];
+    uint8_t   out[WC_SHA256_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA256_DIGEST_SIZE];
+    /* DMA bypasses the comm buffer, so any size goes; reuse the shared
+     * static buffer to keep stack pressure low. */
+    uint8_t* buf   = whTest_Sha256BigBuf;
+    uint32_t BUFSZ = (uint32_t)sizeof(whTest_Sha256BigBuf);
+    uint32_t i;
+
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)((i * 17u + 3u) & 0xff);
+    }
+
+    /* Case A: single large DMA Update + Final */
+    ret = wc_InitSha256_ex(sha256, NULL, devId);
+    if (ret == 0) {
+        bool sent = false;
+        ret = wh_Client_Sha256DmaUpdateRequest(ctx, sha256, buf, BUFSZ, &sent);
+        if (ret == 0 && sent) {
+            do {
+                ret = wh_Client_Sha256DmaUpdateResponse(ctx, sha256);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha256DmaFinalRequest(ctx, sha256);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha256DmaFinalResponse(ctx, sha256, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    (void)wc_Sha256Free(sha256);
+    if (ret == 0) {
+        ret = whTest_Sha256Reference(buf, BUFSZ, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA256_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async DMA SHA256 case A mismatch\n");
+        ret = -1;
+    }
+
+    /* Case B: multiple DMA Update round-trips, then Final */
+    if (ret == 0) {
+        uint32_t consumed = 0;
+        ret               = wc_InitSha256_ex(sha256, NULL, devId);
+        while (ret == 0 && consumed < BUFSZ) {
+            uint32_t chunk = 1024;
+            bool     sent  = false;
+            if (consumed + chunk > BUFSZ) {
+                chunk = BUFSZ - consumed;
+            }
+            ret = wh_Client_Sha256DmaUpdateRequest(ctx, sha256, buf + consumed,
+                                                   chunk, &sent);
+            if (ret == 0 && sent) {
+                do {
+                    ret = wh_Client_Sha256DmaUpdateResponse(ctx, sha256);
+                } while (ret == WH_ERROR_NOTREADY);
+            }
+            consumed += chunk;
+        }
+        if (ret == 0) {
+            ret = wh_Client_Sha256DmaFinalRequest(ctx, sha256);
+        }
+        if (ret == 0) {
+            do {
+                ret = wh_Client_Sha256DmaFinalResponse(ctx, sha256, out);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+        (void)wc_Sha256Free(sha256);
+        if (ret == 0) {
+            ret = whTest_Sha256Reference(buf, BUFSZ, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA256_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("Async DMA SHA256 case B mismatch\n");
+            ret = -1;
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA256 DMA ASYNC DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+#endif /* WOLFHSM_CFG_DMA */
+
 #endif /* !NO_SHA256 */
 
 #ifdef WOLFSSL_SHA224
@@ -1704,6 +2107,405 @@ static int whTest_CryptoSha224(whClientContext* ctx, int devId, WC_RNG* rng)
     }
     return ret;
 }
+
+/* Hash a buffer with a pure-software SHA224 (no devId) so we can compare. */
+static int whTest_Sha224Reference(const uint8_t* in, uint32_t inLen,
+                                  uint8_t out[WC_SHA224_DIGEST_SIZE])
+{
+    wc_Sha224 sw[1];
+    int       ret = wc_InitSha224_ex(sw, NULL, INVALID_DEVID);
+    if (ret == 0) {
+        ret = wc_Sha224Update(sw, in, inLen);
+    }
+    if (ret == 0) {
+        ret = wc_Sha224Final(sw, out);
+    }
+    (void)wc_Sha224Free(sw);
+    return ret;
+}
+
+/* Drive the new multi-block wire format through the blocking wrapper. Tests:
+ *  - large multi-request input,
+ *  - exact per-call inline capacity boundary,
+ *  - one-byte-over-capacity boundary (forces a tail in the client buffer),
+ *  - non-aligned chunked update sequence.
+ *
+ * Buffer is sized to comfortably exceed the per-call inline capacity at any
+ * reasonable comm-buffer size. We use a static buffer to keep stack pressure
+ * low under ASAN. */
+static uint8_t
+    whTest_Sha224BigBuf[2 *
+                        (WH_MESSAGE_CRYPTO_SHA224_MAX_INLINE_UPDATE_SZ + 64u)];
+
+static int whTest_CryptoSha224LargeInput(whClientContext* ctx, int devId,
+                                         WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha224 sha224[1];
+    uint8_t   out[WC_SHA224_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA224_DIGEST_SIZE];
+    uint8_t*  buf   = whTest_Sha224BigBuf;
+    uint32_t  BUFSZ = (uint32_t)sizeof(whTest_Sha224BigBuf);
+    uint32_t  i;
+
+    (void)ctx;
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)(i & 0xff);
+    }
+
+    /* Test 1: large single-update */
+    ret = wc_InitSha224_ex(sha224, NULL, devId);
+    if (ret == 0) {
+        ret = wc_Sha224Update(sha224, buf, BUFSZ);
+    }
+    if (ret == 0) {
+        ret = wc_Sha224Final(sha224, out);
+    }
+    (void)wc_Sha224Free(sha224);
+    if (ret == 0) {
+        ret = whTest_Sha224Reference(buf, BUFSZ, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA224_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("SHA224 large input mismatch\n");
+        ret = -1;
+    }
+
+    /* Test 2: exactly the per-call inline capacity in one shot */
+    if (ret == 0) {
+        const uint32_t cap = WH_MESSAGE_CRYPTO_SHA224_MAX_INLINE_UPDATE_SZ;
+        ret                = wc_InitSha224_ex(sha224, NULL, devId);
+        if (ret == 0) {
+            ret = wc_Sha224Update(sha224, buf, cap);
+        }
+        if (ret == 0) {
+            ret = wc_Sha224Final(sha224, out);
+        }
+        (void)wc_Sha224Free(sha224);
+        if (ret == 0) {
+            ret = whTest_Sha224Reference(buf, cap, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA224_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("SHA224 capacity-boundary mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Test 3: capacity + 1 byte (one full request, then a tail buffered) */
+    if (ret == 0) {
+        const uint32_t cap1 =
+            WH_MESSAGE_CRYPTO_SHA224_MAX_INLINE_UPDATE_SZ + 1u;
+        ret = wc_InitSha224_ex(sha224, NULL, devId);
+        if (ret == 0) {
+            ret = wc_Sha224Update(sha224, buf, cap1);
+        }
+        if (ret == 0) {
+            ret = wc_Sha224Final(sha224, out);
+        }
+        (void)wc_Sha224Free(sha224);
+        if (ret == 0) {
+            ret = whTest_Sha224Reference(buf, cap1, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA224_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("SHA224 capacity+1 mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Test 4: non-aligned chunk stress test */
+    if (ret == 0) {
+        const uint32_t chunks[] = {13, 17, 1280, 41, 1};
+        const size_t   nChunks  = sizeof(chunks) / sizeof(chunks[0]);
+        uint32_t       total    = 0;
+        size_t         k;
+        for (k = 0; k < nChunks; k++) {
+            total += chunks[k];
+        }
+        if (total > BUFSZ) {
+            WH_ERROR_PRINT("test buffer too small for chunked stress test\n");
+            ret = -1;
+        }
+        if (ret == 0) {
+            uint32_t off = 0;
+            ret          = wc_InitSha224_ex(sha224, NULL, devId);
+            for (k = 0; ret == 0 && k < nChunks; k++) {
+                ret = wc_Sha224Update(sha224, buf + off, chunks[k]);
+                off += chunks[k];
+            }
+            if (ret == 0) {
+                ret = wc_Sha224Final(sha224, out);
+            }
+            (void)wc_Sha224Free(sha224);
+            if (ret == 0) {
+                ret = whTest_Sha224Reference(buf, total, ref);
+            }
+            if (ret == 0 && memcmp(out, ref, WC_SHA224_DIGEST_SIZE) != 0) {
+                WH_ERROR_PRINT("SHA224 chunked stress mismatch\n");
+                ret = -1;
+            }
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA224 LARGE-INPUT DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+
+/* Direct exercise of the new async non-DMA SHA224 primitives. */
+static int whTest_CryptoSha224Async(whClientContext* ctx, int devId,
+                                    WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha224 sha224[1];
+    uint8_t   out[WC_SHA224_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA224_DIGEST_SIZE];
+    /* Use the same large static buffer as the LargeInput test. */
+    uint8_t* buf   = whTest_Sha224BigBuf;
+    uint32_t BUFSZ = (uint32_t)sizeof(whTest_Sha224BigBuf);
+    uint32_t i;
+    bool     sent;
+
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)((i * 31u + 7u) & 0xff);
+    }
+
+    /* Case A: basic UpdateRequest -> UpdateResponse -> Final */
+    ret = wc_InitSha224_ex(sha224, NULL, devId);
+    if (ret == 0) {
+        sent = false;
+        ret  = wh_Client_Sha224UpdateRequest(ctx, sha224, buf, 256, &sent);
+    }
+    if (ret == 0 && sent) {
+        do {
+            ret = wh_Client_Sha224UpdateResponse(ctx, sha224);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha224FinalRequest(ctx, sha224);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha224FinalResponse(ctx, sha224, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = whTest_Sha224Reference(buf, 256, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA224_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async SHA224 case A mismatch\n");
+        ret = -1;
+    }
+
+    /* Case B: pure-buffer-fill update (sent must be false), then finalize */
+    if (ret == 0) {
+        (void)wc_Sha224Free(sha224);
+        ret = wc_InitSha224_ex(sha224, NULL, devId);
+    }
+    if (ret == 0) {
+        sent = true; /* expect to be cleared to false */
+        ret  = wh_Client_Sha224UpdateRequest(ctx, sha224, buf, 10, &sent);
+        if (ret == 0 && sent != false) {
+            WH_ERROR_PRINT(
+                "Async SHA224: expected sent==false on small update\n");
+            ret = -1;
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha224FinalRequest(ctx, sha224);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha224FinalResponse(ctx, sha224, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = whTest_Sha224Reference(buf, 10, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA224_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async SHA224 case B mismatch\n");
+        ret = -1;
+    }
+
+    /* Case C: multi-round async updates that span more than the per-call
+     * inline capacity (forces multiple Request/Response pairs). */
+    if (ret == 0) {
+        uint32_t consumed = 0;
+        (void)wc_Sha224Free(sha224);
+        ret = wc_InitSha224_ex(sha224, NULL, devId);
+        while (ret == 0 && consumed < BUFSZ) {
+            uint32_t chunk = 700; /* arbitrary, less than max inline */
+            if (consumed + chunk > BUFSZ) {
+                chunk = BUFSZ - consumed;
+            }
+            sent = false;
+            ret  = wh_Client_Sha224UpdateRequest(ctx, sha224, buf + consumed,
+                                                 chunk, &sent);
+            if (ret == 0 && sent) {
+                do {
+                    ret = wh_Client_Sha224UpdateResponse(ctx, sha224);
+                } while (ret == WH_ERROR_NOTREADY);
+            }
+            consumed += chunk;
+        }
+        if (ret == 0) {
+            ret = wh_Client_Sha224FinalRequest(ctx, sha224);
+        }
+        if (ret == 0) {
+            do {
+                ret = wh_Client_Sha224FinalResponse(ctx, sha224, out);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+        if (ret == 0) {
+            ret = whTest_Sha224Reference(buf, BUFSZ, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA224_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("Async SHA224 case C mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Case D: oversized-input rejection. UpdateRequest with inLen > capacity
+     * must return BADARGS without mutating sha. */
+    if (ret == 0) {
+        uint8_t  savedDigest[WC_SHA256_DIGEST_SIZE];
+        word32   savedBuffLen;
+        uint32_t cap;
+        int      rc;
+        (void)wc_Sha224Free(sha224);
+        ret = wc_InitSha224_ex(sha224, NULL, devId);
+        if (ret == 0) {
+            memcpy(savedDigest, sha224->digest, WC_SHA256_DIGEST_SIZE);
+            savedBuffLen = sha224->buffLen;
+            cap          = WH_MESSAGE_CRYPTO_SHA224_MAX_INLINE_UPDATE_SZ +
+                  (uint32_t)(WC_SHA224_BLOCK_SIZE - 1u - sha224->buffLen);
+            sent = true;
+            rc   = wh_Client_Sha224UpdateRequest(ctx, sha224, buf, cap + 1u,
+                                                 &sent);
+            if (rc != WH_ERROR_BADARGS) {
+                WH_ERROR_PRINT("Async SHA224: expected BADARGS, got %d\n", rc);
+                ret = -1;
+            }
+            else if (sent != false) {
+                WH_ERROR_PRINT(
+                    "Async SHA224: sent should remain false on err\n");
+                ret = -1;
+            }
+            else if (sha224->buffLen != savedBuffLen ||
+                     memcmp(sha224->digest, savedDigest,
+                            WC_SHA256_DIGEST_SIZE) != 0) {
+                WH_ERROR_PRINT(
+                    "Async SHA224: state mutated on rejected call\n");
+                ret = -1;
+            }
+        }
+        (void)wc_Sha224Free(sha224);
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA224 ASYNC DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+
+#ifdef WOLFHSM_CFG_DMA
+/* Direct exercise of the new async DMA SHA224 primitives. */
+static int whTest_CryptoSha224DmaAsync(whClientContext* ctx, int devId,
+                                       WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha224 sha224[1];
+    uint8_t   out[WC_SHA224_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA224_DIGEST_SIZE];
+    /* DMA bypasses the comm buffer, so any size goes; reuse the shared
+     * static buffer to keep stack pressure low. */
+    uint8_t* buf   = whTest_Sha224BigBuf;
+    uint32_t BUFSZ = (uint32_t)sizeof(whTest_Sha224BigBuf);
+    uint32_t i;
+
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)((i * 17u + 3u) & 0xff);
+    }
+
+    /* Case A: single large DMA Update + Final */
+    ret = wc_InitSha224_ex(sha224, NULL, devId);
+    if (ret == 0) {
+        bool sent = false;
+        ret = wh_Client_Sha224DmaUpdateRequest(ctx, sha224, buf, BUFSZ, &sent);
+        if (ret == 0 && sent) {
+            do {
+                ret = wh_Client_Sha224DmaUpdateResponse(ctx, sha224);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha224DmaFinalRequest(ctx, sha224);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha224DmaFinalResponse(ctx, sha224, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    (void)wc_Sha224Free(sha224);
+    if (ret == 0) {
+        ret = whTest_Sha224Reference(buf, BUFSZ, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA224_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async DMA SHA224 case A mismatch\n");
+        ret = -1;
+    }
+
+    /* Case B: multiple DMA Update round-trips, then Final */
+    if (ret == 0) {
+        uint32_t consumed = 0;
+        ret               = wc_InitSha224_ex(sha224, NULL, devId);
+        while (ret == 0 && consumed < BUFSZ) {
+            uint32_t chunk = 1024;
+            if (consumed + chunk > BUFSZ) {
+                chunk = BUFSZ - consumed;
+            }
+            {
+                bool sent = false;
+                ret       = wh_Client_Sha224DmaUpdateRequest(
+                    ctx, sha224, buf + consumed, chunk, &sent);
+                if (ret == 0 && sent) {
+                    do {
+                        ret = wh_Client_Sha224DmaUpdateResponse(ctx, sha224);
+                    } while (ret == WH_ERROR_NOTREADY);
+                }
+            }
+            consumed += chunk;
+        }
+        if (ret == 0) {
+            ret = wh_Client_Sha224DmaFinalRequest(ctx, sha224);
+        }
+        if (ret == 0) {
+            do {
+                ret = wh_Client_Sha224DmaFinalResponse(ctx, sha224, out);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+        (void)wc_Sha224Free(sha224);
+        if (ret == 0) {
+            ret = whTest_Sha224Reference(buf, BUFSZ, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA224_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("Async DMA SHA224 case B mismatch\n");
+            ret = -1;
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA224 DMA ASYNC DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+#endif /* WOLFHSM_CFG_DMA */
+
 #endif /* WOLFSSL_SHA224 */
 
 #ifdef WOLFSSL_SHA384
@@ -1825,6 +2627,405 @@ static int whTest_CryptoSha384(whClientContext* ctx, int devId, WC_RNG* rng)
     }
     return ret;
 }
+
+/* Hash a buffer with a pure-software SHA384 (no devId) so we can compare. */
+static int whTest_Sha384Reference(const uint8_t* in, uint32_t inLen,
+                                  uint8_t out[WC_SHA384_DIGEST_SIZE])
+{
+    wc_Sha384 sw[1];
+    int       ret = wc_InitSha384_ex(sw, NULL, INVALID_DEVID);
+    if (ret == 0) {
+        ret = wc_Sha384Update(sw, in, inLen);
+    }
+    if (ret == 0) {
+        ret = wc_Sha384Final(sw, out);
+    }
+    (void)wc_Sha384Free(sw);
+    return ret;
+}
+
+/* Drive the new multi-block wire format through the blocking wrapper. Tests:
+ *  - large multi-request input,
+ *  - exact per-call inline capacity boundary,
+ *  - one-byte-over-capacity boundary (forces a tail in the client buffer),
+ *  - non-aligned chunked update sequence.
+ *
+ * Buffer is sized to comfortably exceed the per-call inline capacity at any
+ * reasonable comm-buffer size. We use a static buffer to keep stack pressure
+ * low under ASAN. */
+static uint8_t
+    whTest_Sha384BigBuf[2 *
+                        (WH_MESSAGE_CRYPTO_SHA384_MAX_INLINE_UPDATE_SZ + 128u)];
+
+static int whTest_CryptoSha384LargeInput(whClientContext* ctx, int devId,
+                                         WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha384 sha384[1];
+    uint8_t   out[WC_SHA384_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA384_DIGEST_SIZE];
+    uint8_t*  buf   = whTest_Sha384BigBuf;
+    uint32_t  BUFSZ = (uint32_t)sizeof(whTest_Sha384BigBuf);
+    uint32_t  i;
+
+    (void)ctx;
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)(i & 0xff);
+    }
+
+    /* Test 1: large single-update */
+    ret = wc_InitSha384_ex(sha384, NULL, devId);
+    if (ret == 0) {
+        ret = wc_Sha384Update(sha384, buf, BUFSZ);
+    }
+    if (ret == 0) {
+        ret = wc_Sha384Final(sha384, out);
+    }
+    (void)wc_Sha384Free(sha384);
+    if (ret == 0) {
+        ret = whTest_Sha384Reference(buf, BUFSZ, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA384_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("SHA384 large input mismatch\n");
+        ret = -1;
+    }
+
+    /* Test 2: exactly the per-call inline capacity in one shot */
+    if (ret == 0) {
+        const uint32_t cap = WH_MESSAGE_CRYPTO_SHA384_MAX_INLINE_UPDATE_SZ;
+        ret                = wc_InitSha384_ex(sha384, NULL, devId);
+        if (ret == 0) {
+            ret = wc_Sha384Update(sha384, buf, cap);
+        }
+        if (ret == 0) {
+            ret = wc_Sha384Final(sha384, out);
+        }
+        (void)wc_Sha384Free(sha384);
+        if (ret == 0) {
+            ret = whTest_Sha384Reference(buf, cap, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA384_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("SHA384 capacity-boundary mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Test 3: capacity + 1 byte (one full request, then a tail buffered) */
+    if (ret == 0) {
+        const uint32_t cap1 =
+            WH_MESSAGE_CRYPTO_SHA384_MAX_INLINE_UPDATE_SZ + 1u;
+        ret = wc_InitSha384_ex(sha384, NULL, devId);
+        if (ret == 0) {
+            ret = wc_Sha384Update(sha384, buf, cap1);
+        }
+        if (ret == 0) {
+            ret = wc_Sha384Final(sha384, out);
+        }
+        (void)wc_Sha384Free(sha384);
+        if (ret == 0) {
+            ret = whTest_Sha384Reference(buf, cap1, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA384_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("SHA384 capacity+1 mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Test 4: non-aligned chunk stress test */
+    if (ret == 0) {
+        const uint32_t chunks[] = {13, 17, 1280, 41, 1};
+        const size_t   nChunks  = sizeof(chunks) / sizeof(chunks[0]);
+        uint32_t       total    = 0;
+        size_t         k;
+        for (k = 0; k < nChunks; k++) {
+            total += chunks[k];
+        }
+        if (total > BUFSZ) {
+            WH_ERROR_PRINT("test buffer too small for chunked stress test\n");
+            ret = -1;
+        }
+        if (ret == 0) {
+            uint32_t off = 0;
+            ret          = wc_InitSha384_ex(sha384, NULL, devId);
+            for (k = 0; ret == 0 && k < nChunks; k++) {
+                ret = wc_Sha384Update(sha384, buf + off, chunks[k]);
+                off += chunks[k];
+            }
+            if (ret == 0) {
+                ret = wc_Sha384Final(sha384, out);
+            }
+            (void)wc_Sha384Free(sha384);
+            if (ret == 0) {
+                ret = whTest_Sha384Reference(buf, total, ref);
+            }
+            if (ret == 0 && memcmp(out, ref, WC_SHA384_DIGEST_SIZE) != 0) {
+                WH_ERROR_PRINT("SHA384 chunked stress mismatch\n");
+                ret = -1;
+            }
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA384 LARGE-INPUT DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+
+/* Direct exercise of the new async non-DMA SHA384 primitives. */
+static int whTest_CryptoSha384Async(whClientContext* ctx, int devId,
+                                    WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha384 sha384[1];
+    uint8_t   out[WC_SHA384_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA384_DIGEST_SIZE];
+    /* Use the same large static buffer as the LargeInput test. */
+    uint8_t* buf   = whTest_Sha384BigBuf;
+    uint32_t BUFSZ = (uint32_t)sizeof(whTest_Sha384BigBuf);
+    uint32_t i;
+    bool     sent;
+
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)((i * 31u + 7u) & 0xff);
+    }
+
+    /* Case A: basic UpdateRequest -> UpdateResponse -> Final */
+    ret = wc_InitSha384_ex(sha384, NULL, devId);
+    if (ret == 0) {
+        sent = false;
+        ret  = wh_Client_Sha384UpdateRequest(ctx, sha384, buf, 256, &sent);
+    }
+    if (ret == 0 && sent) {
+        do {
+            ret = wh_Client_Sha384UpdateResponse(ctx, sha384);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha384FinalRequest(ctx, sha384);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha384FinalResponse(ctx, sha384, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = whTest_Sha384Reference(buf, 256, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA384_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async SHA384 case A mismatch\n");
+        ret = -1;
+    }
+
+    /* Case B: pure-buffer-fill update (sent must be false), then finalize */
+    if (ret == 0) {
+        (void)wc_Sha384Free(sha384);
+        ret = wc_InitSha384_ex(sha384, NULL, devId);
+    }
+    if (ret == 0) {
+        sent = true; /* expect to be cleared to false */
+        ret  = wh_Client_Sha384UpdateRequest(ctx, sha384, buf, 10, &sent);
+        if (ret == 0 && sent != false) {
+            WH_ERROR_PRINT(
+                "Async SHA384: expected sent==false on small update\n");
+            ret = -1;
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha384FinalRequest(ctx, sha384);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha384FinalResponse(ctx, sha384, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = whTest_Sha384Reference(buf, 10, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA384_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async SHA384 case B mismatch\n");
+        ret = -1;
+    }
+
+    /* Case C: multi-round async updates that span more than the per-call
+     * inline capacity (forces multiple Request/Response pairs). */
+    if (ret == 0) {
+        uint32_t consumed = 0;
+        (void)wc_Sha384Free(sha384);
+        ret = wc_InitSha384_ex(sha384, NULL, devId);
+        while (ret == 0 && consumed < BUFSZ) {
+            uint32_t chunk = 1400; /* arbitrary, less than max inline */
+            if (consumed + chunk > BUFSZ) {
+                chunk = BUFSZ - consumed;
+            }
+            sent = false;
+            ret  = wh_Client_Sha384UpdateRequest(ctx, sha384, buf + consumed,
+                                                 chunk, &sent);
+            if (ret == 0 && sent) {
+                do {
+                    ret = wh_Client_Sha384UpdateResponse(ctx, sha384);
+                } while (ret == WH_ERROR_NOTREADY);
+            }
+            consumed += chunk;
+        }
+        if (ret == 0) {
+            ret = wh_Client_Sha384FinalRequest(ctx, sha384);
+        }
+        if (ret == 0) {
+            do {
+                ret = wh_Client_Sha384FinalResponse(ctx, sha384, out);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+        if (ret == 0) {
+            ret = whTest_Sha384Reference(buf, BUFSZ, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA384_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("Async SHA384 case C mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Case D: oversized-input rejection. UpdateRequest with inLen > capacity
+     * must return BADARGS without mutating sha. */
+    if (ret == 0) {
+        uint8_t  savedDigest[WC_SHA512_DIGEST_SIZE];
+        word32   savedBuffLen;
+        uint32_t cap;
+        int      rc;
+        (void)wc_Sha384Free(sha384);
+        ret = wc_InitSha384_ex(sha384, NULL, devId);
+        if (ret == 0) {
+            memcpy(savedDigest, sha384->digest, WC_SHA512_DIGEST_SIZE);
+            savedBuffLen = sha384->buffLen;
+            cap          = WH_MESSAGE_CRYPTO_SHA384_MAX_INLINE_UPDATE_SZ +
+                  (uint32_t)(WC_SHA384_BLOCK_SIZE - 1u - sha384->buffLen);
+            sent = true;
+            rc   = wh_Client_Sha384UpdateRequest(ctx, sha384, buf, cap + 1u,
+                                                 &sent);
+            if (rc != WH_ERROR_BADARGS) {
+                WH_ERROR_PRINT("Async SHA384: expected BADARGS, got %d\n", rc);
+                ret = -1;
+            }
+            else if (sent != false) {
+                WH_ERROR_PRINT(
+                    "Async SHA384: sent should remain false on err\n");
+                ret = -1;
+            }
+            else if (sha384->buffLen != savedBuffLen ||
+                     memcmp(sha384->digest, savedDigest,
+                            WC_SHA512_DIGEST_SIZE) != 0) {
+                WH_ERROR_PRINT(
+                    "Async SHA384: state mutated on rejected call\n");
+                ret = -1;
+            }
+        }
+        (void)wc_Sha384Free(sha384);
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA384 ASYNC DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+
+#ifdef WOLFHSM_CFG_DMA
+/* Direct exercise of the new async DMA SHA384 primitives. */
+static int whTest_CryptoSha384DmaAsync(whClientContext* ctx, int devId,
+                                       WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha384 sha384[1];
+    uint8_t   out[WC_SHA384_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA384_DIGEST_SIZE];
+    /* DMA bypasses the comm buffer, so any size goes; reuse the shared
+     * static buffer to keep stack pressure low. */
+    uint8_t* buf   = whTest_Sha384BigBuf;
+    uint32_t BUFSZ = (uint32_t)sizeof(whTest_Sha384BigBuf);
+    uint32_t i;
+
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)((i * 17u + 3u) & 0xff);
+    }
+
+    /* Case A: single large DMA Update + Final */
+    ret = wc_InitSha384_ex(sha384, NULL, devId);
+    if (ret == 0) {
+        bool sent = false;
+        ret = wh_Client_Sha384DmaUpdateRequest(ctx, sha384, buf, BUFSZ, &sent);
+        if (ret == 0 && sent) {
+            do {
+                ret = wh_Client_Sha384DmaUpdateResponse(ctx, sha384);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha384DmaFinalRequest(ctx, sha384);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha384DmaFinalResponse(ctx, sha384, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    (void)wc_Sha384Free(sha384);
+    if (ret == 0) {
+        ret = whTest_Sha384Reference(buf, BUFSZ, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA384_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async DMA SHA384 case A mismatch\n");
+        ret = -1;
+    }
+
+    /* Case B: multiple DMA Update round-trips, then Final */
+    if (ret == 0) {
+        uint32_t consumed = 0;
+        ret               = wc_InitSha384_ex(sha384, NULL, devId);
+        while (ret == 0 && consumed < BUFSZ) {
+            uint32_t chunk = 1024;
+            if (consumed + chunk > BUFSZ) {
+                chunk = BUFSZ - consumed;
+            }
+            {
+                bool sent = false;
+                ret       = wh_Client_Sha384DmaUpdateRequest(
+                    ctx, sha384, buf + consumed, chunk, &sent);
+                if (ret == 0 && sent) {
+                    do {
+                        ret = wh_Client_Sha384DmaUpdateResponse(ctx, sha384);
+                    } while (ret == WH_ERROR_NOTREADY);
+                }
+            }
+            consumed += chunk;
+        }
+        if (ret == 0) {
+            ret = wh_Client_Sha384DmaFinalRequest(ctx, sha384);
+        }
+        if (ret == 0) {
+            do {
+                ret = wh_Client_Sha384DmaFinalResponse(ctx, sha384, out);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+        (void)wc_Sha384Free(sha384);
+        if (ret == 0) {
+            ret = whTest_Sha384Reference(buf, BUFSZ, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA384_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("Async DMA SHA384 case B mismatch\n");
+            ret = -1;
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA384 DMA ASYNC DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+#endif /* WOLFHSM_CFG_DMA */
+
 #endif /* WOLFSSL_SHA384 */
 
 #ifdef WOLFSSL_SHA512
@@ -1950,6 +3151,405 @@ static int whTest_CryptoSha512(whClientContext* ctx, int devId, WC_RNG* rng)
     }
     return ret;
 }
+
+/* Hash a buffer with a pure-software SHA512 (no devId) so we can compare. */
+static int whTest_Sha512Reference(const uint8_t* in, uint32_t inLen,
+                                  uint8_t out[WC_SHA512_DIGEST_SIZE])
+{
+    wc_Sha512 sw[1];
+    int       ret = wc_InitSha512_ex(sw, NULL, INVALID_DEVID);
+    if (ret == 0) {
+        ret = wc_Sha512Update(sw, in, inLen);
+    }
+    if (ret == 0) {
+        ret = wc_Sha512Final(sw, out);
+    }
+    (void)wc_Sha512Free(sw);
+    return ret;
+}
+
+/* Drive the new multi-block wire format through the blocking wrapper. Tests:
+ *  - large multi-request input,
+ *  - exact per-call inline capacity boundary,
+ *  - one-byte-over-capacity boundary (forces a tail in the client buffer),
+ *  - non-aligned chunked update sequence.
+ *
+ * Buffer is sized to comfortably exceed the per-call inline capacity at any
+ * reasonable comm-buffer size. We use a static buffer to keep stack pressure
+ * low under ASAN. */
+static uint8_t
+    whTest_Sha512BigBuf[2 *
+                        (WH_MESSAGE_CRYPTO_SHA512_MAX_INLINE_UPDATE_SZ + 128u)];
+
+static int whTest_CryptoSha512LargeInput(whClientContext* ctx, int devId,
+                                         WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha512 sha512[1];
+    uint8_t   out[WC_SHA512_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA512_DIGEST_SIZE];
+    uint8_t*  buf   = whTest_Sha512BigBuf;
+    uint32_t  BUFSZ = (uint32_t)sizeof(whTest_Sha512BigBuf);
+    uint32_t  i;
+
+    (void)ctx;
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)(i & 0xff);
+    }
+
+    /* Test 1: large single-update */
+    ret = wc_InitSha512_ex(sha512, NULL, devId);
+    if (ret == 0) {
+        ret = wc_Sha512Update(sha512, buf, BUFSZ);
+    }
+    if (ret == 0) {
+        ret = wc_Sha512Final(sha512, out);
+    }
+    (void)wc_Sha512Free(sha512);
+    if (ret == 0) {
+        ret = whTest_Sha512Reference(buf, BUFSZ, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA512_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("SHA512 large input mismatch\n");
+        ret = -1;
+    }
+
+    /* Test 2: exactly the per-call inline capacity in one shot */
+    if (ret == 0) {
+        const uint32_t cap = WH_MESSAGE_CRYPTO_SHA512_MAX_INLINE_UPDATE_SZ;
+        ret                = wc_InitSha512_ex(sha512, NULL, devId);
+        if (ret == 0) {
+            ret = wc_Sha512Update(sha512, buf, cap);
+        }
+        if (ret == 0) {
+            ret = wc_Sha512Final(sha512, out);
+        }
+        (void)wc_Sha512Free(sha512);
+        if (ret == 0) {
+            ret = whTest_Sha512Reference(buf, cap, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA512_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("SHA512 capacity-boundary mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Test 3: capacity + 1 byte (one full request, then a tail buffered) */
+    if (ret == 0) {
+        const uint32_t cap1 =
+            WH_MESSAGE_CRYPTO_SHA512_MAX_INLINE_UPDATE_SZ + 1u;
+        ret = wc_InitSha512_ex(sha512, NULL, devId);
+        if (ret == 0) {
+            ret = wc_Sha512Update(sha512, buf, cap1);
+        }
+        if (ret == 0) {
+            ret = wc_Sha512Final(sha512, out);
+        }
+        (void)wc_Sha512Free(sha512);
+        if (ret == 0) {
+            ret = whTest_Sha512Reference(buf, cap1, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA512_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("SHA512 capacity+1 mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Test 4: non-aligned chunk stress test */
+    if (ret == 0) {
+        const uint32_t chunks[] = {13, 17, 1280, 41, 1};
+        const size_t   nChunks  = sizeof(chunks) / sizeof(chunks[0]);
+        uint32_t       total    = 0;
+        size_t         k;
+        for (k = 0; k < nChunks; k++) {
+            total += chunks[k];
+        }
+        if (total > BUFSZ) {
+            WH_ERROR_PRINT("test buffer too small for chunked stress test\n");
+            ret = -1;
+        }
+        if (ret == 0) {
+            uint32_t off = 0;
+            ret          = wc_InitSha512_ex(sha512, NULL, devId);
+            for (k = 0; ret == 0 && k < nChunks; k++) {
+                ret = wc_Sha512Update(sha512, buf + off, chunks[k]);
+                off += chunks[k];
+            }
+            if (ret == 0) {
+                ret = wc_Sha512Final(sha512, out);
+            }
+            (void)wc_Sha512Free(sha512);
+            if (ret == 0) {
+                ret = whTest_Sha512Reference(buf, total, ref);
+            }
+            if (ret == 0 && memcmp(out, ref, WC_SHA512_DIGEST_SIZE) != 0) {
+                WH_ERROR_PRINT("SHA512 chunked stress mismatch\n");
+                ret = -1;
+            }
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA512 LARGE-INPUT DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+
+/* Direct exercise of the new async non-DMA SHA512 primitives. */
+static int whTest_CryptoSha512Async(whClientContext* ctx, int devId,
+                                    WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha512 sha512[1];
+    uint8_t   out[WC_SHA512_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA512_DIGEST_SIZE];
+    /* Use the same large static buffer as the LargeInput test. */
+    uint8_t* buf   = whTest_Sha512BigBuf;
+    uint32_t BUFSZ = (uint32_t)sizeof(whTest_Sha512BigBuf);
+    uint32_t i;
+    bool     sent;
+
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)((i * 31u + 7u) & 0xff);
+    }
+
+    /* Case A: basic UpdateRequest -> UpdateResponse -> Final */
+    ret = wc_InitSha512_ex(sha512, NULL, devId);
+    if (ret == 0) {
+        sent = false;
+        ret  = wh_Client_Sha512UpdateRequest(ctx, sha512, buf, 256, &sent);
+    }
+    if (ret == 0 && sent) {
+        do {
+            ret = wh_Client_Sha512UpdateResponse(ctx, sha512);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha512FinalRequest(ctx, sha512);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha512FinalResponse(ctx, sha512, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = whTest_Sha512Reference(buf, 256, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA512_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async SHA512 case A mismatch\n");
+        ret = -1;
+    }
+
+    /* Case B: pure-buffer-fill update (sent must be false), then finalize */
+    if (ret == 0) {
+        (void)wc_Sha512Free(sha512);
+        ret = wc_InitSha512_ex(sha512, NULL, devId);
+    }
+    if (ret == 0) {
+        sent = true; /* expect to be cleared to false */
+        ret  = wh_Client_Sha512UpdateRequest(ctx, sha512, buf, 10, &sent);
+        if (ret == 0 && sent != false) {
+            WH_ERROR_PRINT(
+                "Async SHA512: expected sent==false on small update\n");
+            ret = -1;
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha512FinalRequest(ctx, sha512);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha512FinalResponse(ctx, sha512, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    if (ret == 0) {
+        ret = whTest_Sha512Reference(buf, 10, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA512_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async SHA512 case B mismatch\n");
+        ret = -1;
+    }
+
+    /* Case C: multi-round async updates that span more than the per-call
+     * inline capacity (forces multiple Request/Response pairs). */
+    if (ret == 0) {
+        uint32_t consumed = 0;
+        (void)wc_Sha512Free(sha512);
+        ret = wc_InitSha512_ex(sha512, NULL, devId);
+        while (ret == 0 && consumed < BUFSZ) {
+            uint32_t chunk = 1400; /* arbitrary, less than max inline */
+            if (consumed + chunk > BUFSZ) {
+                chunk = BUFSZ - consumed;
+            }
+            sent = false;
+            ret  = wh_Client_Sha512UpdateRequest(ctx, sha512, buf + consumed,
+                                                 chunk, &sent);
+            if (ret == 0 && sent) {
+                do {
+                    ret = wh_Client_Sha512UpdateResponse(ctx, sha512);
+                } while (ret == WH_ERROR_NOTREADY);
+            }
+            consumed += chunk;
+        }
+        if (ret == 0) {
+            ret = wh_Client_Sha512FinalRequest(ctx, sha512);
+        }
+        if (ret == 0) {
+            do {
+                ret = wh_Client_Sha512FinalResponse(ctx, sha512, out);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+        if (ret == 0) {
+            ret = whTest_Sha512Reference(buf, BUFSZ, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA512_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("Async SHA512 case C mismatch\n");
+            ret = -1;
+        }
+    }
+
+    /* Case D: oversized-input rejection. UpdateRequest with inLen > capacity
+     * must return BADARGS without mutating sha. */
+    if (ret == 0) {
+        uint8_t  savedDigest[WC_SHA512_DIGEST_SIZE];
+        word32   savedBuffLen;
+        uint32_t cap;
+        int      rc;
+        (void)wc_Sha512Free(sha512);
+        ret = wc_InitSha512_ex(sha512, NULL, devId);
+        if (ret == 0) {
+            memcpy(savedDigest, sha512->digest, WC_SHA512_DIGEST_SIZE);
+            savedBuffLen = sha512->buffLen;
+            cap          = WH_MESSAGE_CRYPTO_SHA512_MAX_INLINE_UPDATE_SZ +
+                  (uint32_t)(WC_SHA512_BLOCK_SIZE - 1u - sha512->buffLen);
+            sent = true;
+            rc   = wh_Client_Sha512UpdateRequest(ctx, sha512, buf, cap + 1u,
+                                                 &sent);
+            if (rc != WH_ERROR_BADARGS) {
+                WH_ERROR_PRINT("Async SHA512: expected BADARGS, got %d\n", rc);
+                ret = -1;
+            }
+            else if (sent != false) {
+                WH_ERROR_PRINT(
+                    "Async SHA512: sent should remain false on err\n");
+                ret = -1;
+            }
+            else if (sha512->buffLen != savedBuffLen ||
+                     memcmp(sha512->digest, savedDigest,
+                            WC_SHA512_DIGEST_SIZE) != 0) {
+                WH_ERROR_PRINT(
+                    "Async SHA512: state mutated on rejected call\n");
+                ret = -1;
+            }
+        }
+        (void)wc_Sha512Free(sha512);
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA512 ASYNC DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+
+#ifdef WOLFHSM_CFG_DMA
+/* Direct exercise of the new async DMA SHA512 primitives. */
+static int whTest_CryptoSha512DmaAsync(whClientContext* ctx, int devId,
+                                       WC_RNG* rng)
+{
+    int       ret = WH_ERROR_OK;
+    wc_Sha512 sha512[1];
+    uint8_t   out[WC_SHA512_DIGEST_SIZE];
+    uint8_t   ref[WC_SHA512_DIGEST_SIZE];
+    /* DMA bypasses the comm buffer, so any size goes; reuse the shared
+     * static buffer to keep stack pressure low. */
+    uint8_t* buf   = whTest_Sha512BigBuf;
+    uint32_t BUFSZ = (uint32_t)sizeof(whTest_Sha512BigBuf);
+    uint32_t i;
+
+    (void)rng;
+
+    for (i = 0; i < BUFSZ; i++) {
+        buf[i] = (uint8_t)((i * 17u + 3u) & 0xff);
+    }
+
+    /* Case A: single large DMA Update + Final */
+    ret = wc_InitSha512_ex(sha512, NULL, devId);
+    if (ret == 0) {
+        bool sent = false;
+        ret = wh_Client_Sha512DmaUpdateRequest(ctx, sha512, buf, BUFSZ, &sent);
+        if (ret == 0 && sent) {
+            do {
+                ret = wh_Client_Sha512DmaUpdateResponse(ctx, sha512);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+    }
+    if (ret == 0) {
+        ret = wh_Client_Sha512DmaFinalRequest(ctx, sha512);
+    }
+    if (ret == 0) {
+        do {
+            ret = wh_Client_Sha512DmaFinalResponse(ctx, sha512, out);
+        } while (ret == WH_ERROR_NOTREADY);
+    }
+    (void)wc_Sha512Free(sha512);
+    if (ret == 0) {
+        ret = whTest_Sha512Reference(buf, BUFSZ, ref);
+    }
+    if (ret == 0 && memcmp(out, ref, WC_SHA512_DIGEST_SIZE) != 0) {
+        WH_ERROR_PRINT("Async DMA SHA512 case A mismatch\n");
+        ret = -1;
+    }
+
+    /* Case B: multiple DMA Update round-trips, then Final */
+    if (ret == 0) {
+        uint32_t consumed = 0;
+        ret               = wc_InitSha512_ex(sha512, NULL, devId);
+        while (ret == 0 && consumed < BUFSZ) {
+            uint32_t chunk = 1024;
+            if (consumed + chunk > BUFSZ) {
+                chunk = BUFSZ - consumed;
+            }
+            {
+                bool sent = false;
+                ret       = wh_Client_Sha512DmaUpdateRequest(
+                    ctx, sha512, buf + consumed, chunk, &sent);
+                if (ret == 0 && sent) {
+                    do {
+                        ret = wh_Client_Sha512DmaUpdateResponse(ctx, sha512);
+                    } while (ret == WH_ERROR_NOTREADY);
+                }
+            }
+            consumed += chunk;
+        }
+        if (ret == 0) {
+            ret = wh_Client_Sha512DmaFinalRequest(ctx, sha512);
+        }
+        if (ret == 0) {
+            do {
+                ret = wh_Client_Sha512DmaFinalResponse(ctx, sha512, out);
+            } while (ret == WH_ERROR_NOTREADY);
+        }
+        (void)wc_Sha512Free(sha512);
+        if (ret == 0) {
+            ret = whTest_Sha512Reference(buf, BUFSZ, ref);
+        }
+        if (ret == 0 && memcmp(out, ref, WC_SHA512_DIGEST_SIZE) != 0) {
+            WH_ERROR_PRINT("Async DMA SHA512 case B mismatch\n");
+            ret = -1;
+        }
+    }
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHA512 DMA ASYNC DEVID=0x%X SUCCESS\n", devId);
+    }
+    return ret;
+}
+#endif /* WOLFHSM_CFG_DMA */
+
 #endif /* WOLFSSL_SHA512 */
 
 #ifdef HAVE_HKDF
@@ -5748,6 +7348,17 @@ int whTest_CryptoClientConfig(whClientConfig* config)
         WH_ERROR_PRINT("Failed to comm init:%d\n", ret);
     }
 
+    if (ret == 0) {
+#ifdef WOLFHSM_CFG_ENABLE_AUTHENTICATION
+        int serverRc;
+
+        /* Attempt log in as an admin user for the rest of the tests */
+        WH_TEST_RETURN_ON_FAIL(wh_Client_AuthLogin(
+            client, WH_AUTH_METHOD_PIN, TEST_ADMIN_USERNAME, TEST_ADMIN_PIN,
+            strlen(TEST_ADMIN_PIN), &serverRc, NULL));
+#endif /* WOLFHSM_CFG_ENABLE_AUTHENTICATION */
+    }
+
 #ifdef WOLFHSM_CFG_DEBUG_VERBOSE
     if (ret == 0) {
         (void)whTest_ShowNvmAvailable(client);
@@ -5882,9 +7493,21 @@ int whTest_CryptoClientConfig(whClientConfig* config)
     while ((ret == WH_ERROR_OK) && (i < WH_NUM_DEVIDS)) {
         ret = whTest_CryptoSha256(client, WH_DEV_IDS_ARRAY[i], rng);
         if (ret == WH_ERROR_OK) {
+            ret =
+                whTest_CryptoSha256LargeInput(client, WH_DEV_IDS_ARRAY[i], rng);
+        }
+        if (ret == WH_ERROR_OK) {
+            ret = whTest_CryptoSha256Async(client, WH_DEV_IDS_ARRAY[i], rng);
+        }
+        if (ret == WH_ERROR_OK) {
             i++;
         }
     }
+#ifdef WOLFHSM_CFG_DMA
+    if (ret == WH_ERROR_OK) {
+        ret = whTest_CryptoSha256DmaAsync(client, WH_DEV_ID_DMA, rng);
+    }
+#endif /* WOLFHSM_CFG_DMA */
 #endif /* !NO_SHA256 */
 
 #ifdef WOLFSSL_SHA224
@@ -5892,9 +7515,21 @@ int whTest_CryptoClientConfig(whClientConfig* config)
     while ((ret == WH_ERROR_OK) && (i < WH_NUM_DEVIDS)) {
         ret = whTest_CryptoSha224(client, WH_DEV_IDS_ARRAY[i], rng);
         if (ret == WH_ERROR_OK) {
+            ret =
+                whTest_CryptoSha224LargeInput(client, WH_DEV_IDS_ARRAY[i], rng);
+        }
+        if (ret == WH_ERROR_OK) {
+            ret = whTest_CryptoSha224Async(client, WH_DEV_IDS_ARRAY[i], rng);
+        }
+        if (ret == WH_ERROR_OK) {
             i++;
         }
     }
+#ifdef WOLFHSM_CFG_DMA
+    if (ret == WH_ERROR_OK) {
+        ret = whTest_CryptoSha224DmaAsync(client, WH_DEV_ID_DMA, rng);
+    }
+#endif /* WOLFHSM_CFG_DMA */
 #endif /* WOLFSSL_SHA224 */
 
 #ifdef WOLFSSL_SHA384
@@ -5902,9 +7537,21 @@ int whTest_CryptoClientConfig(whClientConfig* config)
     while ((ret == WH_ERROR_OK) && (i < WH_NUM_DEVIDS)) {
         ret = whTest_CryptoSha384(client, WH_DEV_IDS_ARRAY[i], rng);
         if (ret == WH_ERROR_OK) {
+            ret =
+                whTest_CryptoSha384LargeInput(client, WH_DEV_IDS_ARRAY[i], rng);
+        }
+        if (ret == WH_ERROR_OK) {
+            ret = whTest_CryptoSha384Async(client, WH_DEV_IDS_ARRAY[i], rng);
+        }
+        if (ret == WH_ERROR_OK) {
             i++;
         }
     }
+#ifdef WOLFHSM_CFG_DMA
+    if (ret == WH_ERROR_OK) {
+        ret = whTest_CryptoSha384DmaAsync(client, WH_DEV_ID_DMA, rng);
+    }
+#endif /* WOLFHSM_CFG_DMA */
 #endif /* WOLFSSL_SHA384 */
 
 #ifdef WOLFSSL_SHA512
@@ -5912,9 +7559,21 @@ int whTest_CryptoClientConfig(whClientConfig* config)
     while ((ret == WH_ERROR_OK) && (i < WH_NUM_DEVIDS)) {
         ret = whTest_CryptoSha512(client, WH_DEV_IDS_ARRAY[i], rng);
         if (ret == WH_ERROR_OK) {
+            ret =
+                whTest_CryptoSha512LargeInput(client, WH_DEV_IDS_ARRAY[i], rng);
+        }
+        if (ret == WH_ERROR_OK) {
+            ret = whTest_CryptoSha512Async(client, WH_DEV_IDS_ARRAY[i], rng);
+        }
+        if (ret == WH_ERROR_OK) {
             i++;
         }
     }
+#ifdef WOLFHSM_CFG_DMA
+    if (ret == WH_ERROR_OK) {
+        ret = whTest_CryptoSha512DmaAsync(client, WH_DEV_ID_DMA, rng);
+    }
+#endif /* WOLFHSM_CFG_DMA */
 #endif /* WOLFSSL_SHA512 */
 
 #ifdef HAVE_HKDF

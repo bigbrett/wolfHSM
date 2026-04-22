@@ -123,7 +123,8 @@ whMessageCrypto_HkdfResponse          hkdfRes;
 
 /* DMA crypto messages */
 #if defined(WOLFHSM_CFG_DMA)
-whMessageCrypto_Sha2DmaRequest         hashSha2DmaReq;
+whMessageCrypto_Sha256DmaRequest       hashSha256DmaReq;
+whMessageCrypto_Sha512DmaRequest       hashSha512DmaReq;
 whMessageCrypto_Sha2DmaResponse        hashSha2DmaRes;
 whMessageCrypto_MlDsaKeyGenDmaRequest  pqMldsaKeygenDmaReq;
 whMessageCrypto_MlDsaKeyGenDmaResponse pqMldsaKeygenDmaRes;

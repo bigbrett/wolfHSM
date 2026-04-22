@@ -740,47 +740,103 @@ int wh_MessageCrypto_TranslateEd25519VerifyResponse(
  * SHA
  */
 
-/* SHA256 and SHA224 Request */
+/* SHA256/SHA224 Request (variable-length input data follows the struct).
+ *
+ * Wire layout in the comm buffer:
+ *   whMessageCrypto_GenericRequestHeader
+ *   whMessageCrypto_Sha256Request
+ *   uint8_t in[inSz]
+ *
+ * Non-final updates: inSz must be a multiple of WC_SHA256_BLOCK_SIZE (or
+ * WC_SHA224_BLOCK_SIZE for SHA224, which is the same value).
+ * Final: 0..(BLOCK_SIZE - 1). The client buffers any partial-block tail
+ * locally and only sends the final tail with isLastBlock=1.
+ */
 typedef struct {
     struct {
         uint32_t hiLen;
         uint32_t loLen;
         /* intermediate hash value */
-        uint8_t hash[32]; /* TODO (BRN) WC_SHA256_DIGEST_SIZE */
+        uint8_t hash[32]; /* WC_SHA256_DIGEST_SIZE */
     } resumeState;
-    /* Flag indicating to the server that this is the last block and it should
-     * finalize the hash. If set, inBlock may be only partially full*/
+    /* 1 = last block; server finalizes after consuming inSz bytes.
+     * 0 = non-final update; inSz MUST be a multiple of the block size. */
     uint32_t isLastBlock;
-    /* Length of the last input block of data. Only valid if isLastBlock=1 */
-    uint32_t lastBlockLen;
-    /* Full sha256 input block to hash */
-    uint8_t inBlock[64]; /* TODO (BRN) WC_SHA256_BLOCK_SIZE */
-    uint8_t WH_PAD[4];
+    /* Number of input bytes trailing this struct. */
+    uint32_t inSz;
 } whMessageCrypto_Sha256Request;
+
+/* Maximum number of input bytes that can be carried inline (after the generic
+ * crypto request header and the Sha256Request struct) in a single comm-buffer
+ * message, rounded down to a multiple of WC_SHA256_BLOCK_SIZE so non-final
+ * updates always carry whole blocks. */
+#define WH_MESSAGE_CRYPTO_SHA256_MAX_INLINE_UPDATE_SZ           \
+    (((WOLFHSM_CFG_COMM_DATA_LEN -                              \
+       (uint32_t)sizeof(whMessageCrypto_GenericRequestHeader) - \
+       (uint32_t)sizeof(whMessageCrypto_Sha256Request)) /       \
+      64u) *                                                    \
+     64u)
+
+WH_UTILS_STATIC_ASSERT(WH_MESSAGE_CRYPTO_SHA256_MAX_INLINE_UPDATE_SZ >= 64u,
+                       "Comm buffer too small to fit a SHA256 block");
+
+/* SHA224 shares the SHA256 wire format and block size (64), so the same
+ * per-call inline capacity applies. Exposed as a separate macro so SHA224
+ * call sites stay self-documenting. */
+#define WH_MESSAGE_CRYPTO_SHA224_MAX_INLINE_UPDATE_SZ \
+    WH_MESSAGE_CRYPTO_SHA256_MAX_INLINE_UPDATE_SZ
 
 int wh_MessageCrypto_TranslateSha256Request(
     uint16_t magic, const whMessageCrypto_Sha256Request* src,
     whMessageCrypto_Sha256Request* dest);
 
 
-/* SHA512 and SHA384 Request */
+/* SHA512/SHA384 Request (variable-length input data follows the struct).
+ *
+ * Wire layout in the comm buffer:
+ *   whMessageCrypto_GenericRequestHeader
+ *   whMessageCrypto_Sha512Request
+ *   uint8_t in[inSz]
+ *
+ * Non-final updates: inSz must be a multiple of WC_SHA512_BLOCK_SIZE (or
+ * WC_SHA384_BLOCK_SIZE for SHA384, which is the same value).
+ * Final: 0..(BLOCK_SIZE - 1). The client buffers any partial-block tail
+ * locally and only sends the final tail with isLastBlock=1.
+ */
 typedef struct {
     struct {
         uint32_t hiLen;
         uint32_t loLen;
         /* intermediate hash value */
-        uint8_t hash[64]; /* TODO (HM) WC_SHA512_DIGEST_SIZE */
+        uint8_t  hash[64]; /* WC_SHA512_DIGEST_SIZE */
         uint32_t hashType;
     } resumeState;
-    /* Flag indicating to the server that this is the last block and it should
-     * finalize the hash. If set, inBlock may be only partially full*/
+    /* 1 = last block; server finalizes after consuming inSz bytes.
+     * 0 = non-final update; inSz MUST be a multiple of the block size. */
     uint32_t isLastBlock;
-    /* Length of the last input block of data. Only valid if isLastBlock=1 */
-    uint32_t lastBlockLen;
-    /* Full sha512 input block to hash */
-    uint8_t inBlock[128]; /* TODO (HM) WC_SHA512_BLOCK_SIZE 128*/
-    uint8_t WH_PAD[4];
+    /* Number of input bytes trailing this struct. */
+    uint32_t inSz;
 } whMessageCrypto_Sha512Request;
+
+/* Maximum number of input bytes that can be carried inline (after the generic
+ * crypto request header and the Sha512Request struct) in a single comm-buffer
+ * message, rounded down to a multiple of WC_SHA512_BLOCK_SIZE so non-final
+ * updates always carry whole blocks. */
+#define WH_MESSAGE_CRYPTO_SHA512_MAX_INLINE_UPDATE_SZ           \
+    (((WOLFHSM_CFG_COMM_DATA_LEN -                              \
+       (uint32_t)sizeof(whMessageCrypto_GenericRequestHeader) - \
+       (uint32_t)sizeof(whMessageCrypto_Sha512Request)) /       \
+      128u) *                                                   \
+     128u)
+
+WH_UTILS_STATIC_ASSERT(WH_MESSAGE_CRYPTO_SHA512_MAX_INLINE_UPDATE_SZ >= 128u,
+                       "Comm buffer too small to fit a SHA512 block");
+
+/* SHA384 shares the SHA512 wire format and block size (128), so the same
+ * per-call inline capacity applies. Exposed as a separate macro so SHA384
+ * call sites stay self-documenting. */
+#define WH_MESSAGE_CRYPTO_SHA384_MAX_INLINE_UPDATE_SZ \
+    WH_MESSAGE_CRYPTO_SHA512_MAX_INLINE_UPDATE_SZ
 
 /* SHA2 Response */
 typedef struct {
@@ -966,26 +1022,61 @@ typedef struct {
 } whMessageCrypto_DmaAddrStatus;
 
 
-/* SHA2 DMA Request */
+/* SHA256/SHA224 DMA Request - state is passed inline (not via DMA) for
+ * cross-architecture safety. Only input data goes via DMA.
+ *
+ * Wire layout in the comm buffer:
+ *   whMessageCrypto_GenericRequestHeader
+ *   whMessageCrypto_Sha256DmaRequest
+ *   uint8_t in[inSz]   (inline trailing data: assembled first block from
+ *                        partial buffer, or partial tail on Final)
+ *
+ * Non-final: DMA input must be whole blocks. inSz is 0 or BLOCK_SIZE
+ *   (assembled first block from client partial-block buffer).
+ * Final: inSz = buffLen (0..BLOCK_SIZE-1), no DMA input. */
 typedef struct {
-    /* Since client addresses are subject to DMA checking, we can't use them to
-     * determine the requested operation (update/final). Therefore we need to
-     * indicate to the server which SHA224 operation to perform */
-    uint64_t                  finalize;
-    whMessageCrypto_DmaBuffer input;
-    whMessageCrypto_DmaBuffer state;
-    whMessageCrypto_DmaBuffer output;
-} whMessageCrypto_Sha2DmaRequest;
+    struct {
+        uint32_t hiLen;
+        uint32_t loLen;
+        uint8_t  hash[32]; /* WC_SHA256_DIGEST_SIZE */
+    } resumeState;
+    whMessageCrypto_DmaBuffer input; /* DMA whole blocks (Update only) */
+    uint32_t                  isLastBlock;
+    uint32_t                  inSz; /* inline trailing data size */
+} whMessageCrypto_Sha256DmaRequest;
 
-/* SHA224 DMA Response */
+/* SHA512/SHA384 DMA Request */
 typedef struct {
+    struct {
+        uint32_t hiLen;
+        uint32_t loLen;
+        uint8_t  hash[64]; /* WC_SHA512_DIGEST_SIZE */
+        uint32_t hashType;
+        uint8_t  WH_PAD[4];
+    } resumeState;
+    whMessageCrypto_DmaBuffer input;
+    uint32_t                  isLastBlock;
+    uint32_t                  inSz;
+} whMessageCrypto_Sha512DmaRequest;
+
+/* SHA2 DMA Response - carries updated state or final hash inline */
+typedef struct {
+    uint32_t hiLen;
+    uint32_t loLen;
+    uint8_t  hash[64]; /* big enough for all SHA2 variants */
+    uint32_t hashType;
     whMessageCrypto_DmaAddrStatus dmaAddrStatus;
+    uint8_t  WH_PAD[4];
 } whMessageCrypto_Sha2DmaResponse;
 
 /* SHA2 DMA translation functions */
-int wh_MessageCrypto_TranslateSha2DmaRequest(
-    uint16_t magic, const whMessageCrypto_Sha2DmaRequest* src,
-    whMessageCrypto_Sha2DmaRequest* dest);
+int wh_MessageCrypto_TranslateSha256DmaRequest(
+    uint16_t magic, const whMessageCrypto_Sha256DmaRequest* src,
+    whMessageCrypto_Sha256DmaRequest* dest);
+
+int wh_MessageCrypto_TranslateSha512DmaRequest(
+    uint16_t magic, const whMessageCrypto_Sha512DmaRequest* src,
+    whMessageCrypto_Sha512DmaRequest* dest);
 
 int wh_MessageCrypto_TranslateSha2DmaResponse(
     uint16_t magic, const whMessageCrypto_Sha2DmaResponse* src,
