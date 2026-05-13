@@ -55,6 +55,19 @@ whKeyId wh_KeyId_TranslateFromClient(uint16_t type, uint16_t clientId,
     return WH_MAKE_KEYID(type, user, id);
 }
 
+whKeyId wh_KeyId_TranslateObjectFromClient(uint16_t type, uint16_t clientId,
+                                           whKeyId reqId)
+{
+    /* Strip the wrapped and hardware flags so they cannot override the fixed
+     * type; the GLOBAL flag is preserved and resolved by the plain translator.
+     * This keeps the object in its own type namespace, preventing a client
+     * from reaching a wrapped-key or hardware object through a fixed-type API
+     * (NVM, counter, cert). */
+    reqId &=
+        (whKeyId) ~(WH_KEYID_CLIENT_WRAPPED_FLAG | WH_KEYID_CLIENT_HW_FLAG);
+    return wh_KeyId_TranslateFromClient(type, clientId, reqId);
+}
+
 whKeyId wh_KeyId_TranslateToClient(whKeyId serverId)
 {
     whKeyId clientId = WH_KEYID_ID(serverId);

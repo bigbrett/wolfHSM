@@ -116,6 +116,7 @@ typedef uint16_t whKeyId;
 #define WH_KEYTYPE_COUNTER 0x3 /* Monotonic counter */
 #define WH_KEYTYPE_WRAPPED 0x4 /* Wrapped key metadata */
 #define WH_KEYTYPE_HW 0x5 /* HW-only key. Port-specific */
+#define WH_KEYTYPE_CERT 0x6 /* Trusted certificate object */
 
 /* True when a key id carries no explicit identifier (ID field == 0) and so must
  * not be accepted as one - it would collide with the "assign me one" sentinel
@@ -151,6 +152,27 @@ typedef uint16_t whKeyId;
  */
 whKeyId wh_KeyId_TranslateFromClient(uint16_t type, uint16_t clientId,
                                      whKeyId reqId);
+
+/**
+ * @brief Translate a client keyId for a fixed-type NVM-backed object.
+ *
+ * Like wh_KeyId_TranslateFromClient(), but the wrapped and hardware client
+ * flags do NOT override the type — they are stripped first — so the object
+ * always stays in the supplied TYPE namespace. The GLOBAL flag is still
+ * honored: the USER field is the connection's clientId by default, or
+ * WH_KEYUSER_GLOBAL when the client sets WH_KEYID_CLIENT_GLOBAL_FLAG (and
+ * WOLFHSM_CFG_GLOBAL_KEYS is enabled). Used by every subsystem whose objects
+ * have a fixed type: NVM objects, counters, and certificates. Keys use the
+ * plain translator, where the wrapped/hardware flags are meaningful sub-types.
+ *
+ * @param type    Fixed object TYPE to stamp (e.g. WH_KEYTYPE_COUNTER)
+ * @param clientId Connection's client id for the USER field
+ * @param reqId   Requested id from the client (GLOBAL flag honored; wrapped and
+ *  hardware flags ignored)
+ * @return Server-internal keyId with the fixed TYPE, resolved USER, and ID.
+ */
+whKeyId wh_KeyId_TranslateObjectFromClient(uint16_t type, uint16_t clientId,
+                                           whKeyId reqId);
 
 /**
  * @brief Translate server keyId to client keyId format (with flags)

@@ -129,6 +129,14 @@ static int _GetId(whServerContext* server, uint16_t magic, uint16_t req_size,
                   const void* req_packet, uint16_t* out_resp_size,
                   void* resp_packet);
 static uint8_t _BuildSreg(whServerContext* server);
+#ifdef WOLFHSM_CFG_SHE_ENABLE_TEST_KEY_MGMT
+static int _PreProgramKey(whServerContext* server, uint16_t magic,
+                          uint16_t req_size, const void* req_packet,
+                          uint16_t* out_resp_size, void* resp_packet);
+static int _DestroyKey(whServerContext* server, uint16_t magic,
+                       uint16_t req_size, const void* req_packet,
+                       uint16_t* out_resp_size, void* resp_packet);
+#endif /* WOLFHSM_CFG_SHE_ENABLE_TEST_KEY_MGMT */
 static int _TranslateSheReturnCode(int ret);
 static int _GetUid(whServerContext* server, uint8_t* outUid);
 static int _StoreUid(whServerContext* server, const uint8_t* uid);
@@ -1753,7 +1761,15 @@ static int _GetId(whServerContext* server, uint16_t magic, uint16_t req_size,
     whMessageShe_GetIdRequest  req = {0};
     whMessageShe_GetIdResponse resp = {0};
 
-    if (req_size < sizeof(req)) {
+    /* The MASTER_ECU_KEY lookup below embeds the connection's client id.
+     * Before COMM INIT binds a nonzero id it would use the USER=0
+     * factory-provisioned namespace, so refuse unbound clients (same gate as
+     * the NVM group and the SHE key-management handlers). */
+    if (server->comm->client_id == WH_KEYUSER_GLOBAL) {
+        ret = WH_ERROR_ACCESS;
+    }
+
+    if ((ret == 0) && (req_size < sizeof(req))) {
         ret = WH_ERROR_BUFFER_SIZE;
     }
 
@@ -1813,6 +1829,102 @@ static int _GetId(whServerContext* server, uint16_t magic, uint16_t req_size,
     return ret;
 }
 
+/* Pre-program a SHE-typed NVM entry under the calling client's USER namespace.
+ * Replaces the historical client-side use of wh_Client_NvmAddObject with a
+ * hand-constructed SHE-typed id, which is incompatible with the new client-id
+ * translation on the NVM message path. */
+#ifdef WOLFHSM_CFG_SHE_ENABLE_TEST_KEY_MGMT
+static int _PreProgramKey(whServerContext* server, uint16_t magic,
+                          uint16_t req_size, const void* req_packet,
+                          uint16_t* out_resp_size, void* resp_packet)
+{
+    int                                ret  = 0;
+    whMessageShe_PreProgramKeyRequest  req  = {0};
+    whMessageShe_PreProgramKeyResponse resp = {0};
+    whNvmMetadata                      meta = {0};
+    const uint8_t*                     key_data;
+    const uint16_t                     hdr_len = sizeof(req);
+
+    /* SHE key ids embed the connection's client id. Before COMM INIT binds a
+     * nonzero id, this would write into the USER=0 factory-provisioned
+     * namespace, so refuse unbound clients (same gate as the NVM group). */
+    if (server->comm->client_id == WH_KEYUSER_GLOBAL) {
+        ret = WH_ERROR_ACCESS;
+    }
+    if ((ret == 0) && (req_size < hdr_len)) {
+        ret = WH_ERROR_BUFFER_SIZE;
+    }
+    if (ret == 0) {
+        ret = wh_MessageShe_TranslatePreProgramKeyRequest(magic, req_packet,
+                                                          &req);
+    }
+    /* SHE slots hold exactly one AES-128 key. The server appends a 16 byte
+     * constant after the slot contents when deriving key update keys, so any
+     * other size would overrun its kdf input buffer. */
+    if (ret == 0 &&
+        (req.keySz != WH_SHE_KEY_SZ || req_size != hdr_len + req.keySz)) {
+        ret = WH_ERROR_BADARGS;
+    }
+    if (ret == 0) {
+        key_data = (const uint8_t*)req_packet + hdr_len;
+
+        meta.id =
+            WH_SHE_MAKE_KEYID(server->comm->client_id, (whNvmId)req.keyId);
+        meta.access = 0;
+        meta.flags  = 0;
+        meta.len    = (whNvmSize)req.keySz;
+        wh_She_Meta2Label(req.count, req.flags, meta.label);
+
+        ret = WH_SERVER_NVM_LOCK(server);
+        if (ret == WH_ERROR_OK) {
+            ret = wh_Nvm_AddObjectChecked(server->nvm, &meta,
+                                          (whNvmSize)req.keySz, key_data);
+            (void)WH_SERVER_NVM_UNLOCK(server);
+        }
+    }
+
+    resp.rc = ret;
+    (void)wh_MessageShe_TranslatePreProgramKeyResponse(magic, &resp,
+                                                       resp_packet);
+    *out_resp_size = sizeof(resp);
+    return ret;
+}
+
+static int _DestroyKey(whServerContext* server, uint16_t magic,
+                       uint16_t req_size, const void* req_packet,
+                       uint16_t* out_resp_size, void* resp_packet)
+{
+    int                             ret  = 0;
+    whMessageShe_DestroyKeyRequest  req  = {0};
+    whMessageShe_DestroyKeyResponse resp = {0};
+    whNvmId                         id;
+
+    /* Same unbound-client gate as _PreProgramKey */
+    if (server->comm->client_id == WH_KEYUSER_GLOBAL) {
+        ret = WH_ERROR_ACCESS;
+    }
+    if ((ret == 0) && (req_size < sizeof(req))) {
+        ret = WH_ERROR_BUFFER_SIZE;
+    }
+    if (ret == 0) {
+        ret = wh_MessageShe_TranslateDestroyKeyRequest(magic, req_packet, &req);
+    }
+    if (ret == 0) {
+        id  = WH_SHE_MAKE_KEYID(server->comm->client_id, (whNvmId)req.keyId);
+        ret = WH_SERVER_NVM_LOCK(server);
+        if (ret == WH_ERROR_OK) {
+            ret = wh_Nvm_DestroyObjectsChecked(server->nvm, 1, &id);
+            (void)WH_SERVER_NVM_UNLOCK(server);
+        }
+    }
+
+    resp.rc = ret;
+    (void)wh_MessageShe_TranslateDestroyKeyResponse(magic, &resp, resp_packet);
+    *out_resp_size = sizeof(resp);
+    return ret;
+}
+#endif /* WOLFHSM_CFG_SHE_ENABLE_TEST_KEY_MGMT */
+
 
 /* TODO: This is terrible, but without implementing a SHE sub-protocol like we
  * do for crypto layer, there is no way to return non-request specific error
@@ -1830,6 +1942,10 @@ static int _ReportInvalidSheState(whServerContext* server, uint16_t magic,
         /* Status read is always permitted per AUTOSAR spec, even before boot
          * or UID setup. The UID store is deliberately not consulted so a
          * failing backend still leaves status readable. */
+    }
+    else if (action == WH_SHE_PRE_PROGRAM_KEY || action == WH_SHE_DESTROY_KEY) {
+        /* Key pre-programming and destruction are provisioning-time
+         * operations: allowed before UID setup and secure boot. */
     }
     else {
         int provisioned = _UidIsProvisioned(server);
@@ -2173,6 +2289,16 @@ int wh_Server_HandleSheRequest(whServerContext* server, uint16_t magic,
                 (void)WH_SERVER_NVM_UNLOCK(server);
             } /* WH_SERVER_NVM_LOCK() */
             break;
+#ifdef WOLFHSM_CFG_SHE_ENABLE_TEST_KEY_MGMT
+        case WH_SHE_PRE_PROGRAM_KEY:
+            ret = _PreProgramKey(server, magic, req_size, req_packet,
+                                 out_resp_size, resp_packet);
+            break;
+        case WH_SHE_DESTROY_KEY:
+            ret = _DestroyKey(server, magic, req_size, req_packet,
+                              out_resp_size, resp_packet);
+            break;
+#endif /* WOLFHSM_CFG_SHE_ENABLE_TEST_KEY_MGMT */
         default:
             ret = WH_ERROR_BADARGS;
             break;

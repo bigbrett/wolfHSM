@@ -65,7 +65,11 @@ static int _whTest_CertReadTrustedOversized(whServerContext* server)
     /* Static filler: an automatic copy would double this stack frame on the
      * embedded targets these suites also run on */
     static uint8_t oversized_cert[WH_TEST_CERT_STAGED_LEN + 1];
-    const whNvmId  certId        = 20;
+    /* The READTRUSTED handler translates the client id into the CERT namespace,
+     * so plant the cert there. Translation is idempotent for an already-CERT
+     * id, so this same value also serves as the handler req->id. */
+    const whNvmId certId =
+        WH_MAKE_KEYID(WH_KEYTYPE_CERT, WH_KEYUSER_GLOBAL, 20);
     const uint32_t oversized_len = (uint32_t)WH_TEST_CERT_STAGED_LEN + 1;
     uint16_t       resp_size     = 0;
     int            handler_rc;
@@ -131,9 +135,12 @@ static int _whTest_CertReadTrustedDenied(whServerContext* server)
         whMessageCert_ReadTrustedResponse resp;
         uint8_t                           bytes[WOLFHSM_CFG_COMM_DATA_LEN];
     } respPkt;
-    const whNvmId certId    = 21;
-    uint16_t      resp_size = 0;
-    int           handler_rc;
+    /* Cert namespace, as in the oversized case: the handler translates the
+     * client id into TYPE=CERT, so plant and address the cert there. */
+    const whNvmId certId =
+        WH_MAKE_KEYID(WH_KEYTYPE_CERT, WH_KEYUSER_GLOBAL, 21);
+    uint16_t resp_size = 0;
+    int      handler_rc;
 
     WH_TEST_RETURN_ON_FAIL(wh_Server_CertAddTrusted(
         server, certId, WH_NVM_ACCESS_ANY, WH_NVM_FLAGS_NONEXPORTABLE, NULL, 0,

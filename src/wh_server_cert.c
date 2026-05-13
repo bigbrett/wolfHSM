@@ -878,6 +878,22 @@ int wh_Server_CertVerifyAcert(whServerContext* server, const uint8_t* cert,
 }
 #endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER_ACERT */
 
+/* Translate a client-supplied certificate id into the server-internal cert
+ * namespace, following the same scheme as keys, NVM objects, and counters:
+ * TYPE=CERT, USER = the connection's client id by default, or WH_KEYUSER_GLOBAL
+ * when the client sets the GLOBAL flag (each client has its own trust store;
+ * shared roots live in the global namespace). Confines every client cert verb
+ * to certificate objects: the wrapped/hardware flags are stripped and the id is
+ * masked to 8 bits, so a client cannot reach a key, counter, or server-internal
+ * object (e.g. the auth user database) through a cert verb. Server-internal
+ * callers of the wh_Server_Cert* API pass full internal ids directly and are
+ * unaffected. */
+static whNvmId _CertTranslateFromClient(whServerContext* server, whNvmId reqId)
+{
+    return wh_KeyId_TranslateObjectFromClient(WH_KEYTYPE_CERT,
+                                              server->comm->client_id, reqId);
+}
+
 /* Handle a certificate request and generate a response */
 int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                                 uint16_t action, uint16_t seq,
@@ -924,6 +940,7 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
             /* Convert request struct */
             wh_MessageCert_TranslateAddTrustedRequest(
                 magic, (whMessageCert_AddTrustedRequest*)req_packet, &req);
+            req.id = _CertTranslateFromClient(server, req.id);
 
             /* Validate certificate data fits within request */
             if (req.cert_len > req_size - sizeof(req)) {
@@ -961,6 +978,7 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
             /* Convert request struct */
             wh_MessageCert_TranslateEraseTrustedRequest(
                 magic, (whMessageCert_EraseTrustedRequest*)req_packet, &req);
+            req.id = _CertTranslateFromClient(server, req.id);
 
             /* Process the delete trusted action */
             rc = WH_SERVER_NVM_LOCK(server);
@@ -990,6 +1008,7 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
             /* Convert request struct */
             wh_MessageCert_TranslateReadTrustedRequest(
                 magic, (whMessageCert_ReadTrustedRequest*)req_packet, &req);
+            req.id = _CertTranslateFromClient(server, req.id);
 
             /* Get pointer to certificate data buffer */
             cert_data = (uint8_t*)resp_packet + sizeof(resp);
@@ -997,10 +1016,11 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                             ? max_transport_cert_len
                             : WOLFHSM_CFG_MAX_CERT_SIZE;
 
-            /* Deny reading non-exportable or server-only (trusted KEK)
-             * objects. Keys and certs share the NVM id space, so a client
-             * could pass a protected key's id here. This is the only gate:
-             * wh_Server_CertReadTrusted() does an unchecked NVM read. */
+            /* Deny reading a non-exportable or server-only cert object. The id
+             * is confined to the cert namespace above, so this no longer
+             * guards against reaching a key; it enforces per-object export
+             * policy within the cert store. wh_Server_CertReadTrusted() does an
+             * unchecked NVM read, so this is the only gate. */
             rc = WH_SERVER_NVM_LOCK(server);
             if (rc == WH_ERROR_OK) {
                 rc = wh_Nvm_GetMetadata(server->nvm, req.id, &meta);
@@ -1050,6 +1070,8 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 /* Convert request struct */
                 wh_MessageCert_TranslateVerifyRequest(
                     magic, (whMessageCert_VerifyRequest*)req_packet, &req);
+                req.trustedRootNvmId =
+                    _CertTranslateFromClient(server, req.trustedRootNvmId);
 
                 /* Validate certificate data fits within request */
                 if (req.cert_len > req_size - sizeof(req)) {
@@ -1139,7 +1161,8 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 payload       = (const uint8_t*)req_packet + sizeof(req);
                 root_ids_wire = (const whNvmId*)payload;
                 for (i = 0; i < req.numRoots; i++) {
-                    root_ids[i] = wh_Translate16(magic, root_ids_wire[i]);
+                    root_ids[i] = _CertTranslateFromClient(
+                        server, wh_Translate16(magic, root_ids_wire[i]));
                 }
 
                 /* Certificate data follows the root id array */
@@ -1238,6 +1261,7 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 wh_MessageCert_TranslateAddTrustedDmaRequest(
                     magic, (whMessageCert_AddTrustedDmaRequest*)req_packet,
                     &req);
+                req.id = _CertTranslateFromClient(server, req.id);
 
                 /* Process client address */
                 resp.rc = wh_Server_DmaProcessClientAddress(
@@ -1289,6 +1313,7 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 wh_MessageCert_TranslateReadTrustedDmaRequest(
                     magic, (whMessageCert_ReadTrustedDmaRequest*)req_packet,
                     &req);
+                req.id = _CertTranslateFromClient(server, req.id);
 
                 /* Process client address */
                 resp.rc = wh_Server_DmaProcessClientAddress(
@@ -1351,6 +1376,8 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 /* Convert request struct */
                 wh_MessageCert_TranslateVerifyDmaRequest(
                     magic, (whMessageCert_VerifyDmaRequest*)req_packet, &req);
+                req.trustedRootNvmId =
+                    _CertTranslateFromClient(server, req.trustedRootNvmId);
 
                 /* Map client keyId to server keyId space */
                 keyId = wh_KeyId_TranslateFromClient(
@@ -1409,6 +1436,16 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 wh_MessageCert_TranslateVerifyMultiRootDmaRequest(
                     magic, (whMessageCert_VerifyMultiRootDmaRequest*)req_packet,
                     &req);
+                /* Confine every root id to the cert namespace. The array is
+                 * fixed-size, so translate all slots rather than trust the
+                 * client-supplied numRoots for the bound. */
+                {
+                    uint16_t ri;
+                    for (ri = 0; ri < WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS; ri++) {
+                        req.trustedRootNvmIds[ri] = _CertTranslateFromClient(
+                            server, req.trustedRootNvmIds[ri]);
+                    }
+                }
 
                 /* Map client keyId to server keyId space */
                 keyId = wh_KeyId_TranslateFromClient(
@@ -1466,6 +1503,8 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
             /* Convert request struct */
             wh_MessageCert_TranslateVerifyAcertRequest(
                 magic, (whMessageCert_VerifyAcertRequest*)req_packet, &req);
+            req.trustedRootNvmId =
+                _CertTranslateFromClient(server, req.trustedRootNvmId);
 
             /* Validate certificate data fits within request */
             if (req.cert_len > req_size - sizeof(req)) {
@@ -1520,6 +1559,8 @@ int wh_Server_HandleCertRequest(whServerContext* server, uint16_t magic,
                 /* Convert request struct */
                 wh_MessageCert_TranslateVerifyDmaRequest(
                     magic, (whMessageCert_VerifyDmaRequest*)req_packet, &req);
+                req.trustedRootNvmId =
+                    _CertTranslateFromClient(server, req.trustedRootNvmId);
 
                 /* Process client address */
                 rc = wh_Server_DmaProcessClientAddress(

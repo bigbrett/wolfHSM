@@ -69,9 +69,8 @@ int wh_Server_HandleCounter(whServerContext* server, uint16_t magic,
                 magic, (whMessageCounter_InitRequest*)req_packet, &req);
 
             /* write 0 to nvm with the supplied id and user_id */
-            meta->id = WH_MAKE_KEYID(WH_KEYTYPE_COUNTER,
-                                     (uint16_t)server->comm->client_id,
-                                     (uint16_t)req.counterId);
+            meta->id = wh_KeyId_TranslateObjectFromClient(
+                WH_KEYTYPE_COUNTER, server->comm->client_id, req.counterId);
             /* use the label buffer to hold the counter value */
             *counter = req.counter;
 
@@ -114,9 +113,9 @@ int wh_Server_HandleCounter(whServerContext* server, uint16_t magic,
                 /* read the counter, stored in the metadata label */
                 ret = wh_Nvm_GetMetadata(
                     server->nvm,
-                    WH_MAKE_KEYID(WH_KEYTYPE_COUNTER,
-                                  (uint16_t)server->comm->client_id,
-                                  (uint16_t)req.counterId),
+                    wh_KeyId_TranslateObjectFromClient(WH_KEYTYPE_COUNTER,
+                                                       server->comm->client_id,
+                                                       req.counterId),
                     meta);
 
                 /* increment and write the counter back */
@@ -169,9 +168,9 @@ int wh_Server_HandleCounter(whServerContext* server, uint16_t magic,
                 /* read the counter, stored in the metadata label */
                 ret = wh_Nvm_GetMetadata(
                     server->nvm,
-                    WH_MAKE_KEYID(WH_KEYTYPE_COUNTER,
-                                  (uint16_t)server->comm->client_id,
-                                  (uint16_t)req.counterId),
+                    wh_KeyId_TranslateObjectFromClient(WH_KEYTYPE_COUNTER,
+                                                       server->comm->client_id,
+                                                       req.counterId),
                     meta);
 
                 /* return counter to the caller */
@@ -206,9 +205,8 @@ int wh_Server_HandleCounter(whServerContext* server, uint16_t magic,
             (void)wh_MessageCounter_TranslateDestroyRequest(
                 magic, (whMessageCounter_DestroyRequest*)req_packet, &req);
 
-            counterId = WH_MAKE_KEYID(WH_KEYTYPE_COUNTER,
-                                      (uint16_t)server->comm->client_id,
-                                      (uint16_t)req.counterId);
+            counterId = wh_KeyId_TranslateObjectFromClient(
+                WH_KEYTYPE_COUNTER, server->comm->client_id, req.counterId);
 
             ret = WH_SERVER_NVM_LOCK(server);
             if (ret == WH_ERROR_OK) {

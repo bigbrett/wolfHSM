@@ -376,10 +376,14 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
     WH_TEST_RETURN_ON_FAIL(wh_Server_Init(server, serverCfg));
     WH_TEST_RETURN_ON_FAIL(wh_Server_CertInit(server));
 
-    WH_TEST_PRINT("Cert ReadTrusted rejects server-only KEK...\n");
+    WH_TEST_PRINT("Cert ReadTrusted cannot reach a server-only KEK...\n");
 
-    /* Provision a trusted KEK the way whnvmtool would, deliberately WITHOUT
-     * NONEXPORTABLE, to prove the trusted flag alone gates the read. */
+    /* Provision a trusted KEK at a CRYPTO-typed id the way whnvmtool would.
+     * The cert read path translates every client id into the cert namespace
+     * (TYPE=CERT), so this crypto-typed KEK is not nameable through it at all:
+     * the lookup lands on a different (nonexistent) cert object and returns
+     * NOTFOUND, never the KEK. This is stronger than the old flag-gated
+     * behavior, which returned ACCESS after actually finding the KEK. */
     meta.id     = WH_MAKE_KEYID(WH_KEYTYPE_CRYPTO, 0, 0x5A);
     meta.access = WH_NVM_ACCESS_ANY;
     meta.flags  = WH_NVM_FLAGS_TRUSTED | WH_NVM_FLAGS_USAGE_WRAP;
@@ -387,7 +391,7 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
     WH_TEST_RETURN_ON_FAIL(
         wh_Nvm_AddObject(server->nvm, &meta, sizeof(kek), kek));
 
-    /* READTRUSTED must refuse the KEK id and return no cert bytes. */
+    /* READTRUSTED must not reach the KEK id and must return no cert bytes. */
     {
         whMessageCert_ReadTrustedRequest  req  = {0};
         whMessageCert_ReadTrustedResponse resp = {0};
@@ -405,7 +409,7 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
         wh_MessageCert_TranslateReadTrustedResponse(
             magic, (whMessageCert_ReadTrustedResponse*)resp_packet, &resp);
 
-        WH_TEST_ASSERT_RETURN(resp.rc == WH_ERROR_ACCESS);
+        WH_TEST_ASSERT_RETURN(resp.rc == WH_ERROR_NOTFOUND);
         WH_TEST_ASSERT_RETURN(resp.cert_len == 0);
         WH_TEST_ASSERT_RETURN(resp_size == sizeof(resp));
     }
@@ -433,7 +437,7 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
         wh_MessageCert_TranslateSimpleResponse(
             magic, (whMessageCert_SimpleResponse*)resp_packet, &resp);
 
-        WH_TEST_ASSERT_RETURN(resp.rc == WH_ERROR_ACCESS);
+        WH_TEST_ASSERT_RETURN(resp.rc == WH_ERROR_NOTFOUND);
         for (i = 0; i < sizeof(out_buf); i++) {
             WH_TEST_ASSERT_RETURN(out_buf[i] == 0);
         }
@@ -443,7 +447,164 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
     /* Server-internal unchecked destroy still works; clean up with it. */
     WH_TEST_RETURN_ON_FAIL(wh_Nvm_DestroyObjects(server->nvm, 1, &meta.id));
 
-    WH_TEST_PRINT("Cert ReadTrusted server-only rejection PASSED\n");
+    WH_TEST_PRINT("Cert ReadTrusted server-only unreachable PASSED\n");
+    return rc;
+}
+
+/* A client must not be able to destroy a non-certificate object through the
+ * cert erase path. Before cert ids were confined to their own type,
+ * EraseTrusted took a raw NVM id and refused only objects flagged SERVER_ONLY
+ * or NONDESTROYABLE, so a client could erase the auth user database (which
+ * carries neither, only NONMODIFIABLE). Now the client id is translated into
+ * the cert namespace, so a non-cert id lands on a different cert object and
+ * the real object is untouched. */
+static int whTest_CertEraseCannotReachNonCertObject(whServerConfig* serverCfg)
+{
+    int             rc        = WH_ERROR_OK;
+    whServerContext server[1] = {0};
+    whNvmMetadata   meta      = {0};
+    whNvmMetadata   check     = {0};
+    const uint8_t  secret[8] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};
+    const uint16_t magic     = WH_COMM_MAGIC_NATIVE;
+    uint8_t        req_packet[WOLFHSM_CFG_COMM_DATA_LEN]  = {0};
+    uint8_t        resp_packet[WOLFHSM_CFG_COMM_DATA_LEN] = {0};
+    uint16_t       resp_size                              = 0;
+    /* The auth backend's user-index id (WH_NVM_ID_AUTH_USER_INDEX == 0xFE00):
+     * a TYPE nibble no client translation can produce, carrying only
+     * NONMODIFIABLE. */
+    const whNvmId protectedId = WH_MAKE_KEYID(0xF, 0xE, 0x00);
+
+    WH_TEST_RETURN_ON_FAIL(wh_Server_Init(server, serverCfg));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_CertInit(server));
+
+    WH_TEST_PRINT("Cert EraseTrusted cannot reach a non-cert object...\n");
+
+    meta.id     = protectedId;
+    meta.access = WH_NVM_ACCESS_ANY;
+    meta.flags =
+        WH_NVM_FLAGS_NONMODIFIABLE; /* not server-only/nondestroyable */
+    meta.len = sizeof(secret);
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, &meta, sizeof(secret), secret));
+
+    /* Client erase naming the protected id must not destroy it: the id is
+     * confined to the cert namespace and lands elsewhere. */
+    {
+        whMessageCert_EraseTrustedRequest req = {0};
+
+        req.id = protectedId;
+        wh_MessageCert_TranslateEraseTrustedRequest(
+            magic, &req, (whMessageCert_EraseTrustedRequest*)req_packet);
+
+        (void)wh_Server_HandleCertRequest(
+            server, magic, WH_MESSAGE_CERT_ACTION_ERASETRUSTED, /*seq=*/0,
+            sizeof(req), req_packet, &resp_size, resp_packet);
+    }
+
+    /* The protected object must still be present and intact. */
+    WH_TEST_ASSERT_RETURN(
+        wh_Nvm_GetMetadata(server->nvm, protectedId, &check) == WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(check.len == sizeof(secret));
+
+    /* Clean up with the server-internal API. */
+    WH_TEST_RETURN_ON_FAIL(wh_Nvm_DestroyObjects(server->nvm, 1, &protectedId));
+
+    WH_TEST_PRINT("Cert EraseTrusted non-cert confinement PASSED\n");
+    return rc;
+}
+
+/* Drive a client READTRUSTED for `id` at the server's current client_id and
+ * return the client-visible rc. */
+static int32_t _certReadRc(whServerContext* server, uint16_t magic, whNvmId id,
+                           uint8_t* req_packet, uint8_t* resp_packet)
+{
+    whMessageCert_ReadTrustedRequest  req       = {0};
+    whMessageCert_ReadTrustedResponse resp      = {0};
+    uint16_t                          resp_size = 0;
+
+    req.id = id;
+    wh_MessageCert_TranslateReadTrustedRequest(
+        magic, &req, (whMessageCert_ReadTrustedRequest*)req_packet);
+    (void)wh_Server_HandleCertRequest(
+        server, magic, WH_MESSAGE_CERT_ACTION_READTRUSTED, 0, sizeof(req),
+        req_packet, &resp_size, resp_packet);
+    wh_MessageCert_TranslateReadTrustedResponse(
+        magic, (whMessageCert_ReadTrustedResponse*)resp_packet, &resp);
+    return resp.rc;
+}
+
+/* Certificate ids follow the same per-client scheme as keys and NVM objects: a
+ * plain id is private to the calling client, and the GLOBAL flag selects the
+ * shared namespace. Two clients naming "cert 5" get distinct objects; neither
+ * sees the other's, and a global cert is visible to both. */
+static int whTest_CertPerClientIsolation(whServerConfig* serverCfg)
+{
+    int             rc        = WH_ERROR_OK;
+    whServerContext server[1] = {0};
+    whNvmMetadata   meta      = {0};
+    const uint16_t  magic     = WH_COMM_MAGIC_NATIVE;
+    uint8_t         req_packet[WOLFHSM_CFG_COMM_DATA_LEN]  = {0};
+    uint8_t         resp_packet[WOLFHSM_CFG_COMM_DATA_LEN] = {0};
+    const whNvmId   client1Cert = WH_MAKE_KEYID(WH_KEYTYPE_CERT, 1, 5);
+
+    WH_TEST_RETURN_ON_FAIL(wh_Server_Init(server, serverCfg));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_CertInit(server));
+
+    WH_TEST_PRINT("Cert per-client isolation...\n");
+
+    /* Plant a cert in client 1's private namespace (server-direct, full id). */
+    meta.id     = client1Cert;
+    meta.access = WH_NVM_ACCESS_ANY;
+    meta.flags  = WH_NVM_FLAGS_NONE;
+    meta.len    = ROOT_A_CERT_len;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, &meta, ROOT_A_CERT_len, ROOT_A_CERT));
+
+    /* Client 2 asking for cert 5 lands in its own namespace: not found. */
+    server->comm->client_id = 2;
+    WH_TEST_ASSERT_RETURN(_certReadRc(server, magic, 5, req_packet,
+                                      resp_packet) == WH_ERROR_NOTFOUND);
+
+    /* Client 1 sees its own cert 5. */
+    server->comm->client_id = 1;
+    WH_TEST_ASSERT_RETURN(
+        _certReadRc(server, magic, 5, req_packet, resp_packet) == WH_ERROR_OK);
+
+#ifdef WOLFHSM_CFG_GLOBAL_KEYS
+    /* A cert in the global namespace is reachable by any client that sets the
+     * GLOBAL flag, and not by a plain id. */
+    memset(&meta, 0, sizeof(meta));
+    meta.id     = WH_MAKE_KEYID(WH_KEYTYPE_CERT, WH_KEYUSER_GLOBAL, 6);
+    meta.access = WH_NVM_ACCESS_ANY;
+    meta.flags  = WH_NVM_FLAGS_NONE;
+    meta.len    = ROOT_B_CERT_len;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, &meta, ROOT_B_CERT_len, ROOT_B_CERT));
+
+    server->comm->client_id = 2;
+    WH_TEST_ASSERT_RETURN(_certReadRc(server, magic,
+                                      6 | WH_KEYID_CLIENT_GLOBAL_FLAG,
+                                      req_packet, resp_packet) == WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(_certReadRc(server, magic, 6, req_packet,
+                                      resp_packet) == WH_ERROR_NOTFOUND);
+
+    {
+        whNvmId globalCert =
+            WH_MAKE_KEYID(WH_KEYTYPE_CERT, WH_KEYUSER_GLOBAL, 6);
+        WH_TEST_RETURN_ON_FAIL(
+            wh_Nvm_DestroyObjects(server->nvm, 1, &globalCert));
+    }
+#endif
+
+    /* Subtests share one NVM backing via the server config, so clean up the
+     * planted certs and restore the unbound client id. */
+    {
+        whNvmId c1 = client1Cert;
+        WH_TEST_RETURN_ON_FAIL(wh_Nvm_DestroyObjects(server->nvm, 1, &c1));
+    }
+    server->comm->client_id = 0;
+
+    WH_TEST_PRINT("Cert per-client isolation PASSED\n");
     return rc;
 }
 
@@ -2024,6 +2185,22 @@ int whTest_CertRamSim(whTestNvmBackendType nvmType)
             WH_ERROR_PRINT("Cert ReadTrusted server-only rejection test "
                            "failed: %d\n",
                            rc);
+        }
+    }
+
+    if (rc == WH_ERROR_OK) {
+        rc = whTest_CertEraseCannotReachNonCertObject(s_conf);
+        if (rc != WH_ERROR_OK) {
+            WH_ERROR_PRINT("Cert EraseTrusted non-cert confinement test "
+                           "failed: %d\n",
+                           rc);
+        }
+    }
+
+    if (rc == WH_ERROR_OK) {
+        rc = whTest_CertPerClientIsolation(s_conf);
+        if (rc != WH_ERROR_OK) {
+            WH_ERROR_PRINT("Cert per-client isolation test failed: %d\n", rc);
         }
     }
 
