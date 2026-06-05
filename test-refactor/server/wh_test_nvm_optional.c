@@ -19,10 +19,10 @@
 /*
  * test-refactor/server/wh_test_nvm_optional.c
  *
- * Server-side test that the keystore treats NVM as optional. The shared
- * server context arrives fully initialized (with a real NVM); this test
- * temporarily detaches the NVM (server->nvm = NULL) to exercise the no-NVM
- * paths, then restores it. Mirrors test/wh_test_nvm_optional.c.
+ * Server-side test that the keystore and counter layers treat NVM as
+ * optional. The shared server context arrives fully initialized (with a real
+ * NVM); this test temporarily detaches the NVM (server->nvm = NULL) to
+ * exercise the no-NVM paths, then restores it.
  */
 
 #include "wolfhsm/wh_settings.h"
@@ -305,6 +305,20 @@ static int _RunNvmOptionalChecks(whServerContext* server)
                           wh_Server_KeystoreEraseKeyChecked(server, revokeId));
     /* Force-remove the revoked key (EraseKeyChecked could not). */
     (void)wh_Server_KeystoreEvictKey(server, revokeId);
+
+    /* Counter operations are NVM-only (no cache), so with no NVM they should
+     * fail with an error return */
+    {
+        uint32_t counter = 0;
+        WH_TEST_ASSERT_RETURN(WH_ERROR_OK !=
+                              wh_Server_CounterInit(server, 1, &counter));
+        WH_TEST_ASSERT_RETURN(WH_ERROR_OK !=
+                              wh_Server_CounterRead(server, 1, &counter));
+        WH_TEST_ASSERT_RETURN(WH_ERROR_OK !=
+                              wh_Server_CounterIncrement(server, 1, &counter));
+        WH_TEST_ASSERT_RETURN(WH_ERROR_OK !=
+                              wh_Server_CounterDestroy(server, 1));
+    }
 
     /* Drop the global key we cached so the shared context is clean. */
     (void)wh_Server_KeystoreEraseKey(server, globalId);
