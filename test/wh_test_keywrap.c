@@ -724,7 +724,7 @@ static int _AesGcm_TestTrustedKekPolicy(whClientContext* client, WC_RNG* rng)
 static int _AesGcm_TestDataWrap(whClientContext* client)
 {
     int     ret                                           = 0;
-    uint8_t data[]                                        = "Example data!";
+    uint8_t data[]                                        = "Example data spanning several AES blocks to catch overlap bugs!";
     uint8_t unwrappedData[sizeof(data)]                   = {0};
     uint32_t unwrappedDataSz = sizeof(unwrappedData);
     uint8_t  wrappedData[sizeof(data) + WH_KEYWRAP_AES_GCM_HEADER_SIZE] = {0};
@@ -971,7 +971,7 @@ static int _AesGcm_TestHwKeystoreDataWrap(whClientContext* client)
 {
     int      ret;
     whKeyId  hwKekId = WH_CLIENT_KEYID_MAKE_HW(WH_TEST_HWKEK_ID);
-    uint8_t  data[]  = "Example data!";
+    uint8_t  data[]  = "Example data spanning several AES blocks to catch overlap bugs!";
     uint8_t  unwrappedData[sizeof(data)] = {0};
     uint32_t unwrappedDataSz             = sizeof(unwrappedData);
     uint8_t  wrappedData[sizeof(data) + WH_KEYWRAP_AES_GCM_HEADER_SIZE] = {0};

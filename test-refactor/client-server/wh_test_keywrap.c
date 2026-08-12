@@ -73,6 +73,9 @@
  * for the maximum plus its header, so this is the binding limit */
 #define WH_TEST_KW_OVER_KEY (WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE + 1)
 #define WH_TEST_KW_OVER_DATA (WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE + 1)
+/* Unwrap takes a blob, so its limit adds the wrap header */
+#define WH_TEST_KW_OVER_WRAPPED_DATA \
+    (WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE + WH_KEYWRAP_AES_GCM_HEADER_SIZE + 1)
 
 /* Distinct id range so nothing collides with other client-group suites; every
  * subtest cleans up its own keys */
@@ -330,6 +333,53 @@ static int _whTest_KeywrapDataWrapUsage(whClientContext* client)
 
     WH_TEST_RETURN_ON_FAIL(_CacheSwKek(client, &kekId));
 
+    /* Round-trip sizes spanning the AES block boundary and the configured max */
+    {
+        static const uint32_t sizes[] = {
+            1,  15, 16,  17,  31, 32,
+            33, 64, 127, 128,
+            WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE - 1,
+            WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE};
+        uint8_t  big[WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE];
+        uint8_t  rt[WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE];
+        uint8_t  wr[WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE +
+                   WH_KEYWRAP_AES_GCM_HEADER_SIZE];
+        uint32_t i;
+        uint32_t n;
+        uint32_t wrSz;
+        uint32_t rtSz;
+
+        for (i = 0; i < sizeof(big); i++) {
+            big[i] = (uint8_t)(i & 0xFF);
+        }
+
+        for (i = 0; i < (sizeof(sizes) / sizeof(sizes[0])); i++) {
+            n    = sizes[i];
+            wrSz = sizeof(wr);
+            rtSz = sizeof(rt);
+
+            ret = wh_Client_DataWrap(client, WC_CIPHER_AES_GCM, kekId, big, n,
+                                     wr, &wrSz);
+            if (ret == WH_ERROR_OK) {
+                ret = wh_Client_DataUnwrap(client, WC_CIPHER_AES_GCM, kekId, wr,
+                                           wrSz, rt, &rtSz);
+            }
+            if (ret != WH_ERROR_OK) {
+                WH_ERROR_PRINT("Data wrap round-trip size %u failed %d\n",
+                               (unsigned int)n, ret);
+                (void)wh_Client_KeyEvict(client, kekId);
+                return ret;
+            }
+
+            if (rtSz != n || memcmp(big, rt, n) != 0) {
+                WH_ERROR_PRINT("Data wrap round-trip corrupt at size %u\n",
+                               (unsigned int)n);
+                (void)wh_Client_KeyEvict(client, kekId);
+                return WH_ERROR_ABORTED;
+            }
+        }
+    }
+
     ret = wh_Client_DataWrap(client, WC_CIPHER_AES_GCM, kekId, data,
                              sizeof(data), wrappedData, &wrappedDataSz);
     if (ret != WH_ERROR_OK) {
@@ -513,7 +563,8 @@ static int _whTest_KeywrapOversizeRequest(whClientContext* client)
         ret = _CheckOversizeRejected(
             "DataUnwrap",
             wh_Client_DataUnwrap(client, WC_CIPHER_AES_GCM, kekId, in,
-                                 WH_TEST_KW_OVER_DATA, out, &dataOutSz));
+                                 WH_TEST_KW_OVER_WRAPPED_DATA, out,
+                                 &dataOutSz));
     }
 
     (void)wh_Client_KeyEvict(client, kekId);
