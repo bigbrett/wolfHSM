@@ -1896,8 +1896,8 @@ static int _whTest_Auth_NvmPersistence(void)
     WH_TEST_RETURN_ON_FAIL(wh_Auth_Init(&ctx, &cfg));
 
     memset(&perms_out, 0, sizeof(perms_out));
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Auth_UserGet(&ctx, "nvmuser", &reloaded_id, &perms_out));
+    WH_TEST_RETURN_ON_FAIL(wh_Auth_BaseUserGet(&ctx, user_id, "nvmuser",
+                                               &reloaded_id, &perms_out));
     WH_TEST_ASSERT_RETURN(reloaded_id == user_id);
     WH_TEST_ASSERT_RETURN(WH_AUTH_IS_ADMIN(perms_out));
 
@@ -2022,10 +2022,11 @@ static int _whTest_Auth_NvmSplitObjects(void)
         nvm, (whNvmId)(WH_NVM_ID_AUTH_CRED_BASE + (admin_id - 1)), &meta));
 
     /* The deleted user must no longer resolve; the admin still must */
-    WH_TEST_ASSERT_RETURN(wh_Auth_BaseUserGet(&ctx, "splituser", &out_id,
+    WH_TEST_ASSERT_RETURN(wh_Auth_BaseUserGet(&ctx, admin_id, "splituser",
+                                              &out_id,
                                               &perms_out) == WH_ERROR_NOTFOUND);
     WH_TEST_RETURN_ON_FAIL(
-        wh_Auth_BaseUserGet(&ctx, "splitadmin", &out_id, &perms_out));
+        wh_Auth_BaseUserGet(&ctx, admin_id, "splitadmin", &out_id, &perms_out));
     WH_TEST_ASSERT_RETURN(out_id == admin_id);
 
     /* Clean up remaining admin so the shared user table is left empty */

@@ -760,24 +760,24 @@ int wh_PosixServer_ExampleAuthConfig(void* conf)
         "Default auth context configured (%s user database)\n",
         (s_conf->nvm != NULL) ? "NVM-backed" : "in-memory");
 
-    /* Add admin user only if not already present (e.g. from NVM load) */
-    rc = wh_Auth_BaseUserGet(&auth_ctx, "admin", &out_user_id, &permissions);
-    if (rc != WH_ERROR_OK && rc != WH_ERROR_NOTFOUND) {
-        WOLFHSM_CFG_PRINTF("Failed to query admin user: %d\n", rc);
-        return rc;
+    /* Add the admin user. Looking it up first is not possible here: the lookup
+     * requires an authenticated caller and no user is logged in during
+     * bootstrap, so add unconditionally and treat a duplicate name as proof it
+     * was already restored from NVM. */
+    memset(&permissions, 0xFF, sizeof(whAuthPermissions));
+    permissions.keyIdCount = 0;
+    for (i = 0; i < WH_AUTH_MAX_KEY_IDS; i++) {
+        permissions.keyIds[i] = 0;
     }
-    if (rc == WH_ERROR_NOTFOUND) {
-        memset(&permissions, 0xFF, sizeof(whAuthPermissions));
-        permissions.keyIdCount = 0;
-        for (i = 0; i < WH_AUTH_MAX_KEY_IDS; i++) {
-            permissions.keyIds[i] = 0;
-        }
-        rc = wh_Auth_BaseUserAdd(&auth_ctx, "admin", &out_user_id, permissions,
-                                 WH_AUTH_METHOD_PIN, "1234", 4);
-        if (rc != WH_ERROR_OK) {
-            WOLFHSM_CFG_PRINTF("Failed to add admin user: %d\n", rc);
-            return rc;
-        }
+    rc = wh_Auth_BaseUserAdd(&auth_ctx, "admin", &out_user_id, permissions,
+                             WH_AUTH_METHOD_PIN, "1234", 4);
+    if (rc == WH_ERROR_BADARGS) {
+        /* Name already taken, i.e. the admin user came back from NVM */
+        rc = WH_ERROR_OK;
+    }
+    if (rc != WH_ERROR_OK) {
+        WOLFHSM_CFG_PRINTF("Failed to add admin user: %d\n", rc);
+        return rc;
     }
 
     return WH_ERROR_OK;
