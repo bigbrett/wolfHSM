@@ -173,7 +173,7 @@ static int _GetUid(whServerContext* server, uint8_t* outUid)
     int                 ret;
 
     if (she->getUidCb != NULL) {
-        ret = she->getUidCb(server, she->uidCtx, outUid);
+        ret = she->getUidCb(she->uidCtx, outUid);
         if (ret != 0) {
             memset(outUid, 0, WH_SHE_UID_SZ);
         }
@@ -197,7 +197,7 @@ static int _StoreUid(whServerContext* server, const uint8_t* uid)
         if (she->setUidCb == NULL) {
             return WH_ERROR_NOTIMPL;
         }
-        return she->setUidCb(server, she->uidCtx, uid);
+        return she->setUidCb(she->uidCtx, uid);
     }
 
     memcpy(she->uid, uid, WH_SHE_UID_SZ);
@@ -208,15 +208,14 @@ static int _StoreUid(whServerContext* server, const uint8_t* uid)
 /* Returns 1 if a UID is provisioned, 0 if not, or a negative error. */
 static int _UidIsProvisioned(whServerContext* server)
 {
-    uint8_t uid[WH_SHE_UID_SZ];
-    int     ret;
+    int ret;
 
     if (server->she->getUidCb == NULL) {
         return (server->she->uidSet != 0) ? 1 : 0;
     }
 
-    ret = _GetUid(server, uid);
-    memset(uid, 0, sizeof(uid));
+    /* NULL out buffer probes for the UID without reading it out */
+    ret = server->she->getUidCb(server->she->uidCtx, NULL);
     if (ret == 0) {
         return 1;
     }

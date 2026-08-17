@@ -704,13 +704,11 @@ The SHE spec also requires every key to carry a 28-bit monotonic update counter 
 A pair of optional callbacks determines where the 15-byte ECU UID lives. Install them and the server reads it from the integrator's store (fuses, OTP, NVM); leave them unset and it stays in the caller-owned `whServerSheContext`, re-provisioned with `CMD_SET_UID` after every reset.
 
 ```c
-typedef int (*whServerSheGetUidCb)(whServerContext* server, void* ctx,
-                                   uint8_t* outUid);
-typedef int (*whServerSheSetUidCb)(whServerContext* server, void* ctx,
-                                   const uint8_t* uid);
+typedef int (*whServerSheGetUidCb)(void* ctx, uint8_t* outUid);
+typedef int (*whServerSheSetUidCb)(void* ctx, const uint8_t* uid);
 ```
 
-The getter fills `WH_SHE_UID_SZ` bytes and returns `0`, `WH_ERROR_NOTFOUND` if no UID has been provisioned, or any other wolfHSM error to report a backend failure. The setter persists a UID that arrived over the wire via `CMD_SET_UID`; leaving it `NULL` marks the UID read-only, so provisioning attempts are answered with `WH_SHE_ERC_WRITE_PROTECTED` rather than being silently dropped.
+The getter fills `WH_SHE_UID_SZ` bytes and returns `0`, `WH_ERROR_NOTFOUND` if no UID has been provisioned, or any other wolfHSM error to report a backend failure. It must also accept a `NULL` `outUid`, which asks for the return code alone and must not write any bytes; the server uses that form to test whether a UID exists without reading it out. The setter persists a UID that arrived over the wire via `CMD_SET_UID`; leaving it `NULL` marks the UID read-only, so provisioning attempts are answered with `WH_SHE_ERC_WRITE_PROTECTED` rather than being silently dropped.
 
 Callbacks are supplied at initialization through the optional `whServerConfig.sheConfig` field, or registered later with `wh_Server_SheSetUidCb`:
 

@@ -40,17 +40,14 @@
 
 #if defined(WOLFHSM_CFG_SHE_EXTENSION)
 
-struct whServerContext_t;
-
 /* Reads WH_SHE_UID_SZ bytes into outUid. Returns 0, WH_ERROR_NOTFOUND if no UID
- * is provisioned, or another wolfHSM error. Called on every gated SHE request,
- * so it must be cheap and idempotent. */
-typedef int (*whServerSheGetUidCb)(struct whServerContext_t* server, void* ctx,
-                                   uint8_t* outUid);
+ * is provisioned, or another wolfHSM error. A NULL outUid reports provisioning
+ * status only and must not transfer any bytes. Called on every gated SHE
+ * request, so it must be cheap and idempotent. */
+typedef int (*whServerSheGetUidCb)(void* ctx, uint8_t* outUid);
 
 /* Persists the WH_SHE_UID_SZ byte UID provisioned by WH_SHE_SET_UID. */
-typedef int (*whServerSheSetUidCb)(struct whServerContext_t* server, void* ctx,
-                                   const uint8_t* uid);
+typedef int (*whServerSheSetUidCb)(void* ctx, const uint8_t* uid);
 
 typedef struct {
     whServerSheGetUidCb getUidCb; /* NULL = use in-context uid[]/uidSet */

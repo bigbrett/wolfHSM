@@ -77,6 +77,7 @@ typedef struct {
     int     readOnly;
     int     getErr; /* forced error from the get callback */
     int     getCount;
+    int     probeCount; /* get callback calls with a NULL out buffer */
     int     setCount;
 } TestUidStore;
 
@@ -99,13 +100,14 @@ typedef struct {
 static TestCtx     _testCtx;
 static TestUidStore _uidStore;
 
-static int _TestGetUid(struct whServerContext_t* server, void* ctx,
-                       uint8_t* outUid)
+static int _TestGetUid(void* ctx, uint8_t* outUid)
 {
     TestUidStore* store = (TestUidStore*)ctx;
-    (void)server;
 
     store->getCount++;
+    if (outUid == NULL) {
+        store->probeCount++;
+    }
 
     if (store->getErr != 0) {
         return store->getErr;
@@ -113,15 +115,15 @@ static int _TestGetUid(struct whServerContext_t* server, void* ctx,
     if (store->provisioned == 0) {
         return WH_ERROR_NOTFOUND;
     }
-    memcpy(outUid, store->uid, WH_SHE_UID_SZ);
+    if (outUid != NULL) {
+        memcpy(outUid, store->uid, WH_SHE_UID_SZ);
+    }
     return WH_ERROR_OK;
 }
 
-static int _TestSetUid(struct whServerContext_t* server, void* ctx,
-                       const uint8_t* uid)
+static int _TestSetUid(void* ctx, const uint8_t* uid)
 {
     TestUidStore* store = (TestUidStore*)ctx;
-    (void)server;
 
     store->setCount++;
 
@@ -224,6 +226,7 @@ static int _TestReadOnlyUid(TestCtx* t, uint8_t* req_packet,
     whServerContext* server = t->server;
     int32_t          rc;
     int              getCount;
+    int              probeCount;
 
     /* The UID is already provisioned, so SET_UID hits the one-shot rule. */
     {
@@ -245,12 +248,16 @@ static int _TestReadOnlyUid(TestCtx* t, uint8_t* req_packet,
     WH_TEST_ASSERT_RETURN(rc == WH_SHE_ERC_NO_ERROR);
     WH_TEST_ASSERT_RETURN(_uidStore.getCount == getCount);
 
-    /* GET_ID reports the store's UID and reads it back from the store. */
+    /* GET_ID reports the store's UID and reads it back from the store. The
+     * state gate probes with a NULL out buffer before the handler reads. */
     server->she->sbState = TEST_SHE_SB_STATE_SUCCESS;
     getCount             = _uidStore.getCount;
+    probeCount           = _uidStore.probeCount;
     WH_TEST_RETURN_ON_FAIL(
         _CheckGetIdUid(server, s_fusedUid, req_packet, resp_packet));
-    WH_TEST_ASSERT_RETURN(_uidStore.getCount > getCount);
+    WH_TEST_ASSERT_RETURN(_uidStore.probeCount > probeCount);
+    WH_TEST_ASSERT_RETURN(_uidStore.getCount - getCount >
+                          _uidStore.probeCount - probeCount);
 
     /* Nothing was cached in the SHE context. */
     WH_TEST_ASSERT_RETURN(server->she->uidSet == 0);

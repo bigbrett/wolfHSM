@@ -89,6 +89,7 @@ WH_TEST_DECL(whTest_SheMasterEcuKeyFallback);
 WH_TEST_DECL(whTest_SheNoNvm);
 WH_TEST_DECL(whTest_SheReqSizeChecking);
 WH_TEST_DECL(whTest_SheStateGate);
+WH_TEST_DECL(whTest_SheUidClient);
 WH_TEST_DECL(whTest_SheUidCb);
 WH_TEST_DECL(whTest_Echo);
 WH_TEST_DECL(whTest_NvmDma);
@@ -164,6 +165,7 @@ const whTestCase whTestsClient[] = {
     {"whTest_CryptoSha256", whTest_CryptoSha256},
     {"whTest_KeyWrap", whTest_KeyWrap},
     {"whTest_She", whTest_She},
+    {"whTest_SheUidClient", whTest_SheUidClient},
     {"whTest_Echo", whTest_Echo},
     {"whTest_NvmDma", whTest_NvmDma},
     {"whTest_NvmOps", whTest_NvmOps},
