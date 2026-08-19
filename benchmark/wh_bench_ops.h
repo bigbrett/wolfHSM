@@ -25,9 +25,6 @@
 
 #include <stdint.h>
 
-/* Maximum length of operation name */
-#define MAX_OP_NAME 64
-
 /* Throughput metric types */
 typedef enum {
     BENCH_THROUGHPUT_NONE, /* No throughput calculation */
@@ -47,8 +44,9 @@ typedef enum {
 } whBenchTransportType;
 
 typedef struct whBenchOp {
-    /* Name of the operation being timed */
-    char name[MAX_OP_NAME];
+    /* Name of the operation being timed. Stored by reference: the string
+     * must stay valid until wh_Bench_Cleanup */
+    const char* name;
     /* Is this a valid benchmark entry */
     int valid;
     /* Is this operation currently in progress? */
@@ -86,7 +84,9 @@ typedef struct whBenchOpContext {
  * registered operations, which must stay valid until wh_Bench_Cleanup. */
 int wh_Bench_Init(whBenchOpContext* ctx, whBenchOp* ops, int maxOps);
 
-/* Register a new benchmark operation with a name, returns ID via pointer */
+/* Register a new benchmark operation with a name, returns ID via pointer.
+ * The name is stored by reference and must stay valid until
+ * wh_Bench_Cleanup */
 int wh_Bench_RegisterOp(whBenchOpContext* ctx, const char* name,
                         whBenchOpThroughputType tpType, int* id);
 
