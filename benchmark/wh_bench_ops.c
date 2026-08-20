@@ -413,6 +413,11 @@ int wh_Bench_Cleanup(whBenchOpContext* ctx)
         return WH_ERROR_BADARGS;
     }
 
+    /* Clear the caller's ops array so no name pointers outlive cleanup */
+    if ((ctx->ops != NULL) && (ctx->maxOps > 0)) {
+        memset(ctx->ops, 0, (size_t)ctx->maxOps * sizeof(*ctx->ops));
+    }
+
     /* Clear benchmark context */
     memset(ctx, 0, sizeof(whBenchOpContext));
 
