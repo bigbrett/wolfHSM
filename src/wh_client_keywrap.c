@@ -253,7 +253,8 @@ int wh_Client_KeyUnwrapAndExportRequest(whClientContext*   ctx,
     }
 
     /* Bound the whole wire length before copying into the comm data buffer */
-    if (wrappedKeySz == 0 || wrappedKeySz > WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE ||
+    if (wrappedKeySz == 0 ||
+        wrappedKeySz > WH_KEYWRAP_AES_GCM_MAX_WRAPPED_KEY_SIZE ||
         (size_t)sizeof(*req) + wrappedKeySz > WOLFHSM_CFG_COMM_DATA_LEN) {
         return WH_ERROR_BADARGS;
     }
@@ -377,7 +378,8 @@ int wh_Client_KeyUnwrapAndCacheRequest(whClientContext*   ctx,
         return WH_ERROR_BADARGS;
 
     /* Bound the whole wire length before copying into the comm data buffer */
-    if (wrappedKeySz == 0 || wrappedKeySz > WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE ||
+    if (wrappedKeySz == 0 ||
+        wrappedKeySz > WH_KEYWRAP_AES_GCM_MAX_WRAPPED_KEY_SIZE ||
         (size_t)sizeof(*req) + wrappedKeySz > WOLFHSM_CFG_COMM_DATA_LEN) {
         return WH_ERROR_BADARGS;
     }
@@ -599,9 +601,10 @@ int wh_Client_DataUnwrapRequest(whClientContext*   ctx,
         return WH_ERROR_BADARGS;
     }
 
-    /* Bound the whole wire length before copying into the comm data buffer */
+    /* Bound the wire length; the blob adds the wrap header to the plaintext */
     if (wrappedDataInSz == 0 ||
-        wrappedDataInSz > WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE ||
+        wrappedDataInSz > (uint32_t)WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE +
+                              WH_KEYWRAP_AES_GCM_HEADER_SIZE ||
         (size_t)sizeof(*req) + wrappedDataInSz > WOLFHSM_CFG_COMM_DATA_LEN) {
         return WH_ERROR_BADARGS;
     }

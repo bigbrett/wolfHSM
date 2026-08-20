@@ -541,8 +541,10 @@ WH_UTILS_STATIC_ASSERT((uint32_t)sizeof(whMessageKeystore_DataWrapRequest) +
                        "WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE too large for "
                        "WOLFHSM_CFG_COMM_DATA_LEN");
 
+/* The unwrap request carries the wrap header on top of the maximum plaintext */
 WH_UTILS_STATIC_ASSERT((uint32_t)sizeof(whMessageKeystore_DataUnwrapRequest) +
-                               (uint32_t)WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE <=
+                               (uint32_t)WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE +
+                               (uint32_t)WH_KEYWRAP_AES_GCM_HEADER_SIZE <=
                            (uint32_t)WOLFHSM_CFG_COMM_DATA_LEN,
                        "WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE too large for "
                        "WOLFHSM_CFG_COMM_DATA_LEN");

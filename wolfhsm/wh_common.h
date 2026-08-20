@@ -147,6 +147,13 @@ typedef uint16_t whCertFlags;
 #define WH_KEYWRAP_AES_GCM_HEADER_SIZE \
     (WH_KEYWRAP_AES_GCM_IV_SIZE + WH_KEYWRAP_AES_GCM_TAG_SIZE)
 
+#define WH_KEYWRAP_AES_GCM_MAX_WRAPPED_KEY_SIZE \
+    (WH_KEYWRAP_AES_GCM_HEADER_SIZE +           \
+     sizeof(whNvmMetadata) + WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE)
+
+#define WH_KEYWRAP_AES_GCM_MAX_WRAPPED_DATA_SIZE \
+    (WH_KEYWRAP_AES_GCM_HEADER_SIZE + WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE)
+
 /* AES-GCM AAD domain separation for wrapped blobs.
  *
  * WARNING: Changing these strings will invalidate actively stored wrapped
