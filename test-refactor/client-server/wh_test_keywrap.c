@@ -74,6 +74,8 @@
 #define WH_TEST_KW_OVER_KEY (WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE + 1)
 #define WH_TEST_KW_OVER_DATA (WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE + 1)
 /* Unwrap takes a blob, so its limit adds the wrap header */
+#define WH_TEST_KW_OVER_WRAPPED_KEY \
+    (WH_KEYWRAP_AES_GCM_MAX_WRAPPED_KEY_SIZE + 1)
 #define WH_TEST_KW_OVER_WRAPPED_DATA \
     (WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE + WH_KEYWRAP_AES_GCM_HEADER_SIZE + 1)
 
@@ -541,15 +543,16 @@ static int _whTest_KeywrapOversizeRequest(whClientContext* client)
         ret = _CheckOversizeRejected(
             "KeyUnwrapAndExport",
             wh_Client_KeyUnwrapAndExport(client, WC_CIPHER_AES_GCM, kekId, in,
-                                         (uint16_t)WH_TEST_KW_OVER_KEY, &meta,
-                                         out, &keyOutSz));
+                                         (uint16_t)WH_TEST_KW_OVER_WRAPPED_KEY,
+                                         &meta, out, &keyOutSz));
     }
 
     if (ret == WH_ERROR_OK) {
         ret = _CheckOversizeRejected(
-            "KeyUnwrapAndCache", wh_Client_KeyUnwrapAndCache(
-                                     client, WC_CIPHER_AES_GCM, kekId, in,
-                                     (uint16_t)WH_TEST_KW_OVER_KEY, &cachedId));
+            "KeyUnwrapAndCache",
+            wh_Client_KeyUnwrapAndCache(client, WC_CIPHER_AES_GCM, kekId, in,
+                                        (uint16_t)WH_TEST_KW_OVER_WRAPPED_KEY,
+                                        &cachedId));
     }
 
     if (ret == WH_ERROR_OK) {
@@ -571,6 +574,62 @@ static int _whTest_KeywrapOversizeRequest(whClientContext* client)
     return ret;
 }
 
+/* A blob is the key plus the wrap header and metadata, so a maximum-size key
+ * wraps to more than WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE bytes. Round trip the
+ * largest permitted key: bounding the blob by the key limit left every key
+ * over MAX_KEY_SIZE minus the blob overhead wrappable but never unwrappable */
+static int _whTest_KeywrapMaxKeyRoundTrip(whClientContext* client)
+{
+    int           ret;
+    whKeyId       kekId = WH_KEYID_ERASED;
+    uint8_t       srcKey[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+    uint8_t       outKey[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+    uint8_t       wrappedKey[WH_KEYWRAP_AES_GCM_MAX_WRAPPED_KEY_SIZE];
+    uint16_t      wrappedKeySz = (uint16_t)sizeof(wrappedKey);
+    uint16_t      outKeySz     = (uint16_t)sizeof(outKey);
+    whNvmMetadata wrapMeta     = {0};
+    whNvmMetadata outMeta      = {0};
+    size_t        i;
+
+    wrapMeta.id    = WH_CLIENT_KEYID_MAKE_WRAPPED_META(client->comm->client_id,
+                                                       WH_TEST_KW_META_ID);
+    wrapMeta.len   = (whNvmSize)sizeof(srcKey);
+    wrapMeta.flags = WH_NVM_FLAGS_USAGE_ANY;
+    memcpy(wrapMeta.label, "KW max key", sizeof("KW max key"));
+
+    for (i = 0; i < sizeof(srcKey); i++) {
+        srcKey[i] = (uint8_t)(0x5A ^ i);
+    }
+
+    WH_TEST_RETURN_ON_FAIL(_CacheSwKek(client, &kekId));
+
+    ret = wh_Client_KeyWrap(client, WC_CIPHER_AES_GCM, kekId, srcKey,
+                            (uint16_t)sizeof(srcKey), &wrapMeta, wrappedKey,
+                            &wrappedKeySz);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("max-key: KeyWrap failed %d\n", ret);
+        goto cleanup;
+    }
+
+    ret = wh_Client_KeyUnwrapAndExport(client, WC_CIPHER_AES_GCM, kekId,
+                                       wrappedKey, wrappedKeySz, &outMeta,
+                                       outKey, &outKeySz);
+    if (ret != WH_ERROR_OK) {
+        WH_ERROR_PRINT("max-key: KeyUnwrapAndExport failed %d\n", ret);
+        goto cleanup;
+    }
+
+    if (outKeySz != (uint16_t)sizeof(srcKey) ||
+        memcmp(srcKey, outKey, sizeof(srcKey)) != 0) {
+        WH_ERROR_PRINT("max-key: round trip mismatch\n");
+        ret = WH_ERROR_ABORTED;
+    }
+
+cleanup:
+    (void)wh_Client_KeyEvict(client, kekId);
+    return ret;
+}
+
 int whTest_KeyWrap(whClientContext* ctx)
 {
     WH_TEST_RETURN_ON_FAIL(_whTest_KeywrapTrustedKekPolicy(ctx));
@@ -578,6 +637,7 @@ int whTest_KeyWrap(whClientContext* ctx)
     WH_TEST_RETURN_ON_FAIL(_whTest_KeywrapKeyUnwrapUnderflow(ctx));
     WH_TEST_RETURN_ON_FAIL(_whTest_KeywrapDataUnwrapUnderflow(ctx));
     WH_TEST_RETURN_ON_FAIL(_whTest_KeywrapOversizeRequest(ctx));
+    WH_TEST_RETURN_ON_FAIL(_whTest_KeywrapMaxKeyRoundTrip(ctx));
 
     WH_TEST_PRINT("KEYWRAP POLICY SUCCESS\n");
     return 0;

@@ -253,7 +253,8 @@ int wh_Client_KeyUnwrapAndExportRequest(whClientContext*   ctx,
     }
 
     /* Bound the whole wire length before copying into the comm data buffer */
-    if (wrappedKeySz == 0 || wrappedKeySz > WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE ||
+    if (wrappedKeySz == 0 ||
+        wrappedKeySz > WH_KEYWRAP_AES_GCM_MAX_WRAPPED_KEY_SIZE ||
         (size_t)sizeof(*req) + wrappedKeySz > WOLFHSM_CFG_COMM_DATA_LEN) {
         return WH_ERROR_BADARGS;
     }
@@ -377,7 +378,8 @@ int wh_Client_KeyUnwrapAndCacheRequest(whClientContext*   ctx,
         return WH_ERROR_BADARGS;
 
     /* Bound the whole wire length before copying into the comm data buffer */
-    if (wrappedKeySz == 0 || wrappedKeySz > WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE ||
+    if (wrappedKeySz == 0 ||
+        wrappedKeySz > WH_KEYWRAP_AES_GCM_MAX_WRAPPED_KEY_SIZE ||
         (size_t)sizeof(*req) + wrappedKeySz > WOLFHSM_CFG_COMM_DATA_LEN) {
         return WH_ERROR_BADARGS;
     }
