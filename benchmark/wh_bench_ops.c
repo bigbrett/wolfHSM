@@ -94,8 +94,7 @@ int wh_Bench_RegisterOp(whBenchOpContext* ctx, const char* name,
 
     /* Check if operation with this name already exists */
     for (i = 0; i < ctx->opCount; i++) {
-        if (ctx->ops[i].valid &&
-            strncmp(ctx->ops[i].name, name, sizeof((ctx->ops[i].name))) == 0) {
+        if (ctx->ops[i].valid && strcmp(ctx->ops[i].name, name) == 0) {
             *id = i;
             return WH_ERROR_OK; /* Operation already registered */
         }
@@ -108,8 +107,7 @@ int wh_Bench_RegisterOp(whBenchOpContext* ctx, const char* name,
 
     /* Register the new operation */
     *id = ctx->opCount;
-    strncpy(ctx->ops[*id].name, name, MAX_OP_NAME - 1);
-    ctx->ops[*id].name[MAX_OP_NAME - 1] = '\0'; /* Ensure null termination */
+    ctx->ops[*id].name                  = name;
     ctx->ops[*id].valid                 = 1;
     ctx->ops[*id].inProgress            = 0;
     ctx->ops[*id].totalTimeUs           = 0;
@@ -413,6 +411,11 @@ int wh_Bench_Cleanup(whBenchOpContext* ctx)
 {
     if (ctx == NULL) {
         return WH_ERROR_BADARGS;
+    }
+
+    /* Clear the caller's ops array so no name pointers outlive cleanup */
+    if ((ctx->ops != NULL) && (ctx->maxOps > 0)) {
+        memset(ctx->ops, 0, (size_t)ctx->maxOps * sizeof(*ctx->ops));
     }
 
     /* Clear benchmark context */
