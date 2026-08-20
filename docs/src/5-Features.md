@@ -848,10 +848,10 @@ Images are registered at server initialization through a `whServerImgMgrConfig` 
 - `keyId`: the [keyId](#key-cache-key-ids-and-nvm-backing-store) of the verification key
 - `sigNvmId`: for image types whose signature lives in NVM, the `whNvmId` of the signature object; for cert-chain image types, the `whNvmId` of the trusted root certificate
 - `imgType`: one of `WH_IMG_MGR_IMG_TYPE_RAW`, `WH_IMG_MGR_IMG_TYPE_WOLFBOOT`, or `WH_IMG_MGR_IMG_TYPE_WOLFBOOT_CERT`, which tells the framework how to load the key and signature
-- `verifyMethod`: the verify callback that runs the actual cryptographic check
-- `verifyAction`: the post-verification callback invoked with the verify result
+- `verifyMethod`: the verify callback that runs the actual cryptographic check (required)
+- `verifyAction`: the post-verification callback invoked with the verify result (required; use `wh_Server_ImgMgrVerifyActionDefault` for a no-op)
 
-Once registered, an image can be verified individually by reference (`wh_Server_ImgMgrVerifyImg`), by index into the registered array (`wh_Server_ImgMgrVerifyImgIdx`), or in bulk against every registered image (`wh_Server_ImgMgrVerifyAll`). All three calls return both the cryptographic outcome and the action callback's return value through a `whServerImgMgrVerifyResult` so the caller can distinguish a verification failure from an action failure.
+Once registered, an image can be verified individually by reference (`wh_Server_ImgMgrVerifyImg`), by index into the registered array (`wh_Server_ImgMgrVerifyImgIdx`), or in bulk against every registered image (`wh_Server_ImgMgrVerifyAll`). All three calls return `WH_ERROR_OK` only when verification and the action callback both succeed, so a caller can gate on the return value alone. A failed signature check surfaces as the verify method's error (typically `WH_ERROR_NOTVERIFIED`), and a failed verification cannot be masked by the action callback's return value. The per-callback breakdown is also reported through a `whServerImgMgrVerifyResult` so the caller can distinguish a verification failure from an action failure. `wh_Server_ImgMgrVerifyAll` stops at the first image that fails and reports its index. The result entries of images it did not reach are marked `WH_ERROR_ABORTED`.
 
 ### Verify Methods
 

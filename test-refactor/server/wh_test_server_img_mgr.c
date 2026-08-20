@@ -208,6 +208,7 @@ static int _imgMgrRunSigVerify(whServerContext* server,
                                const uint8_t* sig, word32 sigLen,
                                const char* sigLabel)
 {
+    int                        rc;
     whServerImgMgrConfig       imgMgrConfig = {0};
     whServerImgMgrContext      imgMgr       = {0};
     whServerImgMgrVerifyResult result;
@@ -268,10 +269,11 @@ static int _imgMgrRunSigVerify(whServerContext* server,
     WH_TEST_RETURN_ON_FAIL(
         wh_Nvm_AddObject(server->nvm, &sigMeta, sigLen, corrupt));
 
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Server_ImgMgrVerifyImg(&imgMgr, testImage, &result));
-    /* Method must reject; the default action just relays that result */
-    WH_TEST_ASSERT_RETURN(result.verifyMethodResult != WH_ERROR_OK);
+    rc = wh_Server_ImgMgrVerifyImg(&imgMgr, testImage, &result);
+    /* Method must reject and its error must be the return value; the
+     * default action just relays that result */
+    WH_TEST_ASSERT_RETURN(rc != WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(rc == result.verifyMethodResult);
     WH_TEST_ASSERT_RETURN(
         result.verifyActionResult == result.verifyMethodResult);
 
@@ -512,6 +514,7 @@ static int _whTest_ServerImgMgrWolfBootRsa4096(whServerContext* server)
     whServerImgMgrContext      imgMgr       = {0};
     whServerImgMgrImg          testImage    = {0};
     const whNvmId              keyId        = 1;
+    int                        rc;
     whServerImgMgrVerifyResult result;
     whNvmMetadata              keyMeta = {0};
     uint8_t                    corrupt_fw[sizeof(wolfboot_test_firmware)];
@@ -553,9 +556,9 @@ static int _whTest_ServerImgMgrWolfBootRsa4096(whServerContext* server)
     memcpy(corrupt_fw, wolfboot_test_firmware, sizeof(corrupt_fw));
     corrupt_fw[0] ^= 0x01;
     corruptImage.addr = (uintptr_t)corrupt_fw;
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Server_ImgMgrVerifyImg(&imgMgr, &corruptImage, &result));
-    WH_TEST_ASSERT_RETURN(result.verifyMethodResult != WH_ERROR_OK);
+    rc = wh_Server_ImgMgrVerifyImg(&imgMgr, &corruptImage, &result);
+    WH_TEST_ASSERT_RETURN(rc != WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(rc == result.verifyMethodResult);
 
     /* Leave the key cache clean for the next suite */
     WH_TEST_RETURN_ON_FAIL(wh_Server_KeystoreEraseKey(server, keyId));
@@ -571,6 +574,7 @@ static int _whTest_ServerImgMgrWolfBootCertChainRsa4096(whServerContext* server)
     whServerImgMgrContext      imgMgr       = {0};
     whServerImgMgrImg          testImage    = {0};
     const whNvmId              rootCaNvmId  = 10;
+    int                        rc;
     whServerImgMgrVerifyResult result;
     whNvmMetadata              rootCaMeta = {0};
     uint8_t                    corrupt_fw[sizeof(wolfboot_test_firmware)];
@@ -613,9 +617,9 @@ static int _whTest_ServerImgMgrWolfBootCertChainRsa4096(whServerContext* server)
     memcpy(corrupt_fw, wolfboot_test_firmware, sizeof(corrupt_fw));
     corrupt_fw[0] ^= 0x01;
     corruptImage.addr = (uintptr_t)corrupt_fw;
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Server_ImgMgrVerifyImg(&imgMgr, &corruptImage, &result));
-    WH_TEST_ASSERT_RETURN(result.verifyMethodResult != WH_ERROR_OK);
+    rc = wh_Server_ImgMgrVerifyImg(&imgMgr, &corruptImage, &result);
+    WH_TEST_ASSERT_RETURN(rc != WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(rc == result.verifyMethodResult);
 
     /* Leave NVM clean for the next suite */
     WH_TEST_RETURN_ON_FAIL(
@@ -627,6 +631,123 @@ static int _whTest_ServerImgMgrWolfBootCertChainRsa4096(whServerContext* server)
 }
 #endif /* WOLFHSM_CFG_CERTIFICATE_MANAGER */
 #endif /* !NO_RSA */
+
+/* Stub verify callbacks for the return-semantics and bad-args tests.
+ * WOLFBOOT_CERT images skip key/sig loading, so these run without any
+ * keystore or NVM setup. */
+static int _testVerifyMethodOk(whServerImgMgrContext*   context,
+                               const whServerImgMgrImg* img, const uint8_t* key,
+                               size_t keySz, const uint8_t* sig, size_t sigSz)
+{
+    (void)context;
+    (void)img;
+    (void)key;
+    (void)keySz;
+    (void)sig;
+    (void)sigSz;
+    return WH_ERROR_OK;
+}
+
+static int _testVerifyMethodNotVerified(whServerImgMgrContext*   context,
+                                        const whServerImgMgrImg* img,
+                                        const uint8_t* key, size_t keySz,
+                                        const uint8_t* sig, size_t sigSz)
+{
+    (void)context;
+    (void)img;
+    (void)key;
+    (void)keySz;
+    (void)sig;
+    (void)sigSz;
+    return WH_ERROR_NOTVERIFIED;
+}
+
+static int _testVerifyActionFail(whServerImgMgrContext*   context,
+                                 const whServerImgMgrImg* img, int verifyResult)
+{
+    (void)context;
+    (void)img;
+    (void)verifyResult;
+    return WH_ERROR_ABORTED;
+}
+
+/*
+ * Return-value semantics: a verify call must not return WH_ERROR_OK when
+ * the verify method fails, the action fails, or a callback is missing, and
+ * Init must reject images registered without callbacks.
+ */
+static int _whTest_ServerImgMgrReturnSemantics(whServerContext* server)
+{
+    int                        rc;
+    whServerImgMgrConfig       imgMgrConfig = {0};
+    whServerImgMgrContext      imgMgr       = {0};
+    whServerImgMgrImg          images[2];
+    whServerImgMgrImg          tmpImg;
+    whServerImgMgrVerifyResult result;
+    whServerImgMgrVerifyResult results[2];
+    size_t                     errIdx = 99;
+
+    memset(images, 0, sizeof(images));
+    images[0].imgType      = WH_IMG_MGR_IMG_TYPE_WOLFBOOT_CERT;
+    images[0].verifyMethod = _testVerifyMethodOk;
+    images[0].verifyAction = wh_Server_ImgMgrVerifyActionDefault;
+    images[1]              = images[0];
+    images[1].verifyMethod = _testVerifyMethodNotVerified;
+
+    imgMgrConfig.server     = server;
+    imgMgrConfig.images     = images;
+    imgMgrConfig.imageCount = 2;
+    WH_TEST_RETURN_ON_FAIL(wh_Server_ImgMgrInit(&imgMgr, &imgMgrConfig));
+
+    /* Verified image with successful action returns OK */
+    rc = wh_Server_ImgMgrVerifyImgIdx(&imgMgr, 0, &result);
+    WH_TEST_ASSERT_RETURN(rc == WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(result.verifyMethodResult == WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(result.verifyActionResult == WH_ERROR_OK);
+
+    /* Failed verification surfaces in the return value */
+    rc = wh_Server_ImgMgrVerifyImgIdx(&imgMgr, 1, &result);
+    WH_TEST_ASSERT_RETURN(rc == WH_ERROR_NOTVERIFIED);
+    WH_TEST_ASSERT_RETURN(result.verifyMethodResult == WH_ERROR_NOTVERIFIED);
+    WH_TEST_ASSERT_RETURN(result.verifyActionResult == WH_ERROR_NOTVERIFIED);
+
+    /* A failing action surfaces even when verification passed */
+    tmpImg              = images[0];
+    tmpImg.verifyAction = _testVerifyActionFail;
+    rc                  = wh_Server_ImgMgrVerifyImg(&imgMgr, &tmpImg, &result);
+    WH_TEST_ASSERT_RETURN(rc == WH_ERROR_ABORTED);
+    WH_TEST_ASSERT_RETURN(result.verifyMethodResult == WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(result.verifyActionResult == WH_ERROR_ABORTED);
+
+    /* VerifyAll returns the failing image's error and index. Poison the
+     * results with WH_ERROR_OK (0) to prove they are overwritten. */
+    memset(results, 0, sizeof(results));
+    rc = wh_Server_ImgMgrVerifyAll(&imgMgr, results, 2, &errIdx);
+    WH_TEST_ASSERT_RETURN(rc == WH_ERROR_NOTVERIFIED);
+    WH_TEST_ASSERT_RETURN(errIdx == 1);
+    WH_TEST_ASSERT_RETURN(results[0].verifyMethodResult == WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(results[1].verifyMethodResult ==
+                          WH_ERROR_NOTVERIFIED);
+
+    /* Re-register with the failing image first: VerifyAll must stop there
+     * and the unvisited image's result must read as failed, not verified */
+    tmpImg    = images[0];
+    images[0] = images[1];
+    images[1] = tmpImg;
+    WH_TEST_RETURN_ON_FAIL(wh_Server_ImgMgrInit(&imgMgr, &imgMgrConfig));
+    memset(results, 0, sizeof(results));
+    errIdx = 99;
+    rc     = wh_Server_ImgMgrVerifyAll(&imgMgr, results, 2, &errIdx);
+    WH_TEST_ASSERT_RETURN(rc == WH_ERROR_NOTVERIFIED);
+    WH_TEST_ASSERT_RETURN(errIdx == 0);
+    WH_TEST_ASSERT_RETURN(results[0].verifyMethodResult ==
+                          WH_ERROR_NOTVERIFIED);
+    WH_TEST_ASSERT_RETURN(results[1].verifyMethodResult == WH_ERROR_ABORTED);
+    WH_TEST_ASSERT_RETURN(results[1].verifyActionResult == WH_ERROR_ABORTED);
+
+    WH_TEST_PRINT("IMG_MGR Return Semantics Test completed successfully!\n");
+    return WH_TEST_SUCCESS;
+}
 
 /*
  * Argument-validation and dispatch guards. No signing needed, so this is
@@ -664,10 +785,23 @@ static int _whTest_ServerImgMgrBadArgs(whServerContext* server)
     WH_TEST_ASSERT_RETURN(WH_ERROR_BADARGS ==
                           wh_Server_ImgMgrInit(&imgMgr, &cfg));
 
-    /* A valid single-image context to drive the Verify* guards */
-    memset(images, 0, sizeof(images));
-    cfg.images     = images;
+    /* Init: NULL image list with a nonzero count, then missing callbacks */
+    cfg.images     = NULL;
     cfg.imageCount = 1;
+    WH_TEST_ASSERT_RETURN(WH_ERROR_BADARGS ==
+                          wh_Server_ImgMgrInit(&imgMgr, &cfg));
+    memset(images, 0, sizeof(images));
+    images[0].verifyAction = wh_Server_ImgMgrVerifyActionDefault;
+    cfg.images             = images;
+    WH_TEST_ASSERT_RETURN(WH_ERROR_BADARGS ==
+                          wh_Server_ImgMgrInit(&imgMgr, &cfg));
+    images[0].verifyMethod = _testVerifyMethodOk;
+    images[0].verifyAction = NULL;
+    WH_TEST_ASSERT_RETURN(WH_ERROR_BADARGS ==
+                          wh_Server_ImgMgrInit(&imgMgr, &cfg));
+
+    /* A valid single-image context to drive the Verify* guards */
+    images[0].verifyAction = wh_Server_ImgMgrVerifyActionDefault;
     WH_TEST_RETURN_ON_FAIL(wh_Server_ImgMgrInit(&imgMgr, &cfg));
 
     /* VerifyImg: NULL args */
@@ -691,8 +825,8 @@ static int _whTest_ServerImgMgrBadArgs(whServerContext* server)
      * action surface as NOHANDLER without any NVM setup */
     memset(&img, 0, sizeof(img));
     img.imgType = WH_IMG_MGR_IMG_TYPE_WOLFBOOT_CERT;
-    WH_TEST_RETURN_ON_FAIL(
-        wh_Server_ImgMgrVerifyImg(&imgMgr, &img, &result));
+    WH_TEST_ASSERT_RETURN(WH_ERROR_NOHANDLER ==
+                          wh_Server_ImgMgrVerifyImg(&imgMgr, &img, &result));
     WH_TEST_ASSERT_RETURN(result.verifyMethodResult == WH_ERROR_NOHANDLER);
     WH_TEST_ASSERT_RETURN(result.verifyActionResult == WH_ERROR_NOHANDLER);
 
@@ -712,10 +846,12 @@ static int _whTest_ServerImgMgrBadArgs(whServerContext* server)
     /* VerifyAll: an image whose key is missing makes the sub-verify return
      * non-OK, exercising the error-index reporting path */
     memset(images, 0, sizeof(images));
-    images[0].imgType = WH_IMG_MGR_IMG_TYPE_RAW;
-    images[0].keyId   = 0xBEEF; /* not in keystore */
-    cfg.images        = images;
-    cfg.imageCount    = 1;
+    images[0].imgType      = WH_IMG_MGR_IMG_TYPE_RAW;
+    images[0].keyId        = 0xBEEF; /* not in keystore */
+    images[0].verifyMethod = _testVerifyMethodOk;
+    images[0].verifyAction = wh_Server_ImgMgrVerifyActionDefault;
+    cfg.images             = images;
+    cfg.imageCount         = 1;
     WH_TEST_RETURN_ON_FAIL(wh_Server_ImgMgrInit(&imgMgr, &cfg));
     WH_TEST_ASSERT_RETURN(
         WH_ERROR_OK !=
@@ -787,6 +923,7 @@ static int _whTest_ServerImgMgrBadArgs(whServerContext* server)
 int whTest_ServerImgMgr(whServerContext* server)
 {
     WH_TEST_RETURN_ON_FAIL(_whTest_ServerImgMgrBadArgs(server));
+    WH_TEST_RETURN_ON_FAIL(_whTest_ServerImgMgrReturnSemantics(server));
 #ifdef HAVE_ECC
     WH_TEST_RETURN_ON_FAIL(_whTest_ServerImgMgrEcc256(server));
 #endif
