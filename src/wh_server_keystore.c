@@ -1701,7 +1701,6 @@ static int _AesGcmDataWrapWithKek(whServerContext* server,
     uint8_t  authTag[WH_KEYWRAP_AES_GCM_TAG_SIZE];
     uint8_t  iv[WH_KEYWRAP_AES_GCM_IV_SIZE];
     uint8_t* encBlob;
-    uint8_t  plainData[WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE];
 
     if (server == NULL || dataIn == NULL || wrappedDataOut == NULL ||
         dataSz > WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE) {
@@ -1735,10 +1734,8 @@ static int _AesGcmDataWrapWithKek(whServerContext* server,
     /* Place the encrypted blob after the IV and Auth Tag */
     encBlob = (uint8_t*)wrappedDataOut + sizeof(iv) + sizeof(authTag);
 
-    memcpy(plainData, dataIn, dataSz);
-
     /* Encrypt the blob under the data-wrap domain */
-    ret = wc_AesGcmEncrypt(aes, encBlob, plainData, dataSz, iv, sizeof(iv),
+    ret = wc_AesGcmEncrypt(aes, encBlob, dataIn, dataSz, iv, sizeof(iv),
                            authTag, sizeof(authTag), WH_KEYWRAP_AAD_DATA,
                            WH_KEYWRAP_AAD_DATA_LEN);
     if (ret == 0) {
@@ -1748,8 +1745,6 @@ static int _AesGcmDataWrapWithKek(whServerContext* server,
     }
 
     wc_AesFree(aes);
-
-    wh_Utils_ForceZero(plainData, dataSz);
 
     return (ret == 0) ? WH_ERROR_OK : ret;
 }
@@ -1795,7 +1790,6 @@ static int _AesGcmDataUnwrapWithKek(whServerContext* server,
     uint8_t  iv[WH_KEYWRAP_AES_GCM_IV_SIZE];
     uint8_t* encBlob;
     uint16_t encBlobSz;
-    uint8_t  plainData[WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE];
 
     if (server == NULL || wrappedDataIn == NULL || dataOut == NULL ||
         dataSz > WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE) {
@@ -1830,16 +1824,10 @@ static int _AesGcmDataUnwrapWithKek(whServerContext* server,
     memcpy(authTag, (const uint8_t*)wrappedDataIn + sizeof(iv), sizeof(authTag));
 
     /* Decrypt under the data-wrap domain; a key blob won't authenticate here */
-    ret = wc_AesGcmDecrypt(aes, plainData, encBlob, encBlobSz, iv, sizeof(iv),
+    ret = wc_AesGcmDecrypt(aes, dataOut, encBlob, encBlobSz, iv, sizeof(iv),
                            authTag, sizeof(authTag), WH_KEYWRAP_AAD_DATA,
                            WH_KEYWRAP_AAD_DATA_LEN);
-    if (ret == 0) {
-        memcpy(dataOut, plainData, encBlobSz);
-    }
-
     wc_AesFree(aes);
-
-    wh_Utils_ForceZero(plainData, encBlobSz);
 
     return (ret == 0) ? WH_ERROR_OK : ret;
 }
@@ -1886,7 +1874,6 @@ static int _HandleKeyWrapRequest(whServerContext*                  server,
 {
 
     int           ret;
-    uint8_t*      wrappedKey;
     whNvmMetadata metadata;
     uint8_t*      key;
     whKeyId       serverKeyId;
@@ -1928,14 +1915,12 @@ static int _HandleKeyWrapRequest(whServerContext*                  server,
                                                server->comm->client_id,
                                                req->serverKeyId);
 
-    /* Store the wrapped key in the response data */
-    wrappedKey = respData;
-
     switch (req->cipherType) {
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
         case WC_CIPHER_AES_GCM: {
+            uint8_t  wrappedKeyStage[WH_KEYWRAP_AES_GCM_MAX_WRAPPED_KEY_SIZE];
             uint16_t wrappedKeySz =
                 WH_KEYWRAP_AES_GCM_HEADER_SIZE + sizeof(metadata) + req->keySz;
 
@@ -1947,11 +1932,16 @@ static int _HandleKeyWrapRequest(whServerContext*                  server,
             /* Wrap the key. The client supplies the plaintext, so no server
              * secret crosses the boundary; the KEK may be any client key. */
             ret = _AesGcmKeyWrap(server, serverKeyId, /*requireTrustedKek=*/0,
-                                 key, req->keySz, &metadata, wrappedKey,
+                                 key, req->keySz, &metadata, wrappedKeyStage,
                                  wrappedKeySz);
             if (ret != WH_ERROR_OK) {
+                wh_Utils_ForceZero(wrappedKeyStage, sizeof(wrappedKeyStage));
                 return ret;
             }
+
+            /* Copy the wrapped key on to the response data buffer */
+            memcpy(respData, wrappedKeyStage, wrappedKeySz);
+            wh_Utils_ForceZero(wrappedKeyStage, sizeof(wrappedKeyStage));
 
             /* Tell the client how big the wrapped key is */
             resp->wrappedKeySz = wrappedKeySz;
@@ -1978,7 +1968,6 @@ _HandleKeyWrapExportRequest(whServerContext*                        server,
                             uint8_t* respData, uint32_t respDataSz)
 {
     int           ret;
-    uint8_t*      wrappedKey;
     whNvmMetadata metadata = {0};
     uint8_t*      key;
     uint32_t      keySz;
@@ -2056,14 +2045,12 @@ _HandleKeyWrapExportRequest(whServerContext*                        server,
                           WH_KEYID_ID(metadata.id));
     }
 
-    /* Store the wrapped key in the response data */
-    wrappedKey = respData;
-
     switch (req->cipherType) {
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
         case WC_CIPHER_AES_GCM: {
+            uint8_t  wrappedKeyStage[WH_KEYWRAP_AES_GCM_MAX_WRAPPED_KEY_SIZE];
             uint16_t wrappedKeySz = WH_KEYWRAP_AES_GCM_HEADER_SIZE +
                                     sizeof(metadata) + (uint16_t)keySz;
 
@@ -2077,11 +2064,16 @@ _HandleKeyWrapExportRequest(whServerContext*                        server,
              * secret to the client, so the KEK must be a trusted (HW or
              * WH_NVM_FLAGS_TRUSTED) key the client cannot know. */
             ret = _AesGcmKeyWrap(server, serverKeyId, /*requireTrustedKek=*/1,
-                                 key, (uint16_t)keySz, &metadata, wrappedKey,
-                                 wrappedKeySz);
+                                 key, (uint16_t)keySz, &metadata,
+                                 wrappedKeyStage, wrappedKeySz);
             if (ret != WH_ERROR_OK) {
+                wh_Utils_ForceZero(wrappedKeyStage, sizeof(wrappedKeyStage));
                 goto out;
             }
+
+            /* Copy the wrapped key on to the response data buffer */
+            memcpy(respData, wrappedKeyStage, wrappedKeySz);
+            wh_Utils_ForceZero(wrappedKeyStage, sizeof(wrappedKeyStage));
 
             /* Tell the client how big the wrapped key is */
             resp->wrappedKeySz = wrappedKeySz;
@@ -2113,12 +2105,12 @@ static int _HandleKeyUnwrapAndExportRequest(
     uint8_t* respData, uint32_t respDataSz)
 {
     /* Defensive: a case that never assigns ret cannot report success */
-    int            ret = WH_ERROR_BADARGS;
-    uint8_t*       wrappedKey;
-    whNvmMetadata* metadata;
-    uint8_t*       key;
-    whKeyId        serverKeyId;
-    uint16_t       keySz = 0;
+    int           ret = WH_ERROR_BADARGS;
+    uint8_t*      wrappedKey;
+    whNvmMetadata metadata = {0};
+    uint8_t       keyStage[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
+    whKeyId       serverKeyId;
+    uint16_t      keySz = 0;
 
     if (server == NULL || req == NULL || reqData == NULL || resp == NULL ||
         respData == NULL) {
@@ -2143,10 +2135,6 @@ static int _HandleKeyUnwrapAndExportRequest(
     /* Key size is only passed back to the client on success */
     resp->keySz = 0;
 
-    /* Store the metadata and key in the respData */
-    metadata = (whNvmMetadata*)respData;
-    key      = respData + sizeof(*metadata);
-
     switch (req->cipherType) {
 
 #ifndef NO_AES
@@ -2156,16 +2144,22 @@ static int _HandleKeyUnwrapAndExportRequest(
             uint16_t wrappedKeyType = 0;
 
             if (req->wrappedKeySz < WH_KEYWRAP_AES_GCM_HEADER_SIZE +
-                                    sizeof(*metadata)) {
+                                    sizeof(metadata)) {
                 ret = WH_ERROR_BADARGS;
                 break;
             }
 
             keySz = req->wrappedKeySz -
-                    WH_KEYWRAP_AES_GCM_HEADER_SIZE - sizeof(*metadata);
+                    WH_KEYWRAP_AES_GCM_HEADER_SIZE - sizeof(metadata);
+
+            /* Check if the staging buffer can fit the key */
+            if (keySz > sizeof(keyStage)) {
+                ret = WH_ERROR_BADARGS;
+                break;
+            }
 
             /* Check if the response data can fit the metadata + key  */
-            if (respDataSz < sizeof(*metadata) + keySz) {
+            if (respDataSz < sizeof(metadata) + keySz) {
                 ret = WH_ERROR_BUFFER_SIZE;
                 break;
             }
@@ -2174,13 +2168,14 @@ static int _HandleKeyUnwrapAndExportRequest(
              * injected into the server, so the KEK may be any client key. */
             ret = _AesGcmKeyUnwrap(server, serverKeyId,
                                    /*requireTrustedKek=*/0, wrappedKey,
-                                   req->wrappedKeySz, metadata, key, keySz);
+                                   req->wrappedKeySz, &metadata, keyStage,
+                                   keySz);
             if (ret != WH_ERROR_OK) {
                 break;
             }
 
             /* Dynamic keyId generation for wrapped keys is not allowed */
-            if (WH_KEYID_IS_UNASSIGNED(metadata->id)) {
+            if (WH_KEYID_IS_UNASSIGNED(metadata.id)) {
                 /* Wrapped keys must use explicit identifiers */
                 ret = WH_ERROR_BADARGS;
                 break;
@@ -2188,8 +2183,8 @@ static int _HandleKeyUnwrapAndExportRequest(
 
             /* Extract ownership from unwrapped metadata (preserves original
              * owner) */
-            wrappedKeyUser = WH_KEYID_USER(metadata->id);
-            wrappedKeyType = WH_KEYID_TYPE(metadata->id);
+            wrappedKeyUser = WH_KEYID_USER(metadata.id);
+            wrappedKeyType = WH_KEYID_TYPE(metadata.id);
 
             /* Require explicit wrapped-key encoding */
             if (wrappedKeyType != WH_KEYTYPE_WRAPPED) {
@@ -2198,7 +2193,7 @@ static int _HandleKeyUnwrapAndExportRequest(
             }
 
             /* Check if the key is exportable */
-            if (metadata->flags & WH_NVM_FLAGS_NONEXPORTABLE) {
+            if (metadata.flags & WH_NVM_FLAGS_NONEXPORTABLE) {
                 ret = WH_ERROR_ACCESS;
                 break;
             }
@@ -2220,8 +2215,6 @@ static int _HandleKeyUnwrapAndExportRequest(
             }
 #endif /* WOLFHSM_CFG_GLOBAL_KEYS */
 
-            /* Tell the client how big the key is on success */
-            resp->keySz = keySz;
         } break;
 #endif /* HAVE_AESGCM */
 #endif /* !NO_AES */
@@ -2234,20 +2227,20 @@ static int _HandleKeyUnwrapAndExportRequest(
     if (ret == WH_ERROR_OK) {
         /* The blob stores metadata in server order, so every check above ran
          * on native values. Convert to client order only on the way out */
-        ret = wh_MessageNvm_TranslateMetadata(magic, metadata, metadata);
+        ret = wh_MessageNvm_TranslateMetadata(magic, &metadata, &metadata);
     }
 
-    /* Keyed off the final ret so a failed translation scrubs too. respData is
-     * the long-lived comm buffer, so wipe the trailer and any decrypted key */
-    if (ret != WH_ERROR_OK && respDataSz >= sizeof(*metadata)) {
-        uint32_t scrubSz = sizeof(*metadata) + keySz;
+    if (ret == WH_ERROR_OK) {
+        /* Copy the metadata and key on to the response data buffer */
+        memcpy(respData, &metadata, sizeof(metadata));
+        memcpy(respData + sizeof(metadata), keyStage, keySz);
 
-        if (scrubSz > respDataSz) {
-            scrubSz = respDataSz;
-        }
-        resp->keySz = 0;
-        wh_Utils_ForceZero(metadata, scrubSz);
+        /* Tell the client how big the key is */
+        resp->keySz = keySz;
     }
+
+    /* keyStage held the decrypted key; wipe the stack copy */
+    wh_Utils_ForceZero(keyStage, sizeof(keyStage));
 
     return ret;
 }
@@ -2271,7 +2264,7 @@ static int _HandleKeyUnwrapAndCacheRequest(
     uint8_t*      wrappedKey;
     whNvmMetadata metadata = {0};
     uint16_t      keySz = 0;
-    uint8_t*      key;
+    uint8_t       keyStage[WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE];
     whKeyId       serverKeyId;
     uint16_t      wrappedKeyUser;
     uint16_t      wrappedKeyType;
@@ -2281,10 +2274,8 @@ static int _HandleKeyUnwrapAndCacheRequest(
         return WH_ERROR_BUFFER_SIZE;
     }
 
-    /* Set the wrapped key to the request data. The unwrap helper reads the
-     * whole blob before writing, so the plaintext can go back over it */
+    /* Set the wrapped key to the request data */
     wrappedKey = reqData;
-    key        = reqData;
 
     /* Translate the server key id passed in from the client */
     serverKeyId = wh_KeyId_TranslateFromClient(WH_KEYTYPE_CRYPTO,
@@ -2310,12 +2301,18 @@ static int _HandleKeyUnwrapAndCacheRequest(
                     sizeof(metadata);
             resp->cipherType = WC_CIPHER_AES_GCM;
 
+            /* Check if the staging buffer can fit the key */
+            if (keySz > sizeof(keyStage)) {
+                return WH_ERROR_BADARGS;
+            }
+
             /* Unwrap-and-cache injects a key into the server keystore, so the
              * KEK must be a trusted (HW or WH_NVM_FLAGS_TRUSTED) key, else a
              * client could forge a blob under a KEK it knows. */
             ret = _AesGcmKeyUnwrap(server, serverKeyId,
                                    /*requireTrustedKek=*/1, wrappedKey,
-                                   req->wrappedKeySz, &metadata, key, keySz);
+                                   req->wrappedKeySz, &metadata, keyStage,
+                                   keySz);
             if (ret != WH_ERROR_OK) {
                 goto out;
             }
@@ -2441,18 +2438,18 @@ static int _HandleKeyUnwrapAndCacheRequest(
 #if defined(WOLFSSL_HAVE_LMS) || defined(WOLFSSL_HAVE_XMSS)
     /* Stateful (LMS/XMSS) private key state must never enter the keystore via
      * unwrap; that would permit a signature-index roll-back. */
-    if (wh_Crypto_IsStatefulSigPrivBlob(key, (uint16_t)metadata.len)) {
+    if (wh_Crypto_IsStatefulSigPrivBlob(keyStage, (uint16_t)metadata.len)) {
         ret = WH_ERROR_ACCESS;
         goto out;
     }
 #endif
 
     /* Cache the key */
-    ret = wh_Server_KeystoreCacheKey(server, &metadata, key);
+    ret = wh_Server_KeystoreCacheKey(server, &metadata, keyStage);
 
 out:
-    /* key held decrypted key material; wipe it on every exit */
-    wh_Utils_ForceZero(key, keySz);
+    /* keyStage held decrypted key material; wipe it on every exit */
+    wh_Utils_ForceZero(keyStage, sizeof(keyStage));
     return ret;
 }
 
@@ -2463,8 +2460,7 @@ static int _HandleDataWrapRequest(whServerContext*                   server,
                                   uint8_t* respData, uint32_t respDataSz)
 {
 
-    int      ret;
-    uint8_t* wrappedData;
+    int      ret = WH_ERROR_BADARGS;
     uint8_t* data;
     whKeyId  serverKeyId;
 
@@ -2490,14 +2486,12 @@ static int _HandleDataWrapRequest(whServerContext*                   server,
     /* Wrapped data size is only passed back to the client on success */
     resp->wrappedDataSz = 0;
 
-    /* Store the wrapped data in the response data */
-    wrappedData = respData;
-
     switch (req->cipherType) {
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
         case WC_CIPHER_AES_GCM: {
+            uint8_t  wrappedDataStage[WH_KEYWRAP_AES_GCM_MAX_WRAPPED_DATA_SIZE];
             uint16_t wrappedDataSz =
                 WH_KEYWRAP_AES_GCM_HEADER_SIZE + req->dataSz;
 
@@ -2508,14 +2502,18 @@ static int _HandleDataWrapRequest(whServerContext*                   server,
 
             /* Wrap the data */
             ret = _AesGcmDataWrap(server, serverKeyId, data, req->dataSz,
-                                  wrappedData, wrappedDataSz);
-            if (ret != WH_ERROR_OK) {
-                return ret;
+                                  wrappedDataStage, wrappedDataSz);
+            if (ret == WH_ERROR_OK) {
+                /* Copy the wrapped data on to the response data buffer */
+                memcpy(respData, wrappedDataStage, wrappedDataSz);
+
+                /* Tell the client how big the wrapped data is */
+                resp->wrappedDataSz = wrappedDataSz;
+                resp->cipherType    = WC_CIPHER_AES_GCM;
             }
 
-            /* Tell the client how big the wrapped data is */
-            resp->wrappedDataSz = wrappedDataSz;
-            resp->cipherType    = WC_CIPHER_AES_GCM;
+            /* wrappedDataStage held the wrapped data; wipe the stack copy */
+            wh_Utils_ForceZero(wrappedDataStage, sizeof(wrappedDataStage));
 
         } break;
 #endif /* HAVE_AESGCM */
@@ -2525,7 +2523,7 @@ static int _HandleDataWrapRequest(whServerContext*                   server,
             return WH_ERROR_BADARGS;
     }
 
-    return WH_ERROR_OK;
+    return ret;
 }
 
 static int _HandleDataUnwrapRequest(whServerContext*                     server,
@@ -2534,9 +2532,8 @@ static int _HandleDataUnwrapRequest(whServerContext*                     server,
                                     whMessageKeystore_DataUnwrapResponse* resp,
                                     uint8_t* respData, uint32_t respDataSz)
 {
-    int      ret;
+    int      ret = WH_ERROR_BADARGS;
     uint8_t* wrappedData;
-    uint8_t* data;
     whKeyId  serverKeyId;
 
     if (server == NULL || req == NULL || reqData == NULL || resp == NULL ||
@@ -2561,21 +2558,24 @@ static int _HandleDataUnwrapRequest(whServerContext*                     server,
     /* Data size is only passed back to the client on success */
     resp->dataSz = 0;
 
-    /* Store the unwrapped data in the respData */
-    data = respData;
-
     switch (req->cipherType) {
 
 #ifndef NO_AES
 #ifdef HAVE_AESGCM
         case WC_CIPHER_AES_GCM: {
             uint16_t dataSz;
+            uint8_t  dataStage[WOLFHSM_CFG_KEYWRAP_MAX_DATA_SIZE];
 
             if (req->wrappedDataSz < WH_KEYWRAP_AES_GCM_HEADER_SIZE) {
                 return WH_ERROR_BADARGS;
             }
 
             dataSz = req->wrappedDataSz - WH_KEYWRAP_AES_GCM_HEADER_SIZE;
+
+            /* Check if the staging buffer can fit the unwrapped data */
+            if (dataSz > sizeof(dataStage)) {
+                return WH_ERROR_BADARGS;
+            }
 
             /* Check if the response data can fit the unwrapped data */
             if (respDataSz < dataSz) {
@@ -2584,14 +2584,18 @@ static int _HandleDataUnwrapRequest(whServerContext*                     server,
 
             /* Unwrap the data */
             ret = _AesGcmDataUnwrap(server, serverKeyId, wrappedData,
-                                    req->wrappedDataSz, data, dataSz);
-            if (ret != WH_ERROR_OK) {
-                return ret;
+                                    req->wrappedDataSz, dataStage, dataSz);
+            if (ret == WH_ERROR_OK) {
+                /* Copy the unwrapped data to the response data buffer */
+                memcpy(respData, dataStage, dataSz);
+
+                /* Tell the client how big the unwrapped data is */
+                resp->dataSz     = dataSz;
+                resp->cipherType = WC_CIPHER_AES_GCM;
             }
 
-            /* Tell the client how big the unwrapped data is */
-            resp->dataSz     = dataSz;
-            resp->cipherType = WC_CIPHER_AES_GCM;
+            /* dataStage held the decrypted data; wipe the stack copy */
+            wh_Utils_ForceZero(dataStage, sizeof(dataStage));
 
         } break;
 #endif /* HAVE_AESGCM */
@@ -2601,7 +2605,7 @@ static int _HandleDataUnwrapRequest(whServerContext*                     server,
             return WH_ERROR_BADARGS;
     }
 
-    return WH_ERROR_OK;
+    return ret;
 }
 #endif /* WOLFHSM_CFG_KEYWRAP */
 
