@@ -452,6 +452,39 @@ int whTest_SheClientConfig(whClientConfig* config)
         WH_TEST_PRINT("SHE LOAD KEY UID checks SUCCESS\n");
     }
 
+    /* _LoadKey authorization matrix: a plaintext-loadable RAM key must never
+     * authorize an update to a protected slot. Load a known RAM key, then try
+     * to update MASTER_ECU_KEY authorized by it. Even though M3 is valid (the
+     * RAM key value is known here), the server must reject the unauthorized
+     * authorizer before checking M3. */
+    {
+        uint8_t ramKey[WH_SHE_KEY_SZ];
+        memset(ramKey, 0x5A, sizeof(ramKey));
+
+        if ((ret = wh_Client_SheLoadPlainKey(client, ramKey,
+                sizeof(ramKey))) != 0) {
+            WH_ERROR_PRINT("Failed to load plain RAM key %d\n", ret);
+            goto exit;
+        }
+        if ((ret = wh_She_GenerateLoadableKey(WH_SHE_MASTER_ECU_KEY_ID,
+                WH_SHE_RAM_KEY_ID, 2, 0, sheUid, vectorRawKey, ramKey,
+                messageOne, messageTwo, messageThree, messageFour,
+                messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate RAM-authorized M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        ret = wh_Client_SheLoadKey(client, messageOne, messageTwo,
+                messageThree, outMessageFour, outMessageFive);
+        if (ret != WH_SHE_ERC_KEY_INVALID) {
+            WH_ERROR_PRINT("SHE LOAD KEY RAM-authorized MASTER_ECU update: "
+                           "expected KEY_INVALID, got %d\n", ret);
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
+        WH_TEST_PRINT("SHE LOAD KEY authorization matrix SUCCESS\n");
+    }
+
     if ((ret = wh_Client_SheInitRnd(client)) != 0) {
         WH_ERROR_PRINT("Failed to wh_Client_SheInitRnd %d\n", ret);
         goto exit;

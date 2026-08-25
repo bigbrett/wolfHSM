@@ -74,6 +74,8 @@ static int      _AesMp16(whServerContext* server, uint8_t* in, word32 inSz,
 static uint16_t _PopAuthId(uint8_t* messageOne);
 static uint16_t _PopId(uint8_t* messageOne);
 static uint32_t _PopFlags(uint8_t* messageTwo);
+static int      _SheAuthRank(uint16_t sheSlot);
+static int      _CheckLoadKeyAuth(uint16_t targetId, uint16_t authId);
 static int _SetUid(whServerContext* server, uint16_t magic, uint16_t req_size,
                    const void* req_packet, uint16_t* out_resp_size,
                    void* resp_packet);
@@ -254,6 +256,42 @@ static uint16_t _PopId(uint8_t* messageOne)
 static uint32_t _PopFlags(uint8_t* messageTwo)
 {
     return (((messageTwo[3] & 0x0f) << 4) | ((messageTwo[4] & 0x80) >> 7));
+}
+
+/* Privilege rank of a SHE slot for the memory-update authorization scheme.
+ * A higher rank may authorize updates to a lower rank. RAM_KEY and PRNG_SEED
+ * are rank 0 and may never authorize an update: RAM_KEY is loadable in
+ * plaintext, so treating it as an authorizer would let a client forge a valid
+ * update for any protected slot, and PRNG_SEED is not a key. */
+static int _SheAuthRank(uint16_t sheSlot)
+{
+    switch (sheSlot) {
+        case WH_SHE_SECRET_KEY_ID:
+            return 3;
+        case WH_SHE_MASTER_ECU_KEY_ID:
+            return 2;
+        case WH_SHE_RAM_KEY_ID:
+        case WH_SHE_PRNG_SEED_ID:
+            return 0;
+        default:
+            /* BOOT_MAC_KEY, BOOT_MAC, and KEY_1..KEY_N */
+            return 1;
+    }
+}
+
+/* Check that the authorizing slot may update the target slot before any key
+ * material is read. The authorizer must outrank the target or be the target
+ * itself (key rotation). Returns 0 when allowed, WH_SHE_ERC_KEY_INVALID
+ * otherwise. */
+static int _CheckLoadKeyAuth(uint16_t targetId, uint16_t authId)
+{
+    int authRank = _SheAuthRank(authId);
+
+    if ((authRank > 0) &&
+        ((authRank > _SheAuthRank(targetId)) || (authId == targetId))) {
+        return 0;
+    }
+    return WH_SHE_ERC_KEY_INVALID;
 }
 
 static int _SetUid(whServerContext* server, uint16_t magic, uint16_t req_size,
@@ -586,6 +624,14 @@ static int _LoadKey(whServerContext* server, uint16_t magic, uint16_t req_size,
     }
     if (ret == 0) {
         ret = wh_MessageShe_TranslateLoadKeyRequest(magic, req_packet, &req);
+    }
+
+    /* enforce the SHE authorization matrix before reading any key material, so
+     * a low-privilege slot (e.g. a plaintext RAM key) cannot authorize an
+     * update to a protected slot */
+    if (ret == 0) {
+        ret = _CheckLoadKeyAuth(_PopId(req.messageOne),
+                                _PopAuthId(req.messageOne));
     }
 
     /* read the auth key by AuthID */
