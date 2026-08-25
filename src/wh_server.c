@@ -156,6 +156,9 @@ int wh_Server_Init(whServerContext* server, whServerConfig* config)
     if (NULL != config->dmaConfig) {
         server->dma.dmaAddrAllowList = config->dmaConfig->dmaAddrAllowList;
         server->dma.cb               = config->dmaConfig->cb;
+#ifdef WOLFHSM_CFG_DMA_CUSTOM_CLIENT_COPY
+        server->dma.memCopyCb        = config->dmaConfig->memCopyCb;
+#endif /* WOLFHSM_CFG_DMA_CUSTOM_CLIENT_COPY */
     }
 #endif /* WOLFHSM_CFG_DMA */
 
