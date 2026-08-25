@@ -6844,7 +6844,19 @@ int wh_Client_Sha256FinalResponse(whClientContext* ctx, wc_Sha256* sha,
 int wh_Client_Sha256(whClientContext* ctx, wc_Sha256* sha256, const uint8_t* in,
                      uint32_t inLen, uint8_t* out)
 {
-    int ret = WH_ERROR_OK;
+    int       ret = WH_ERROR_OK;
+    wc_Sha256 saved;
+
+    if (sha256 == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    /* Snapshot the full hash state before offloading. A server without SHA-256
+     * answers NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE and
+     * re-hashes the same input in software. The update helpers mutate the
+     * partial-block buffer before sending and only roll back on a send failure,
+     * so restore on any error to keep the software fallback from absorbing the
+     * buffered bytes a second time and corrupting the digest. */
+    saved = *sha256;
 
     /* Caller invoked SHA Update:
      * wc_CryptoCb_Sha256Hash(sha256, data, len, NULL) */
@@ -6882,6 +6894,10 @@ int wh_Client_Sha256(whClientContext* ctx, wc_Sha256* sha256, const uint8_t* in,
                 ret = wh_Client_Sha256FinalResponse(ctx, sha256, out);
             } while (ret == WH_ERROR_NOTREADY);
         }
+    }
+
+    if (ret != WH_ERROR_OK) {
+        *sha256 = saved;
     }
 
     return ret;
@@ -7171,7 +7187,16 @@ int wh_Client_Sha256DmaFinalResponse(whClientContext* ctx, wc_Sha256* sha,
 int wh_Client_Sha256Dma(whClientContext* ctx, wc_Sha256* sha, const uint8_t* in,
                         uint32_t inLen, uint8_t* out)
 {
-    int ret = WH_ERROR_OK;
+    int       ret = WH_ERROR_OK;
+    wc_Sha256 saved;
+
+    if (sha == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    /* Snapshot so a failed offload (e.g. server without SHA-256 answering
+     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
+     * leave buffered bytes for the software fallback to absorb twice. */
+    saved = *sha;
 
     if (in != NULL && inLen > 0) {
         bool sent = false;
@@ -7189,6 +7214,9 @@ int wh_Client_Sha256Dma(whClientContext* ctx, wc_Sha256* sha, const uint8_t* in,
                 ret = wh_Client_Sha256DmaFinalResponse(ctx, sha, out);
             } while (ret == WH_ERROR_NOTREADY);
         }
+    }
+    if (ret != WH_ERROR_OK) {
+        *sha = saved;
     }
     return ret;
 }
@@ -7447,7 +7475,16 @@ int wh_Client_Sha224FinalResponse(whClientContext* ctx, wc_Sha224* sha,
 int wh_Client_Sha224(whClientContext* ctx, wc_Sha224* sha224, const uint8_t* in,
                      uint32_t inLen, uint8_t* out)
 {
-    int ret = WH_ERROR_OK;
+    int       ret = WH_ERROR_OK;
+    wc_Sha224 saved;
+
+    if (sha224 == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    /* Snapshot so a failed offload (e.g. server without SHA-224 answering
+     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
+     * leave buffered bytes for the software fallback to absorb twice. */
+    saved = *sha224;
 
     /* Caller invoked SHA Update:
      * wc_CryptoCb_Sha224Hash(sha224, data, len, NULL) */
@@ -7485,6 +7522,10 @@ int wh_Client_Sha224(whClientContext* ctx, wc_Sha224* sha224, const uint8_t* in,
                 ret = wh_Client_Sha224FinalResponse(ctx, sha224, out);
             } while (ret == WH_ERROR_NOTREADY);
         }
+    }
+
+    if (ret != WH_ERROR_OK) {
+        *sha224 = saved;
     }
 
     return ret;
@@ -7756,7 +7797,16 @@ int wh_Client_Sha224DmaFinalResponse(whClientContext* ctx, wc_Sha224* sha,
 int wh_Client_Sha224Dma(whClientContext* ctx, wc_Sha224* sha, const uint8_t* in,
                         uint32_t inLen, uint8_t* out)
 {
-    int ret = WH_ERROR_OK;
+    int       ret = WH_ERROR_OK;
+    wc_Sha224 saved;
+
+    if (sha == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    /* Snapshot so a failed offload (e.g. server without SHA-224 answering
+     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
+     * leave buffered bytes for the software fallback to absorb twice. */
+    saved = *sha;
 
     if (in != NULL && inLen > 0) {
         bool sent = false;
@@ -7774,6 +7824,9 @@ int wh_Client_Sha224Dma(whClientContext* ctx, wc_Sha224* sha, const uint8_t* in,
                 ret = wh_Client_Sha224DmaFinalResponse(ctx, sha, out);
             } while (ret == WH_ERROR_NOTREADY);
         }
+    }
+    if (ret != WH_ERROR_OK) {
+        *sha = saved;
     }
     return ret;
 }
@@ -8034,7 +8087,16 @@ int wh_Client_Sha384FinalResponse(whClientContext* ctx, wc_Sha384* sha,
 int wh_Client_Sha384(whClientContext* ctx, wc_Sha384* sha384, const uint8_t* in,
                      uint32_t inLen, uint8_t* out)
 {
-    int ret = WH_ERROR_OK;
+    int       ret = WH_ERROR_OK;
+    wc_Sha384 saved;
+
+    if (sha384 == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    /* Snapshot so a failed offload (e.g. server without SHA-384 answering
+     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
+     * leave buffered bytes for the software fallback to absorb twice. */
+    saved = *sha384;
 
     /* Caller invoked SHA Update:
      * wc_CryptoCb_Sha384Hash(sha384, data, len, NULL) */
@@ -8072,6 +8134,10 @@ int wh_Client_Sha384(whClientContext* ctx, wc_Sha384* sha384, const uint8_t* in,
                 ret = wh_Client_Sha384FinalResponse(ctx, sha384, out);
             } while (ret == WH_ERROR_NOTREADY);
         }
+    }
+
+    if (ret != WH_ERROR_OK) {
+        *sha384 = saved;
     }
 
     return ret;
@@ -8345,7 +8411,16 @@ int wh_Client_Sha384DmaFinalResponse(whClientContext* ctx, wc_Sha384* sha,
 int wh_Client_Sha384Dma(whClientContext* ctx, wc_Sha384* sha, const uint8_t* in,
                         uint32_t inLen, uint8_t* out)
 {
-    int ret = WH_ERROR_OK;
+    int       ret = WH_ERROR_OK;
+    wc_Sha384 saved;
+
+    if (sha == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    /* Snapshot so a failed offload (e.g. server without SHA-384 answering
+     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
+     * leave buffered bytes for the software fallback to absorb twice. */
+    saved = *sha;
 
     if (in != NULL && inLen > 0) {
         bool sent = false;
@@ -8363,6 +8438,9 @@ int wh_Client_Sha384Dma(whClientContext* ctx, wc_Sha384* sha, const uint8_t* in,
                 ret = wh_Client_Sha384DmaFinalResponse(ctx, sha, out);
             } while (ret == WH_ERROR_NOTREADY);
         }
+    }
+    if (ret != WH_ERROR_OK) {
+        *sha = saved;
     }
     return ret;
 }
@@ -8652,7 +8730,16 @@ int wh_Client_Sha512FinalResponse(whClientContext* ctx, wc_Sha512* sha,
 int wh_Client_Sha512(whClientContext* ctx, wc_Sha512* sha512, const uint8_t* in,
                      uint32_t inLen, uint8_t* out)
 {
-    int ret = WH_ERROR_OK;
+    int       ret = WH_ERROR_OK;
+    wc_Sha512 saved;
+
+    if (sha512 == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    /* Snapshot so a failed offload (e.g. server without SHA-512 answering
+     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
+     * leave buffered bytes for the software fallback to absorb twice. */
+    saved = *sha512;
 
     /* Caller invoked SHA Update:
      * wc_CryptoCb_Sha512Hash(sha512, data, len, NULL) */
@@ -8690,6 +8777,10 @@ int wh_Client_Sha512(whClientContext* ctx, wc_Sha512* sha512, const uint8_t* in,
                 ret = wh_Client_Sha512FinalResponse(ctx, sha512, out);
             } while (ret == WH_ERROR_NOTREADY);
         }
+    }
+
+    if (ret != WH_ERROR_OK) {
+        *sha512 = saved;
     }
 
     return ret;
@@ -8996,7 +9087,16 @@ int wh_Client_Sha512DmaFinalResponse(whClientContext* ctx, wc_Sha512* sha,
 int wh_Client_Sha512Dma(whClientContext* ctx, wc_Sha512* sha, const uint8_t* in,
                         uint32_t inLen, uint8_t* out)
 {
-    int ret = WH_ERROR_OK;
+    int       ret = WH_ERROR_OK;
+    wc_Sha512 saved;
+
+    if (sha == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    /* Snapshot so a failed offload (e.g. server without SHA-512 answering
+     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
+     * leave buffered bytes for the software fallback to absorb twice. */
+    saved = *sha;
 
     if (in != NULL && inLen > 0) {
         bool sent = false;
@@ -9014,6 +9114,9 @@ int wh_Client_Sha512Dma(whClientContext* ctx, wc_Sha512* sha, const uint8_t* in,
                 ret = wh_Client_Sha512DmaFinalResponse(ctx, sha, out);
             } while (ret == WH_ERROR_NOTREADY);
         }
+    }
+    if (ret != WH_ERROR_OK) {
+        *sha = saved;
     }
     return ret;
 }
