@@ -10140,7 +10140,10 @@ int wh_Client_MlDsaExportPublicKey(whClientContext* ctx, whKeyId keyId,
                                    uint8_t* label)
 {
     int      ret;
-    byte     buffer[MAX_PUBLIC_KEY_SZ] = {0};
+    /* Size the staging buffer with the ML-DSA DER bound, matching the ML-DSA
+     * export and DMA counterparts. MAX_PUBLIC_KEY_SZ already covers this when
+     * ML-DSA is enabled, but the ML-DSA-specific bound is self-documenting. */
+    byte     buffer[MLDSA_MAX_BOTH_KEY_DER_SIZE] = {0};
     uint16_t buffer_len = sizeof(buffer);
 
     if ((ctx == NULL) || WH_KEYID_ISERASED(keyId) || (key == NULL)) {
