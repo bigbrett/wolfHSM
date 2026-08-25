@@ -1166,6 +1166,14 @@ static int _InitRnd(whServerContext* server, uint16_t magic, uint16_t req_size,
         }
         else {
             ret = wh_Nvm_AddObject(server->nvm, meta, meta->len, cmacOutput);
+            /* Evict any auto-cached copy so a later read of PRNG_SEED returns
+             * the seed just persisted, not a stale cache entry. */
+            if (ret == 0) {
+                ret = wh_Server_KeystoreEvictKey(server, meta->id);
+                if (ret == WH_ERROR_NOTFOUND) {
+                    ret = 0;
+                }
+            }
         }
         if (ret != 0) {
             ret = WH_SHE_ERC_KEY_UPDATE_ERROR;
@@ -1309,6 +1317,14 @@ static int _ExtendSeed(whServerContext* server, uint16_t magic,
         }
         else {
             ret = wh_Nvm_AddObject(server->nvm, meta, meta->len, kdfInput);
+            /* Evict any auto-cached copy so a later read of PRNG_SEED returns
+             * the seed just persisted, not a stale cache entry. */
+            if (ret == 0) {
+                ret = wh_Server_KeystoreEvictKey(server, meta->id);
+                if (ret == WH_ERROR_NOTFOUND) {
+                    ret = 0;
+                }
+            }
         }
         if (ret != 0) {
             ret = WH_SHE_ERC_KEY_UPDATE_ERROR;
