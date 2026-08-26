@@ -6850,12 +6850,7 @@ int wh_Client_Sha256(whClientContext* ctx, wc_Sha256* sha256, const uint8_t* in,
     if (sha256 == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* Snapshot the full hash state before offloading. A server without SHA-256
-     * answers NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE and
-     * re-hashes the same input in software. The update helpers mutate the
-     * partial-block buffer before sending and only roll back on a send failure,
-     * so restore on any error to keep the software fallback from absorbing the
-     * buffered bytes a second time and corrupting the digest. */
+    /* Save state to restore on error for software fallback. */
     saved = *sha256;
 
     /* Caller invoked SHA Update:
@@ -7193,9 +7188,7 @@ int wh_Client_Sha256Dma(whClientContext* ctx, wc_Sha256* sha, const uint8_t* in,
     if (sha == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* Snapshot so a failed offload (e.g. server without SHA-256 answering
-     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
-     * leave buffered bytes for the software fallback to absorb twice. */
+    /* Save state to restore on error for software fallback. */
     saved = *sha;
 
     if (in != NULL && inLen > 0) {
@@ -7481,9 +7474,7 @@ int wh_Client_Sha224(whClientContext* ctx, wc_Sha224* sha224, const uint8_t* in,
     if (sha224 == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* Snapshot so a failed offload (e.g. server without SHA-224 answering
-     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
-     * leave buffered bytes for the software fallback to absorb twice. */
+    /* Save state to restore on error for software fallback. */
     saved = *sha224;
 
     /* Caller invoked SHA Update:
@@ -7803,9 +7794,7 @@ int wh_Client_Sha224Dma(whClientContext* ctx, wc_Sha224* sha, const uint8_t* in,
     if (sha == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* Snapshot so a failed offload (e.g. server without SHA-224 answering
-     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
-     * leave buffered bytes for the software fallback to absorb twice. */
+    /* Save state to restore on error for software fallback. */
     saved = *sha;
 
     if (in != NULL && inLen > 0) {
@@ -8093,9 +8082,7 @@ int wh_Client_Sha384(whClientContext* ctx, wc_Sha384* sha384, const uint8_t* in,
     if (sha384 == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* Snapshot so a failed offload (e.g. server without SHA-384 answering
-     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
-     * leave buffered bytes for the software fallback to absorb twice. */
+    /* Save state to restore on error for software fallback. */
     saved = *sha384;
 
     /* Caller invoked SHA Update:
@@ -8417,9 +8404,7 @@ int wh_Client_Sha384Dma(whClientContext* ctx, wc_Sha384* sha, const uint8_t* in,
     if (sha == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* Snapshot so a failed offload (e.g. server without SHA-384 answering
-     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
-     * leave buffered bytes for the software fallback to absorb twice. */
+    /* Save state to restore on error for software fallback. */
     saved = *sha;
 
     if (in != NULL && inLen > 0) {
@@ -8736,9 +8721,7 @@ int wh_Client_Sha512(whClientContext* ctx, wc_Sha512* sha512, const uint8_t* in,
     if (sha512 == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* Snapshot so a failed offload (e.g. server without SHA-512 answering
-     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
-     * leave buffered bytes for the software fallback to absorb twice. */
+    /* Save state to restore on error for software fallback. */
     saved = *sha512;
 
     /* Caller invoked SHA Update:
@@ -9093,9 +9076,7 @@ int wh_Client_Sha512Dma(whClientContext* ctx, wc_Sha512* sha, const uint8_t* in,
     if (sha == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* Snapshot so a failed offload (e.g. server without SHA-512 answering
-     * NOT_COMPILED_IN, which wolfCrypt maps to CRYPTOCB_UNAVAILABLE) cannot
-     * leave buffered bytes for the software fallback to absorb twice. */
+    /* Save state to restore on error for software fallback. */
     saved = *sha;
 
     if (in != NULL && inLen > 0) {
@@ -10140,9 +10121,6 @@ int wh_Client_MlDsaExportPublicKey(whClientContext* ctx, whKeyId keyId,
                                    uint8_t* label)
 {
     int      ret;
-    /* Size the staging buffer with the ML-DSA DER bound, matching the ML-DSA
-     * export and DMA counterparts. MAX_PUBLIC_KEY_SZ already covers this when
-     * ML-DSA is enabled, but the ML-DSA-specific bound is self-documenting. */
     byte     buffer[MLDSA_MAX_BOTH_KEY_DER_SIZE] = {0};
     uint16_t buffer_len = sizeof(buffer);
 

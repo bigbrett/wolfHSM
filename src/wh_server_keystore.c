@@ -1408,11 +1408,7 @@ int wh_Server_KeystoreRevokeKey(whServerContext* server, whNvmId keyId)
     }
 
     if (isInNvm) {
-        /* Persist the revocation from a temporary copy so a failed NVM write
-         * leaves the cached metadata and committed state untouched. Mutating
-         * the cache first would leave it revoked and committed while NVM still
-         * holds a usable key, and a retry would early-return success above
-         * without ever re-persisting. */
+        /* Persist revocation before updating cache to keep state consistent on failure. */
         whNvmMetadata revokedMeta = *cacheMeta;
         _revokeKey(&revokedMeta);
         ret = wh_Nvm_AddObjectWithReclaim(server->nvm, &revokedMeta,
@@ -1423,7 +1419,6 @@ int wh_Server_KeystoreRevokeKey(whServerContext* server, whNvmId keyId)
         }
     }
     else {
-        /* No NVM copy: the cache is the only store, so revoke it directly. */
         _revokeKey(cacheMeta);
     }
 

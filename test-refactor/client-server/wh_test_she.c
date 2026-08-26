@@ -450,10 +450,7 @@ int whTest_She(whClientContext* client)
 
     /* === Authorization matrix === */
 
-    /* A plaintext-loadable RAM key must never authorize an update to a
-     * protected slot. Load a known RAM key, then try to update MASTER_ECU_KEY
-     * authorized by it. Even though M3 is valid (the RAM key value is known
-     * here), the server must reject the unauthorized authorizer before M3. */
+    /* Verify that updating a protected slot authorized by RAM_KEY is rejected. */
     {
         uint8_t ramKey[WH_SHE_KEY_SZ];
         memset(ramKey, 0x5A, sizeof(ramKey));
