@@ -10121,7 +10121,7 @@ int wh_Client_MlDsaExportPublicKey(whClientContext* ctx, whKeyId keyId,
                                    uint8_t* label)
 {
     int      ret;
-    byte     buffer[MLDSA_MAX_BOTH_KEY_DER_SIZE] = {0};
+    byte     buffer[MAX_PUBLIC_KEY_SZ] = {0};
     uint16_t buffer_len = sizeof(buffer);
 
     if ((ctx == NULL) || WH_KEYID_ISERASED(keyId) || (key == NULL)) {
