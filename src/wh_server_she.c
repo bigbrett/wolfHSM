@@ -74,7 +74,7 @@ static int      _AesMp16(whServerContext* server, uint8_t* in, word32 inSz,
 static uint16_t _PopAuthId(uint8_t* messageOne);
 static uint16_t _PopId(uint8_t* messageOne);
 static uint32_t _PopFlags(uint8_t* messageTwo);
-static int      _SheAuthRank(uint16_t sheSlot);
+static int      _SheIsAppKey(uint16_t sheSlot);
 static int      _CheckLoadKeyAuth(uint16_t targetId, uint16_t authId);
 static int _SetUid(whServerContext* server, uint16_t magic, uint16_t req_size,
                    const void* req_packet, uint16_t* out_resp_size,
@@ -258,34 +258,62 @@ static uint32_t _PopFlags(uint8_t* messageTwo)
     return (((messageTwo[3] & 0x0f) << 4) | ((messageTwo[4] & 0x80) >> 7));
 }
 
-/* Return SHE key authorization rank, where higher ranks can authorize lower ranks.
- * RAM_KEY and PRNG_SEED are rank 0 and cannot authorize updates. */
-static int _SheAuthRank(uint16_t sheSlot)
+/* True for the general-purpose application key slots KEY_1..KEY_N, which sit
+ * between the boot slots and the volatile RAM_KEY. */
+static int _SheIsAppKey(uint16_t sheSlot)
 {
-    switch (sheSlot) {
-        case WH_SHE_SECRET_KEY_ID:
-            return 3;
-        case WH_SHE_MASTER_ECU_KEY_ID:
-            return 2;
-        case WH_SHE_RAM_KEY_ID:
-        case WH_SHE_PRNG_SEED_ID:
-            return 0;
-        default:
-            /* BOOT_MAC_KEY, BOOT_MAC, and KEY_1..KEY_N */
-            return 1;
-    }
+    return (sheSlot > WH_SHE_BOOT_MAC) && (sheSlot < WH_SHE_RAM_KEY_ID);
 }
 
-/* Verify the authorizing slot outranks or matches the target slot.
- * Returns 0 on success, or WH_SHE_ERC_KEY_INVALID if unauthorized. */
+/* Check that the authorizing slot may update the target slot, before any key
+ * material is read. This enforces the SHE memory update policy (AUTOSAR SHE
+ * Table 4.5), with one documented wolfHSM extension: SECRET_KEY, the ROM root
+ * of trust, may authorize any load so it can provision MASTER_ECU_KEY.
+ * Returns 0 when allowed, WH_SHE_ERC_KEY_INVALID otherwise. */
 static int _CheckLoadKeyAuth(uint16_t targetId, uint16_t authId)
 {
-    int authRank = _SheAuthRank(authId);
+    /* SECRET_KEY and PRNG_SEED are not updatable through LOAD_KEY. */
+    if ((targetId == WH_SHE_SECRET_KEY_ID) ||
+        (targetId == WH_SHE_PRNG_SEED_ID)) {
+        return WH_SHE_ERC_KEY_INVALID;
+    }
 
-    if ((authRank > 0) &&
-        ((authRank > _SheAuthRank(targetId)) || (authId == targetId))) {
+    /* SECRET_KEY never leaves the device and a client cannot set it to a known
+     * value, so it may authorize any load. wolfHSM uses it to provision the
+     * master key. This is the one extension to the published SHE spec */
+    if (authId == WH_SHE_SECRET_KEY_ID) {
         return 0;
     }
+
+    /* MASTER_ECU_KEY may update any other slot (SHE 4.4.2.1). */
+    if (authId == WH_SHE_MASTER_ECU_KEY_ID) {
+        return 0;
+    }
+
+    /* Remaining per-target authorizers from Table 4.5 (MASTER and SECRET are
+     * already handled above). */
+    switch (targetId) {
+        case WH_SHE_BOOT_MAC_KEY_ID:
+        case WH_SHE_BOOT_MAC:
+            /* Updatable by BOOT_MAC_KEY. */
+            if (authId == WH_SHE_BOOT_MAC_KEY_ID) {
+                return 0;
+            }
+            break;
+        case WH_SHE_RAM_KEY_ID:
+            /* Updatable by any application key (or in plaintext elsewhere). */
+            if (_SheIsAppKey(authId)) {
+                return 0;
+            }
+            break;
+        default:
+            /* An application key may be rotated with the same key. */
+            if (_SheIsAppKey(targetId) && (authId == targetId)) {
+                return 0;
+            }
+            break;
+    }
+
     return WH_SHE_ERC_KEY_INVALID;
 }
 

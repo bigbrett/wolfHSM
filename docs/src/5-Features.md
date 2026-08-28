@@ -751,6 +751,19 @@ The protocol uses a key derivation function based on the **Miyaguchi-Preneel** o
 
 The server-side handler enforces all of the spec's update constraints in addition to verifying M3 and decrypting M2: the new counter must be strictly greater than the previous counter for that slot (rollback protection), the existing `WRITE_PROTECT` flag must not be set, the UID in M1 must match the ECU's configured UID (unless the existing key has `WILDCARD` set and M1 carries the all-zero UID), and the authorization key referenced by the AID field in M1 must exist. Only after all of these pass is the new key written into NVM and the response constructed.
 
+#### Update Authorization Policy
+
+Beyond requiring the authorization key to exist, wolfHSM enforces the SHE **memory update policy** (AUTOSAR SHE Table 4.5), which restricts *which* slot may authorize an update to *which* target. The target (KID) and authorization (AID) slot IDs are checked against the policy before any key material is read, and a disallowed pairing is rejected with `WH_SHE_ERC_KEY_INVALID`. The rules are:
+
+- **`MASTER_ECU_KEY`** may authorize an update to any updatable slot since it is the ECU owner's re-keying authority.
+- **`KEY_4`…`KEY_13`** may each be updated by `MASTER_ECU_KEY` or by the same key (rotation), but never by a *different* user key.
+- **`BOOT_MAC_KEY`** and **`BOOT_MAC`** may be updated by `MASTER_ECU_KEY` or `BOOT_MAC_KEY`.
+- **`RAM_KEY`** may be updated by any user key `KEY_4`…`KEY_13` (or loaded in plaintext via `CMD_LOAD_PLAIN_KEY`).
+- **`RAM_KEY` and `PRNG_SEED` may never serve as the authorization key.**
+- **`SECRET_KEY` and `PRNG_SEED` are not updatable** through `CMD_LOAD_KEY`, as they are provisioned by other means.
+
+wolfHSM makes one deliberate extension to this policy: **`SECRET_KEY` may authorize any load.** In a SHE module `SECRET_KEY` is a ROM key inserted at fabrication that never leaves the device and cannot be read or chosen by a client, so wolfHSM treats it as the root of trust used to provision the first `MASTER_ECU_KEY` (`SECRET_KEY` → `MASTER_ECU_KEY`), after which normal updates are authorized by `MASTER_ECU_KEY`. Because `SECRET_KEY` is unknowable to a client, permitting it as an authorization key does not create a forgery path the way `RAM_KEY` would. This is the only pairing where wolfHSM's policy is broader than the letter of Table 4.5; every other pairing follows the specification exactly.
+
 ### Secure Boot
 
 SHE secure boot is implemented as a three-phase state machine that the client drives via `CMD_SECURE_BOOT`:

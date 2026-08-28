@@ -476,6 +476,48 @@ int whTest_She(whClientContext* client)
             ret = WH_ERROR_ABORTED;
             goto exit;
         }
+
+        /* One application key may not authorize an update to a different
+         * application key (Table 4.5: KEY_<n> only by MASTER or itself). The
+         * authorization check runs before any key material is read, so the
+         * slots need not be populated. */
+        if ((ret = wh_She_GenerateLoadableKey(
+                 10, 11, 1, 0, sheUid, vectorRawKey, vectorRawKey, messageOne,
+                 messageTwo, messageThree, messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate peer-authorized M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        ret = wh_Client_SheLoadKey(client, messageOne, messageTwo, messageThree,
+                                   outMessageFour, outMessageFive);
+        if (ret != WH_SHE_ERC_KEY_INVALID) {
+            WH_ERROR_PRINT("SHE LOAD KEY peer-authorized update: "
+                           "expected KEY_INVALID, got %d\n",
+                           ret);
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
+
+        /* BOOT_MAC_KEY may authorize an update to BOOT_MAC (Table 4.5): a
+         * same-privilege cross-slot update the spec allows. Rewrite the same
+         * digest so secure-boot state is unchanged. */
+        if ((ret = wh_She_GenerateLoadableKey(
+                 WH_SHE_BOOT_MAC, WH_SHE_BOOT_MAC_KEY_ID, 1, 0, sheUid,
+                 bootMacDigest, key, messageOne, messageTwo, messageThree,
+                 messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate BOOT_MAC_KEY-authorized "
+                           "M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        if ((ret = wh_Client_SheLoadKey(client, messageOne, messageTwo,
+                                        messageThree, outMessageFour,
+                                        outMessageFive)) != 0) {
+            WH_ERROR_PRINT("SHE LOAD KEY BOOT_MAC_KEY-authorized BOOT_MAC "
+                           "update: expected success, got %d\n",
+                           ret);
+            goto exit;
+        }
         WH_TEST_PRINT("SHE LOAD KEY authorization matrix SUCCESS\n");
     }
 
@@ -647,7 +689,7 @@ int whTest_She(whClientContext* client)
         goto exit;
     }
     if ((ret = wh_She_GenerateLoadableKey(
-             SHE_SIZE_CHECK_KEY_ID, SHE_OVERSIZE_AUTH_ID, 1, 0, sheUid,
+             SHE_OVERSIZE_AUTH_ID, SHE_OVERSIZE_AUTH_ID, 1, 0, sheUid,
              vectorRawKey, vectorRawKey, messageOne, messageTwo, messageThree,
              messageFour, messageFive)) != 0) {
         WH_ERROR_PRINT("Failed to generate loadable key %d\n", ret);
