@@ -1408,7 +1408,8 @@ int wh_Server_KeystoreRevokeKey(whServerContext* server, whNvmId keyId)
     }
 
     if (isInNvm) {
-        /* Persist revocation before updating cache to keep state consistent on failure. */
+        /* Persist revocation before updating cache to keep state consistent
+         * on failure. */
         whNvmMetadata revokedMeta = *cacheMeta;
         _revokeKey(&revokedMeta);
         ret = wh_Nvm_AddObjectWithReclaim(server->nvm, &revokedMeta,

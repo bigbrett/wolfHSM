@@ -668,7 +668,7 @@ The SHE extension is independent of the rest of the crypto API: a server can be 
 The SHE client API is declared in `wolfhsm/wh_client_she.h` and maps one-to-one onto the AUTOSAR SHE command set. Each spec command is exposed as a `wh_Client_She*` function, with the same `Request` / `Response` split-transaction variants that the rest of the wolfHSM client API uses (see [Blocking and Non-Blocking Interfaces](#blocking-and-non-blocking-interfaces)). The full set comprises:
 
 - **Secure boot**: `wh_Client_SheSecureBoot` (`CMD_SECURE_BOOT`) — drives the three-phase INIT/UPDATE/FINISH state machine and reports the boot result through the status register
-- **Key update**: `wh_Client_SheLoadKey` (`CMD_LOAD_KEY`) — performs the encrypted M1–M5 key update protocol against any slot other than `RAM_KEY`
+- **Key update**: `wh_Client_SheLoadKey` (`CMD_LOAD_KEY`) — performs the encrypted M1–M5 key update protocol; the allowed target/authorization slot pairings are listed under [Update Authorization Policy](#update-authorization-policy)
 - **Plain key update**: `wh_Client_SheLoadPlainKey` (`CMD_LOAD_PLAIN_KEY`) and `wh_Client_SheExportRamKey` (`CMD_EXPORT_RAM_KEY`) — load the volatile `RAM_KEY` directly, and export it as an M1–M5 blob bound to the master ECU key for transfer to a peer
 - **PRNG**: `wh_Client_SheInitRnd` (`CMD_INIT_RNG`), `wh_Client_SheRnd` (`CMD_RND`), and `wh_Client_SheExtendSeed` (`CMD_EXTEND_SEED`) — initialize, draw from, and reseed the spec's deterministic PRNG
 - **Bulk crypto**: `wh_Client_SheEncEcb` / `wh_Client_SheEncCbc` / `wh_Client_SheDecEcb` / `wh_Client_SheDecCbc` (`CMD_ENC_*` / `CMD_DEC_*`) — AES-ECB and AES-CBC encrypt and decrypt against a selected key slot
@@ -756,13 +756,18 @@ The server-side handler enforces all of the spec's update constraints in additio
 Beyond requiring the authorization key to exist, wolfHSM enforces the SHE **memory update policy** (AUTOSAR SHE Table 4.5), which restricts *which* slot may authorize an update to *which* target. The target (KID) and authorization (AID) slot IDs are checked against the policy before any key material is read, and a disallowed pairing is rejected with `WH_SHE_ERC_KEY_INVALID`. The rules are:
 
 - **`MASTER_ECU_KEY`** may authorize an update to any updatable slot since it is the ECU owner's re-keying authority.
-- **`KEY_4`…`KEY_13`** may each be updated by `MASTER_ECU_KEY` or by the same key (rotation), but never by a *different* user key.
+- **`KEY_4`…`KEY_13`** (the spec's `KEY_1`…`KEY_10`, named here by slot ID) may each be updated by `MASTER_ECU_KEY` or by the same key (rotation), but never by a *different* user key.
 - **`BOOT_MAC_KEY`** and **`BOOT_MAC`** may be updated by `MASTER_ECU_KEY` or `BOOT_MAC_KEY`.
-- **`RAM_KEY`** may be updated by any user key `KEY_4`…`KEY_13` (or loaded in plaintext via `CMD_LOAD_PLAIN_KEY`).
+- **`RAM_KEY`** may be updated by any user key `KEY_4`…`KEY_13`, by `SECRET_KEY` when reloading a blob produced by `CMD_EXPORT_RAM_KEY`, or loaded in plaintext via `CMD_LOAD_PLAIN_KEY`.
 - **`RAM_KEY` and `PRNG_SEED` may never serve as the authorization key.**
 - **`SECRET_KEY` and `PRNG_SEED` are not updatable** through `CMD_LOAD_KEY`, as they are provisioned by other means.
 
-wolfHSM makes one deliberate extension to this policy: **`SECRET_KEY` may authorize any load.** In a SHE module `SECRET_KEY` is a ROM key inserted at fabrication that never leaves the device and cannot be read or chosen by a client, so wolfHSM treats it as the root of trust used to provision the first `MASTER_ECU_KEY` (`SECRET_KEY` → `MASTER_ECU_KEY`), after which normal updates are authorized by `MASTER_ECU_KEY`. Because `SECRET_KEY` is unknowable to a client, permitting it as an authorization key does not create a forgery path the way `RAM_KEY` would. This is the only pairing where wolfHSM's policy is broader than the letter of Table 4.5; every other pairing follows the specification exactly.
+wolfHSM's policy is deliberately broader than the letter of Table 4.5 in two places:
+
+- **`SECRET_KEY` may authorize any load.** The table lists `SECRET_KEY` as an authorizer only for `RAM_KEY` (the `CMD_EXPORT_RAM_KEY` reload path); wolfHSM accepts it for every updatable slot and treats it as the root of trust that provisions the first `MASTER_ECU_KEY` (`SECRET_KEY` → `MASTER_ECU_KEY`), after which normal updates are authorized by `MASTER_ECU_KEY`. In a SHE module `SECRET_KEY` is a ROM key inserted at fabrication, so permitting it as an authorization key does not create a forgery path the way `RAM_KEY` would. Note that wolfHSM itself does not stop a client from writing SHE slot 0 through the NVM API (`wh_Client_ShePreProgramKey` exists precisely to provision it), so this reasoning — and the update policy as a whole — is a security boundary only when client NVM writes to the SHE key range are restricted at deployment.
+- **`MASTER_ECU_KEY` may update `RAM_KEY`.** The table's `RAM_KEY` row names only the user keys and `SECRET_KEY`, but the spec's §4.4.2.1 describes `MASTER_ECU_KEY` as able to change any of the other keys, and the pairing grants its holder nothing it does not already have.
+
+Every other pairing follows Table 4.5 exactly.
 
 ### Secure Boot
 

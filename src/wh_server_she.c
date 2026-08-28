@@ -278,9 +278,9 @@ static int _CheckLoadKeyAuth(uint16_t targetId, uint16_t authId)
         return WH_SHE_ERC_KEY_INVALID;
     }
 
-    /* SECRET_KEY never leaves the device and a client cannot set it to a known
-     * value, so it may authorize any load. wolfHSM uses it to provision the
-     * master key. This is the one extension to the published SHE spec */
+    /* SECRET_KEY may authorize any load. The SHE spec lists it only for RAM_KEY
+     * (reloading an exported RAM key), but wolfHSM extends it to every slot so
+     * it can provision the first MASTER_ECU_KEY */
     if (authId == WH_SHE_SECRET_KEY_ID) {
         return 0;
     }

@@ -452,7 +452,9 @@ int whTest_SheClientConfig(whClientConfig* config)
         WH_TEST_PRINT("SHE LOAD KEY UID checks SUCCESS\n");
     }
 
-    /* Verify that updating a protected slot authorized by RAM_KEY is rejected. */
+    /* Authorization matrix: RAM_KEY and peer application keys may not
+     * authorize updates, SECRET_KEY and PRNG_SEED may not be targets, and
+     * BOOT_MAC_KEY may update BOOT_MAC. */
     {
         uint8_t ramKey[WH_SHE_KEY_SZ];
         memset(ramKey, 0x5A, sizeof(ramKey));
@@ -494,6 +496,61 @@ int whTest_SheClientConfig(whClientConfig* config)
                                    outMessageFour, outMessageFive);
         if (ret != WH_SHE_ERC_KEY_INVALID) {
             WH_ERROR_PRINT("SHE LOAD KEY peer-authorized update: "
+                           "expected KEY_INVALID, got %d\n",
+                           ret);
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
+
+        /* SECRET_KEY and PRNG_SEED are not updatable LOAD_KEY targets. */
+        if ((ret = wh_She_GenerateLoadableKey(
+                 WH_SHE_SECRET_KEY_ID, WH_SHE_MASTER_ECU_KEY_ID, 1, 0, sheUid,
+                 vectorRawKey, vectorMasterEcuKey, messageOne, messageTwo,
+                 messageThree, messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate SECRET-target M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        ret = wh_Client_SheLoadKey(client, messageOne, messageTwo, messageThree,
+                                   outMessageFour, outMessageFive);
+        if (ret != WH_SHE_ERC_KEY_INVALID) {
+            WH_ERROR_PRINT("SHE LOAD KEY SECRET_KEY target: "
+                           "expected KEY_INVALID, got %d\n",
+                           ret);
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
+
+        if ((ret = wh_She_GenerateLoadableKey(
+                 WH_SHE_PRNG_SEED_ID, WH_SHE_MASTER_ECU_KEY_ID, 1, 0, sheUid,
+                 vectorRawKey, vectorMasterEcuKey, messageOne, messageTwo,
+                 messageThree, messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate PRNG-target M1/M2/M3 %d\n", ret);
+            goto exit;
+        }
+        ret = wh_Client_SheLoadKey(client, messageOne, messageTwo, messageThree,
+                                   outMessageFour, outMessageFive);
+        if (ret != WH_SHE_ERC_KEY_INVALID) {
+            WH_ERROR_PRINT("SHE LOAD KEY PRNG_SEED target: "
+                           "expected KEY_INVALID, got %d\n",
+                           ret);
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
+
+        /* RAM_KEY accepts updates from application keys only, so it may not
+         * authorize itself. */
+        if ((ret = wh_She_GenerateLoadableKey(
+                 WH_SHE_RAM_KEY_ID, WH_SHE_RAM_KEY_ID, 1, 0, sheUid,
+                 vectorRawKey, ramKey, messageOne, messageTwo, messageThree,
+                 messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate RAM-target M1/M2/M3 %d\n", ret);
+            goto exit;
+        }
+        ret = wh_Client_SheLoadKey(client, messageOne, messageTwo, messageThree,
+                                   outMessageFour, outMessageFive);
+        if (ret != WH_SHE_ERC_KEY_INVALID) {
+            WH_ERROR_PRINT("SHE LOAD KEY RAM-authorized RAM_KEY update: "
                            "expected KEY_INVALID, got %d\n",
                            ret);
             ret = WH_ERROR_ABORTED;
