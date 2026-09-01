@@ -1,8 +1,8 @@
 #!/bin/sh
 #
-# Negative tests for whnvmtool. Each case runs the tool on an invalid config
-# or key file and requires a nonzero exit plus an error message, stopping at
-# the first unexpected result.
+# Negative tests for whnvmtool. Each case runs the tool on an invalid config,
+# key file, or command line and requires a nonzero exit plus an error message,
+# stopping at the first unexpected result.
 #
 # Usage: test_invalid_input.sh [path-to-whnvmtool]
 
@@ -24,15 +24,18 @@ head -c 16 /dev/zero > "$TMP/key16.bin"
 head -c 15 /dev/zero > "$TMP/key15.bin"
 head -c 65536 /dev/zero > "$TMP/big.bin"
 
-# Runs the tool on config $2. $1 is "pass" (require exit 0) or "fail"
+# Runs the tool on config $2, passing any further arguments after the
+# description through to the tool. $1 is "pass" (require exit 0) or "fail"
 # (require nonzero exit and an error message on stderr).
 run_case() {
     expect=$1
     cfg=$2
     desc=$3
+    shift 3
 
-    rm -f "$TMP/img.bin"
-    if "$TOOL" --image="$TMP/img.bin" "$cfg" >"$TMP/out.log" 2>"$TMP/err.log"
+    rm -f "$TMP/img.bin" "$TMP/img.hex"
+    if "$TOOL" --image="$TMP/img.bin" "$@" "$cfg" \
+        >"$TMP/out.log" 2>"$TMP/err.log"
     then
         rc=0
     else
@@ -108,5 +111,45 @@ run_case fail "$TMP/cfg" "missing key file fails the run"
     echo "she 0 2 0 0 $TMP/key16.bin"
 } > "$TMP/cfg"
 run_case fail "$TMP/cfg" "bad entry fails the run despite valid entries after it"
+
+# Hex output option validation
+echo "key 1 1 0 0 \"k\" $TMP/key16.bin" > "$TMP/cfg"
+run_case pass "$TMP/cfg" "--hex with base and align accepted" \
+    --hex="$TMP/img.hex" --hex-base 0x1000 --hex-align 8
+if [ ! -s "$TMP/img.hex" ]; then
+    echo "FAIL: --hex did not produce a hex file"
+    exit 1
+fi
+
+run_case fail "$TMP/cfg" "--hex-base without --hex rejected" --hex-base 0x1000
+run_case fail "$TMP/cfg" "--hex-align without --hex rejected" --hex-align 8
+run_case fail "$TMP/cfg" "--hex-align 0 rejected" \
+    --hex="$TMP/img.hex" --hex-align 0
+run_case fail "$TMP/cfg" "malformed hex base rejected" \
+    --hex="$TMP/img.hex" --hex-base zzz
+run_case fail "$TMP/cfg" "malformed hex alignment rejected" \
+    --hex="$TMP/img.hex" --hex-align zzz
+run_case fail "$TMP/cfg" "hex base overflowing the 32-bit space rejected" \
+    --hex="$TMP/img.hex" --hex-base 0xFFFFF000
+run_case fail "$TMP/cfg" "hex base not a multiple of hex alignment rejected" \
+    --hex="$TMP/img.hex" --hex-base 0x1003 --hex-align 8
+run_case fail "$TMP/cfg" "hex file equal to image file rejected" \
+    --hex="$TMP/img.bin"
+
+# A pre-existing image must be rejected with --hex: only bytes programmed
+# during the current run are tracked, so the hex file would be incomplete
+head -c 16 /dev/zero > "$TMP/img.bin"
+if "$TOOL" --image="$TMP/img.bin" --hex="$TMP/img.hex" "$TMP/cfg" \
+    >"$TMP/out.log" 2>"$TMP/err.log"
+then
+    echo "FAIL: pre-existing image accepted with --hex"
+    exit 1
+fi
+if ! grep -q "Error" "$TMP/err.log"; then
+    echo "FAIL: pre-existing image case exited without an error message"
+    cat "$TMP/err.log"
+    exit 1
+fi
+echo "PASS: pre-existing image with --hex rejected"
 
 echo "All whnvmtool negative tests passed"
