@@ -39,6 +39,7 @@
 #include "wolfhsm/wh_server_keystore.h"
 #include "wolfhsm/wh_server_she.h"
 #include "wolfhsm/wh_she_common.h"
+#include "wolfhsm/wh_she_crypto.h"
 #include "wolfhsm/wh_message.h"
 #include "wolfhsm/wh_message_she.h"
 #include "wolfhsm/wh_comm.h"
@@ -109,6 +110,10 @@ int whTest_SheReqSizeChecking(whServerContext* server)
     if (server == NULL) {
         return WH_ERROR_BADARGS;
     }
+
+    /* Bind a client id the way COMM INIT would; the handlers are called
+     * directly here, so they see the id a real connection would carry. */
+    server->comm->client_id = 1;
 
     /*
      * Set SHE state so _ReportInvalidSheState allows requests through.
@@ -491,11 +496,131 @@ int whTest_SheReqSizeChecking(whServerContext* server)
         WH_TEST_ASSERT_RETURN(getIdResp->rc != WH_SHE_ERC_NO_ERROR);
     }
 
-    /* Restore a clean SHE context so the poked uidSet/sbState don't
-     * leak into the live request loop the server enters next. */
+    /* Restore a clean SHE context and unbound client id so the poked state
+     * doesn't leak into the live request loop the server enters next. */
     memset(server->she, 0, sizeof(*server->she));
+    server->comm->client_id = 0;
 
     WH_TEST_PRINT("SHE req_size checking test SUCCESS\n");
+
+    return 0;
+}
+
+/*
+ * LoadKey must refuse a slot whose NVM object is not exactly one SHE key,
+ * whether the slot is named as the auth key or as the target: reading it into
+ * the fixed key buffer fails, and an unchecked read would leave the metadata
+ * unset, so a zeroed label would clear the target's write protection. The
+ * slots are planted server-side, as a provisioning image would, because
+ * client NVM ids cannot reach SHE slots.
+ */
+int whTest_SheLoadKeyOversizedSlot(whServerContext* server)
+{
+    int      ret       = 0;
+    uint16_t resp_size = 0;
+    uint8_t  req_packet[WOLFHSM_CFG_COMM_DATA_LEN];
+    uint8_t  resp_packet[WOLFHSM_CFG_COMM_DATA_LEN];
+
+    const uint8_t SLOT_AUTH   = 8; /* oversized, named as the auth key */
+    const uint8_t SLOT_TARGET = 9; /* oversized, named as the target */
+    const uint8_t SLOT_NEW    = 7; /* empty target of the auth-key case */
+    uint8_t       uid[WH_SHE_UID_SZ]       = {0};
+    uint8_t       secretKey[WH_SHE_KEY_SZ] = {
+        0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
+        0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
+    uint8_t       rawKey[WH_SHE_KEY_SZ] = {
+        0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08,
+        0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00};
+    uint8_t       oversize[WH_SHE_KEY_SZ * 2];
+    uint8_t       m4[WH_SHE_M4_SZ];
+    uint8_t       m5[WH_SHE_M5_SZ];
+    whNvmMetadata meta  = {0};
+    whNvmMetadata check = {0};
+    uint32_t      count = 0;
+    uint32_t      flags = 0;
+    whNvmId       ids[3];
+    whNvmId       newId;
+    whMessageShe_LoadKeyRequest* req =
+        (whMessageShe_LoadKeyRequest*)req_packet;
+    whMessageShe_LoadKeyResponse* resp =
+        (whMessageShe_LoadKeyResponse*)resp_packet;
+
+    if (server == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    memset(oversize, 0x5A, sizeof(oversize));
+
+    /* Bind a client id the way COMM INIT would and open the state gate */
+    server->comm->client_id = 1;
+    server->she->uidSet     = 1;
+    server->she->sbState    = TEST_SHE_SB_STATE_SUCCESS;
+
+    ids[0] = WH_SHE_MAKE_KEYID(server->comm->client_id, WH_SHE_SECRET_KEY_ID);
+    ids[1] = WH_SHE_MAKE_KEYID(server->comm->client_id, SLOT_AUTH);
+    ids[2] = WH_SHE_MAKE_KEYID(server->comm->client_id, SLOT_TARGET);
+    newId  = WH_SHE_MAKE_KEYID(server->comm->client_id, SLOT_NEW);
+
+    /* SECRET_KEY authorizes the target-slot case */
+    meta.id     = ids[0];
+    meta.access = WH_NVM_ACCESS_ANY;
+    meta.flags  = WH_NVM_FLAGS_NONE;
+    meta.len    = WH_SHE_KEY_SZ;
+    wh_She_Meta2Label(0, 0, meta.label);
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, &meta, WH_SHE_KEY_SZ, secretKey));
+
+    /* An oversized object in a slot that will be named as the auth key */
+    meta.id  = ids[1];
+    meta.len = sizeof(oversize);
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, &meta, sizeof(oversize), oversize));
+
+    /* An oversized, write-protected object in a slot named as the target */
+    meta.id = ids[2];
+    wh_She_Meta2Label(0, WH_SHE_FLAG_WRITE_PROTECT, meta.label);
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, &meta, sizeof(oversize), oversize));
+
+    /* === Oversized auth key slot === */
+    WH_TEST_RETURN_ON_FAIL(wh_She_GenerateLoadableKey(
+        SLOT_NEW, SLOT_AUTH, 1, 0, uid, rawKey, oversize, req->messageOne,
+        req->messageTwo, req->messageThree, m4, m5));
+    memset(resp, 0, sizeof(*resp));
+    ret = wh_Server_HandleSheRequest(server, WH_COMM_MAGIC_NATIVE,
+                                     WH_SHE_LOAD_KEY, sizeof(*req), req_packet,
+                                     &resp_size, resp_packet);
+    WH_TEST_ASSERT_RETURN(ret == 0);
+    WH_TEST_ASSERT_RETURN(resp_size == sizeof(*resp));
+    WH_TEST_ASSERT_RETURN(resp->rc == WH_SHE_ERC_KEY_INVALID);
+    /* Nothing was written to the target */
+    WH_TEST_ASSERT_RETURN(wh_Nvm_GetMetadata(server->nvm, newId, &check) ==
+                          WH_ERROR_NOTFOUND);
+
+    /* === Oversized target key slot === */
+    WH_TEST_RETURN_ON_FAIL(wh_She_GenerateLoadableKey(
+        SLOT_TARGET, WH_SHE_SECRET_KEY_ID, 1, 0, uid, rawKey, secretKey,
+        req->messageOne, req->messageTwo, req->messageThree, m4, m5));
+    memset(resp, 0, sizeof(*resp));
+    ret = wh_Server_HandleSheRequest(server, WH_COMM_MAGIC_NATIVE,
+                                     WH_SHE_LOAD_KEY, sizeof(*req), req_packet,
+                                     &resp_size, resp_packet);
+    WH_TEST_ASSERT_RETURN(ret == 0);
+    WH_TEST_ASSERT_RETURN(resp_size == sizeof(*resp));
+    WH_TEST_ASSERT_RETURN(resp->rc == WH_SHE_ERC_KEY_INVALID);
+    /* The slot is untouched: still oversized and still write-protected */
+    WH_TEST_ASSERT_RETURN(wh_Nvm_GetMetadata(server->nvm, ids[2], &check) ==
+                          WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(check.len == sizeof(oversize));
+    wh_She_Label2Meta(check.label, &count, &flags);
+    WH_TEST_ASSERT_RETURN((flags & WH_SHE_FLAG_WRITE_PROTECT) != 0);
+
+    /* The server context and NVM are shared across server-group tests */
+    WH_TEST_RETURN_ON_FAIL(wh_Nvm_DestroyObjects(server->nvm, 3, ids));
+    memset(server->she, 0, sizeof(*server->she));
+    server->comm->client_id = 0;
+
+    WH_TEST_PRINT("SHE LoadKey oversized slot test SUCCESS\n");
 
     return 0;
 }

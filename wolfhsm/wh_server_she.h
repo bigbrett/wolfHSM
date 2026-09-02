@@ -89,6 +89,25 @@ int wh_Server_HandleSheRequest(whServerContext* server, uint16_t magic,
                                void* resp_packet);
 
 /**
+ * @brief Format an action-specific SHE error response.
+ *
+ * Used by the request dispatcher when a SHE request is refused before its
+ * handler runs (for example from a connection that has not completed COMM
+ * INIT), so the client receives the response layout it expects for that
+ * action rather than a bare error code. rc is a wolfHSM error code and is
+ * reported as the matching SHE error code; the test key-management actions
+ * report it unchanged.
+ *
+ * @param magic Request magic, used to byte-order the response.
+ * @param action SHE action the response is for.
+ * @param rc wolfHSM error code to report.
+ * @param resp_packet Response buffer to fill.
+ * @return Size of the formatted response, or 0 if the action is unknown.
+ */
+uint16_t wh_Server_SheFormatErrorResponse(uint16_t magic, uint16_t action,
+                                          int rc, void* resp_packet);
+
+/**
  * @brief Register SHE UID storage callbacks at runtime.
  *
  * Replaces callbacks previously set via whServerConfig.sheConfig or by a prior

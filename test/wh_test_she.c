@@ -1380,8 +1380,9 @@ static void* _whServerTask(void* cf)
 
 #if defined(WOLFHSM_CFG_TEST_POSIX) && defined(WOLFHSM_CFG_ENABLE_CLIENT) && \
     defined(WOLFHSM_CFG_ENABLE_SERVER)
-/* SHE key management must be refused until COMM INIT binds a client id since
- * unbound requests would target the USER=0 factory-provisioned namespace. */
+/* Every SHE request must be refused until COMM INIT binds a client id: the
+ * key-management verbs would otherwise target the USER=0 factory-provisioned
+ * namespace, and GET_ID would MAC under that namespace's MASTER_ECU_KEY. */
 static int whTest_ShePreInitKeyMgmtRejected(whClientConfig* config)
 {
     int             ret                = 0;
@@ -1413,11 +1414,10 @@ static int whTest_ShePreInitKeyMgmtRejected(whClientConfig* config)
         goto exit_preinit;
     }
 
-    /* GET_ID embeds the client id in its MASTER_ECU_KEY lookup, so it takes
-     * the same gate. Provision the UID first (SET_UID is a per-server
-     * operation allowed before COMM INIT) so the request passes the SHE state
-     * check and reaches the gate; without the gate this call would succeed
-     * with the all-zero USER=0 key. */
+    /* The refusal is made in the dispatcher for every non-COMM group, so it
+     * also covers SET_UID and GET_ID, which carry no id of their own. Without
+     * it GET_ID would succeed here under the all-zero USER=0 key. The reply
+     * keeps the action's own layout, so the client sees a SHE error code. */
     {
         uint8_t uid[WH_SHE_UID_SZ]       = {0};
         uint8_t challenge[WH_SHE_KEY_SZ] = {0};
@@ -1426,8 +1426,10 @@ static int whTest_ShePreInitKeyMgmtRejected(whClientConfig* config)
         uint8_t mac[WH_SHE_KEY_SZ]       = {0};
 
         ret = wh_Client_SheSetUid(client, uid, sizeof(uid));
-        if (ret != 0) {
-            WH_ERROR_PRINT("pre-init SheSetUid failed %d\n", ret);
+        if (ret != WH_SHE_ERC_GENERAL_ERROR) {
+            WH_ERROR_PRINT(
+                "pre-init SheSetUid: expected GENERAL_ERROR, got %d\n", ret);
+            ret = WH_ERROR_ABORTED;
             goto exit_preinit;
         }
         ret = wh_Client_SheGetId(client, challenge, sizeof(challenge), outUid,
@@ -1440,10 +1442,19 @@ static int whTest_ShePreInitKeyMgmtRejected(whClientConfig* config)
         }
     }
 
-    /* After COMM INIT both must succeed */
+    /* After COMM INIT all of them must succeed */
     ret = wh_Client_CommInit(client, &outClientId, &outServerId);
     if (ret != 0) {
         goto exit_preinit;
+    }
+    {
+        uint8_t uid[WH_SHE_UID_SZ] = {0};
+
+        ret = wh_Client_SheSetUid(client, uid, sizeof(uid));
+        if (ret != 0) {
+            WH_ERROR_PRINT("post-init SheSetUid failed %d\n", ret);
+            goto exit_preinit;
+        }
     }
     ret = wh_Client_ShePreProgramKey(client, WH_SHE_BOOT_MAC_KEY_ID, 0, 0, key,
                                      sizeof(key));
@@ -1796,6 +1807,10 @@ static int wh_She_TestReqSizeChecking(void)
     WH_TEST_RETURN_ON_FAIL(wc_InitRng_ex(crypto->rng, NULL, s_conf->devId));
     WH_TEST_RETURN_ON_FAIL(wh_Server_Init(server, s_conf));
     WH_TEST_RETURN_ON_FAIL(wh_Server_SetConnected(server, WH_COMM_CONNECTED));
+
+    /* Bind a client id the way COMM INIT would; the handlers are called
+     * directly here, so they see the id a real connection would carry. */
+    server->comm->client_id = 1;
 
     /*
      * Set SHE state so _ReportInvalidSheState allows requests through.
@@ -2468,8 +2483,9 @@ static int wh_She_TestGetId(void)
     WH_TEST_RETURN_ON_FAIL(wh_Server_Init(server, s_conf));
     WH_TEST_RETURN_ON_FAIL(wh_Server_SetConnected(server, WH_COMM_CONNECTED));
 
-    /* Bind a client id the way COMM INIT would; GET_ID's key lookup is
-     * per-client and the server refuses it for an unbound connection. */
+    /* Bind a client id the way COMM INIT would; GET_ID's key lookup embeds
+     * it. (The dispatcher refuses requests from an unbound connection, but
+     * this test calls the handler directly.) */
     server->comm->client_id = 1;
 
     /* UID is set (GET_ID returns it), but NO MASTER_ECU_KEY is ever loaded, so
@@ -2539,6 +2555,186 @@ static int wh_She_TestGetId(void)
     WH_TEST_ASSERT_RETURN(sregBooted != sregPreBoot);
 
     WH_TEST_PRINT("SHE GET_ID empty-key / pre-secure-boot test SUCCESS\n");
+
+    wh_Server_Cleanup(server);
+    wh_Nvm_Cleanup(nvm);
+    wc_FreeRng(crypto->rng);
+    wolfCrypt_Cleanup();
+
+    return 0;
+}
+
+/* LoadKey must refuse a slot whose NVM object is not exactly one SHE key,
+ * whether the slot is named as the auth key or as the target: reading it into
+ * the fixed key buffer fails, and an unchecked read would leave the metadata
+ * unset, so a zeroed label would clear the target's write protection. The
+ * slots are planted server-side, as a provisioning image would, because
+ * client NVM ids can no longer reach SHE slots. */
+static int wh_She_TestLoadKeyOversizedSlot(void)
+{
+    int      ret       = 0;
+    uint16_t resp_size = 0;
+
+    uint8_t req_packet[WOLFHSM_CFG_COMM_DATA_LEN];
+    uint8_t resp_packet[WOLFHSM_CFG_COMM_DATA_LEN];
+
+    uint8_t                     reqBuf[BUFFER_SIZE]  = {0};
+    uint8_t                     respBuf[BUFFER_SIZE] = {0};
+    whTransportMemConfig        tmcf[1]              = {{
+                            .req       = (whTransportMemCsr*)reqBuf,
+                            .req_size  = sizeof(reqBuf),
+                            .resp      = (whTransportMemCsr*)respBuf,
+                            .resp_size = sizeof(respBuf),
+    }};
+    whTransportServerCb         tscb[1]    = {WH_TRANSPORT_MEM_SERVER_CB};
+    whTransportMemServerContext tmsc[1]    = {0};
+    whCommServerConfig          cs_conf[1] = {{
+                 .transport_cb      = tscb,
+                 .transport_context = (void*)tmsc,
+                 .transport_config  = (void*)tmcf,
+                 .server_id         = 126,
+    }};
+
+    static uint8_t   memory[FLASH_RAM_SIZE];
+    whFlashRamsimCtx fc[1]                  = {0};
+    whFlashRamsimCfg fc_conf[1]             = {{0}};
+    const whFlashCb  fcb[1]                 = {WH_FLASH_RAMSIM_CB};
+
+    whNvmFlashConfig  nf_conf[1] = {{
+         .cb      = fcb,
+         .context = fc,
+         .config  = fc_conf,
+    }};
+    whNvmFlashContext nfc[1]     = {0};
+    whNvmCb           nfcb[1]    = {WH_NVM_FLASH_CB};
+    whNvmConfig       n_conf[1]  = {{
+               .cb      = nfcb,
+               .context = nfc,
+               .config  = nf_conf,
+    }};
+    whNvmContext      nvm[1]     = {{0}};
+
+    whServerCryptoContext crypto[1] = {0};
+    whServerSheContext    she[1];
+    whServerContext       server[1] = {0};
+
+    whServerConfig s_conf[1] = {{
+        .comm_config = cs_conf,
+        .nvm         = nvm,
+        .crypto      = crypto,
+        .she         = she,
+        .devId       = INVALID_DEVID,
+    }};
+
+    const uint8_t SLOT_AUTH   = 8; /* oversized, named as the auth key */
+    const uint8_t SLOT_TARGET = 9; /* oversized, named as the target */
+    const uint8_t SLOT_NEW    = 7; /* empty target of the auth-key case */
+    uint8_t       uid[WH_SHE_UID_SZ]       = {0};
+    uint8_t       secretKey[WH_SHE_KEY_SZ] = {
+        0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
+        0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
+    uint8_t       rawKey[WH_SHE_KEY_SZ] = {
+        0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08,
+        0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00};
+    uint8_t       oversize[WH_SHE_KEY_SZ * 2];
+    uint8_t       m4[WH_SHE_M4_SZ];
+    uint8_t       m5[WH_SHE_M5_SZ];
+    whNvmMetadata meta  = {0};
+    whNvmMetadata check = {0};
+    uint32_t      count = 0;
+    uint32_t      flags = 0;
+    whNvmId       secretId;
+    whNvmId       authId;
+    whNvmId       targetId;
+    whNvmId       newId;
+    whMessageShe_LoadKeyRequest* req =
+        (whMessageShe_LoadKeyRequest*)req_packet;
+    whMessageShe_LoadKeyResponse* resp =
+        (whMessageShe_LoadKeyResponse*)resp_packet;
+
+    memset(she, 0, sizeof(she));
+    memset(memory, 0, sizeof(memory));
+    memset(oversize, 0x5A, sizeof(oversize));
+
+    fc_conf->size       = FLASH_RAM_SIZE;
+    fc_conf->sectorSize = FLASH_SECTOR_SIZE;
+    fc_conf->pageSize   = FLASH_PAGE_SIZE;
+    fc_conf->erasedByte = ~(uint8_t)0;
+    fc_conf->memory     = memory;
+
+    WH_TEST_RETURN_ON_FAIL(wh_Nvm_Init(nvm, n_conf));
+    WH_TEST_RETURN_ON_FAIL(wolfCrypt_Init());
+    WH_TEST_RETURN_ON_FAIL(wc_InitRng_ex(crypto->rng, NULL, s_conf->devId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_Init(server, s_conf));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_SetConnected(server, WH_COMM_CONNECTED));
+
+    /* Bind a client id the way COMM INIT would and open the state gate */
+    server->comm->client_id = 1;
+    server->she->uidSet     = 1;
+    server->she->sbState    = TEST_SHE_SB_STATE_SUCCESS;
+
+    secretId = WH_SHE_MAKE_KEYID(server->comm->client_id, WH_SHE_SECRET_KEY_ID);
+    authId   = WH_SHE_MAKE_KEYID(server->comm->client_id, SLOT_AUTH);
+    targetId = WH_SHE_MAKE_KEYID(server->comm->client_id, SLOT_TARGET);
+    newId    = WH_SHE_MAKE_KEYID(server->comm->client_id, SLOT_NEW);
+
+    /* SECRET_KEY authorizes the target-slot case */
+    meta.id     = secretId;
+    meta.access = WH_NVM_ACCESS_ANY;
+    meta.flags  = WH_NVM_FLAGS_NONE;
+    meta.len    = WH_SHE_KEY_SZ;
+    wh_She_Meta2Label(0, 0, meta.label);
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, &meta, WH_SHE_KEY_SZ, secretKey));
+
+    /* An oversized object in a slot that will be named as the auth key */
+    meta.id  = authId;
+    meta.len = sizeof(oversize);
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, &meta, sizeof(oversize), oversize));
+
+    /* An oversized, write-protected object in a slot named as the target */
+    meta.id = targetId;
+    wh_She_Meta2Label(0, WH_SHE_FLAG_WRITE_PROTECT, meta.label);
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, &meta, sizeof(oversize), oversize));
+
+    /* === Oversized auth key slot === */
+    WH_TEST_RETURN_ON_FAIL(wh_She_GenerateLoadableKey(
+        SLOT_NEW, SLOT_AUTH, 1, 0, uid, rawKey, oversize, req->messageOne,
+        req->messageTwo, req->messageThree, m4, m5));
+    memset(resp, 0, sizeof(*resp));
+    ret = wh_Server_HandleSheRequest(server, WH_COMM_MAGIC_NATIVE,
+                                     WH_SHE_LOAD_KEY, sizeof(*req), req_packet,
+                                     &resp_size, resp_packet);
+    WH_TEST_ASSERT_RETURN(ret == 0);
+    WH_TEST_ASSERT_RETURN(resp_size == sizeof(*resp));
+    WH_TEST_ASSERT_RETURN(resp->rc == WH_SHE_ERC_KEY_INVALID);
+    /* Nothing was written to the target */
+    WH_TEST_ASSERT_RETURN(wh_Nvm_GetMetadata(server->nvm, newId, &check) ==
+                          WH_ERROR_NOTFOUND);
+    WH_TEST_PRINT("SHE oversized auth key SUCCESS\n");
+
+    /* === Oversized target key slot === */
+    WH_TEST_RETURN_ON_FAIL(wh_She_GenerateLoadableKey(
+        SLOT_TARGET, WH_SHE_SECRET_KEY_ID, 1, 0, uid, rawKey, secretKey,
+        req->messageOne, req->messageTwo, req->messageThree, m4, m5));
+    memset(resp, 0, sizeof(*resp));
+    ret = wh_Server_HandleSheRequest(server, WH_COMM_MAGIC_NATIVE,
+                                     WH_SHE_LOAD_KEY, sizeof(*req), req_packet,
+                                     &resp_size, resp_packet);
+    WH_TEST_ASSERT_RETURN(ret == 0);
+    WH_TEST_ASSERT_RETURN(resp_size == sizeof(*resp));
+    WH_TEST_ASSERT_RETURN(resp->rc == WH_SHE_ERC_KEY_INVALID);
+    /* The slot is untouched: still oversized and still write-protected */
+    WH_TEST_ASSERT_RETURN(wh_Nvm_GetMetadata(server->nvm, targetId, &check) ==
+                          WH_ERROR_OK);
+    WH_TEST_ASSERT_RETURN(check.len == sizeof(oversize));
+    wh_She_Label2Meta(check.label, &count, &flags);
+    WH_TEST_ASSERT_RETURN((flags & WH_SHE_FLAG_WRITE_PROTECT) != 0);
+    WH_TEST_PRINT("SHE oversized target key SUCCESS\n");
+
+    WH_TEST_PRINT("SHE LoadKey oversized slot test SUCCESS\n");
 
     wh_Server_Cleanup(server);
     wh_Nvm_Cleanup(nvm);
@@ -2799,6 +2995,7 @@ exit:
 
 /* Drive the two sessions back-to-back. Each MemThreadTest call uses a fresh
  * server + NVM, modeling the power cycle between provision and restore. */
+
 static int wh_She_TestWrappedInterop(void)
 {
     int ret;
@@ -2826,6 +3023,7 @@ int whTest_She(void)
     WH_TEST_RETURN_ON_FAIL(wh_She_TestStateGate());
     WH_TEST_PRINT("Testing SHE: GET_ID empty-key / pre-secure-boot...\n");
     WH_TEST_RETURN_ON_FAIL(wh_She_TestGetId());
+    WH_TEST_RETURN_ON_FAIL(wh_She_TestLoadKeyOversizedSlot());
     WH_TEST_PRINT("Testing SHE: (pthread) mem core flow...\n");
     WH_TEST_RETURN_ON_FAIL(
         wh_ClientServer_MemThreadTest(whTest_SheClientConfig));

@@ -51,10 +51,9 @@ typedef uint16_t whKeyId;
  * namespace (WH_KEYUSER_GLOBAL), and larger values would be silently
  * truncated by WH_MAKE_KEYID, breaking per-client key isolation.
  * wh_Client_Init() rejects out-of-range ids (including 0) before any
- * communication; the server rejects ids above the maximum at
- * WH_MESSAGE_COMM_ACTION_INIT and, with WOLFHSM_CFG_GLOBAL_KEYS, also rejects
- * 0. Derived from WH_KEYUSER_MASK so the bound stays in sync if the USER
- * field is ever widened. */
+ * communication, and the server rejects both 0 and ids above the maximum at
+ * WH_MESSAGE_COMM_ACTION_INIT. Derived from WH_KEYUSER_MASK so the bound stays
+ * in sync if the USER field is ever widened. */
 #define WH_CLIENT_ID_MAX (WH_KEYUSER_MASK >> WH_KEYUSER_SHIFT)
 
 /*
@@ -173,6 +172,36 @@ whKeyId wh_KeyId_TranslateFromClient(uint16_t type, uint16_t clientId,
  */
 whKeyId wh_KeyId_TranslateObjectFromClient(uint16_t type, uint16_t clientId,
                                            whKeyId reqId);
+
+/**
+ * @brief Check a client-supplied fixed-type object id before translating it.
+ *
+ * Shared by every fixed-type object API (NVM objects, counters, certificates)
+ * on every verb. Rejects bits above the id and client-flag fields, which
+ * translation would silently drop and so remap the request onto a different
+ * object, and the wrapped and hardware flags, which are not valid for these
+ * objects. The GLOBAL flag is allowed, as is an id portion of 0 (the NVM List
+ * start-from-beginning sentinel); creating verbs apply the stricter
+ * wh_KeyId_CheckClientObjectIdForCreate().
+ *
+ * @param reqId Requested id from the client (may include flags)
+ * @return WH_ERROR_OK if the id is well formed, WH_ERROR_BADARGS otherwise.
+ */
+int wh_KeyId_CheckClientObjectId(whKeyId reqId);
+
+/**
+ * @brief Check a client-supplied id that creates a fixed-type object.
+ *
+ * Applies wh_KeyId_CheckClientObjectId() plus the creation rules: the id
+ * portion must be nonzero (0 is the erased sentinel and no object API
+ * auto-assigns ids), and without WOLFHSM_CFG_GLOBAL_KEYS the GLOBAL flag is
+ * rejected so the create fails loudly instead of silently landing in the
+ * caller's own namespace.
+ *
+ * @param reqId Requested id from the client (may include flags)
+ * @return WH_ERROR_OK if the id may be created, WH_ERROR_BADARGS otherwise.
+ */
+int wh_KeyId_CheckClientObjectIdForCreate(whKeyId reqId);
 
 /**
  * @brief Translate server keyId to client keyId format (with flags)

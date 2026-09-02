@@ -64,8 +64,8 @@ static whNvmId _NvmTranslateFromClient(whServerContext* server,
      * the GLOBAL flag is set), and strips the wrapped/hardware flags so a
      * client cannot reach a wrapped-key or hardware object through the NVM API.
      * Every request path already rejects those flags (see
-     * _NvmCheckClientIdBits); the helper's stripping is a backstop that keeps
-     * any future path TYPE=NVM. */
+     * wh_KeyId_CheckClientObjectId); the helper's stripping is a backstop that
+     * keeps any future path TYPE=NVM. */
     return wh_KeyId_TranslateObjectFromClient(
         WH_KEYTYPE_NVM, server->comm->client_id, clientId);
 #endif
@@ -79,46 +79,6 @@ static whNvmId _NvmTranslateToClient(whNvmId serverId)
     return wh_KeyId_TranslateToClient(serverId);
 #endif
 }
-
-#ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
-/* Field check applied to every client-supplied id, on every verb. Bits above
- * the id and client-flag fields would be silently dropped by translation,
- * remapping the request onto a different object, so a legacy-style 16-bit id
- * must fail loudly instead. The WRAPPED and HW flags are rejected because
- * they are not valid for NVM objects. The GLOBAL flag is allowed (it selects
- * the shared namespace with WOLFHSM_CFG_GLOBAL_KEYS and is inert otherwise),
- * as is an id portion of 0 (List's start-from-beginning sentinel). */
-static int _NvmCheckClientIdBits(whNvmId clientId)
-{
-    if ((clientId & (whNvmId) ~(WH_KEYID_MASK | WH_CLIENT_KEYID_FLAGS_MASK)) !=
-        0) {
-        return WH_ERROR_BADARGS;
-    }
-    if ((clientId & (WH_KEYID_CLIENT_WRAPPED_FLAG | WH_KEYID_CLIENT_HW_FLAG)) !=
-        0) {
-        return WH_ERROR_BADARGS;
-    }
-    return WH_ERROR_OK;
-}
-
-/* Additional rules for creating an object: the bare id portion must be
- * non-zero (id=0 is the erased sentinel; auto-generation is not supported
- * here), and without global keys the GLOBAL flag is rejected so an add fails
- * loudly instead of silently landing in the caller's own namespace. */
-static int _NvmValidateClientId(whNvmId clientId)
-{
-    if ((clientId & WH_KEYID_MASK) == WH_KEYID_ERASED) {
-        return WH_ERROR_BADARGS;
-    }
-#ifndef WOLFHSM_CFG_GLOBAL_KEYS
-    /* No global namespace in this build */
-    if ((clientId & WH_KEYID_CLIENT_GLOBAL_FLAG) != 0) {
-        return WH_ERROR_BADARGS;
-    }
-#endif
-    return _NvmCheckClientIdBits(clientId);
-}
-#endif
 
 /* Handle NVM read, do access checking and clamping */
 static int _HandleNvmRead(whServerContext* server, uint8_t* out_data,
@@ -171,23 +131,6 @@ int wh_Server_HandleNvmRequest(whServerContext* server,
             (out_resp_size == NULL) ) {
         return WH_ERROR_BADARGS;
     }
-
-#ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
-    /* Client NVM ids are translated through the connection's client id (the
-     * USER field). Before COMM INIT binds a nonzero id that field is 0, which
-     * would map every request into the USER=0 (shared/global and factory-
-     * provisioned) namespace. Refuse NVM from an unbound client; a valid
-     * connection always has a nonzero id, so this only rejects pre-handshake
-     * requests. */
-    if (server->comm->client_id == WH_KEYUSER_GLOBAL) {
-        whMessageNvm_SimpleResponse resp = {0};
-        resp.rc                          = WH_ERROR_ACCESS;
-        wh_MessageNvm_TranslateSimpleResponse(
-            magic, &resp, (whMessageNvm_SimpleResponse*)resp_packet);
-        *out_resp_size = sizeof(resp);
-        return WH_ERROR_ACCESS;
-    }
-#endif
 
     /* III: Translate function returns do not need to be checked since args
      * are not NULL */
@@ -248,7 +191,7 @@ int wh_Server_HandleNvmRequest(whServerContext* server,
                     (whMessageNvm_ListRequest*)req_packet, &req);
 
 #ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
-            rc = _NvmCheckClientIdBits(req.startId);
+            rc = wh_KeyId_CheckClientObjectId(req.startId);
             if (rc == WH_ERROR_OK) {
                 rc = WH_SERVER_NVM_LOCK(server);
             }
@@ -375,7 +318,7 @@ int wh_Server_HandleNvmRequest(whServerContext* server,
                     (whMessageNvm_GetMetadataRequest*)req_packet, &req);
 
 #ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
-            rc = _NvmCheckClientIdBits(req.id);
+            rc = wh_KeyId_CheckClientObjectId(req.id);
             if (rc == WH_ERROR_OK) {
                 rc = WH_SERVER_NVM_LOCK(server);
             }
@@ -423,7 +366,8 @@ int wh_Server_HandleNvmRequest(whServerContext* server,
                     (whMessageNvm_AddObjectRequest*)req_packet, &req);
             if(req_size == (hdr_len + req.len)) {
 #ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
-                int validate_rc = _NvmValidateClientId(req.id);
+                int validate_rc =
+                    wh_KeyId_CheckClientObjectIdForCreate(req.id);
                 if (validate_rc != WH_ERROR_OK) {
                     resp.rc = validate_rc;
                 }
@@ -459,6 +403,11 @@ int wh_Server_HandleNvmRequest(whServerContext* server,
                     resp.rc = rc;
                 }
             }
+            else {
+                /* Payload length disagrees with the packet: nothing was
+                 * written, so do not report success */
+                resp.rc = WH_ERROR_ABORTED;
+            }
         }
         /* Convert the response struct */
         wh_MessageNvm_TranslateSimpleResponse(magic,
@@ -488,7 +437,7 @@ int wh_Server_HandleNvmRequest(whServerContext* server,
 #ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
                     /* One malformed id fails the whole request, so no entry
                      * can silently target a different object */
-                    rc = _NvmCheckClientIdBits(req.list[i]);
+                    rc = wh_KeyId_CheckClientObjectId(req.list[i]);
                     if (rc != WH_ERROR_OK) {
                         break;
                     }
@@ -538,7 +487,7 @@ int wh_Server_HandleNvmRequest(whServerContext* server,
                 magic, (whMessageNvm_ReadRequest*)req_packet, &req);
 
 #ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
-            rc = _NvmCheckClientIdBits(req.id);
+            rc = wh_KeyId_CheckClientObjectId(req.id);
             if (rc == WH_ERROR_OK) {
                 rc = WH_SERVER_NVM_LOCK(server);
             }
@@ -611,7 +560,7 @@ int wh_Server_HandleNvmRequest(whServerContext* server,
              * field without touching host memory. */
             whNvmMetadata local_meta = *(const whNvmMetadata*)metadata;
 #ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
-            resp.rc = _NvmValidateClientId(local_meta.id);
+            resp.rc = wh_KeyId_CheckClientObjectIdForCreate(local_meta.id);
 #endif
 #if !defined(WOLFHSM_CFG_NO_CRYPTO) && \
     (defined(WOLFSSL_HAVE_LMS) || defined(WOLFSSL_HAVE_XMSS))
@@ -674,7 +623,7 @@ int wh_Server_HandleNvmRequest(whServerContext* server,
             wh_MessageNvm_TranslateReadDmaRequest(magic,
                     (whMessageNvm_ReadDmaRequest*)req_packet, &req);
 #ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
-            resp.rc = _NvmCheckClientIdBits(req.id);
+            resp.rc = wh_KeyId_CheckClientObjectId(req.id);
 #endif
         }
         if (resp.rc == 0) {

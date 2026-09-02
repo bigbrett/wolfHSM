@@ -183,6 +183,8 @@ static int _testGlobalKeyBasic(whClientContext* client1,
  * - Client 2 reads the same global counter id and sees the shared value
  * - A plain (per-client) id of the same number is a different counter that
  *   does not exist for client 2
+ * - A global counter has no owner: client 2 can increment, re-initialize and
+ *   destroy it, and client 1 sees each change
  */
 static int _testGlobalCounter(whClientContext* client1,
                               whServerContext* server1,
@@ -220,10 +222,32 @@ static int _testGlobalCounter(whClientContext* client1,
     ret = wh_Client_CounterReadResponse(client2, &val);
     WH_TEST_ASSERT_RETURN(ret == WH_ERROR_NOTFOUND);
 
-    /* Clean up the global counter */
-    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterDestroyRequest(client1, gCtr));
+    /* A global counter has no owner, exactly like a global key: client 2
+     * increments it, resets it to 5, and client 1 sees both changes. */
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterIncrementRequest(client2, gCtr));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterIncrementResponse(client2, &val));
+    WH_TEST_ASSERT_RETURN(val == 43);
+
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterInitRequest(client2, gCtr, 5));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterInitResponse(client2, &val));
+    WH_TEST_ASSERT_RETURN(val == 5);
+
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterReadRequest(client1, gCtr));
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
-    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterDestroyResponse(client1));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterReadResponse(client1, &val));
+    WH_TEST_ASSERT_RETURN(val == 5);
+
+    /* Client 2 destroys it, and it is gone for client 1 too */
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterDestroyRequest(client2, gCtr));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server2));
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterDestroyResponse(client2));
+
+    WH_TEST_RETURN_ON_FAIL(wh_Client_CounterReadRequest(client1, gCtr));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_HandleRequestMessage(server1));
+    ret = wh_Client_CounterReadResponse(client1, &val);
+    WH_TEST_ASSERT_RETURN(ret == WH_ERROR_NOTFOUND);
 
     WH_TEST_PRINT("  PASS: Global counter shared across clients\n");
     return 0;
@@ -1519,11 +1543,11 @@ static int _testNvmClientIsolation(whClientContext* client1,
     memset(buf, 0, sizeof(buf));
     WH_TEST_RETURN_ON_FAIL(_nvmReadViaServer(
         client2, server2, shared_id, sizeof(buf), &out_rc, &out_len, buf));
-    /* Either NOTFOUND or read returned different bytes; never A's plaintext. */
-    if (out_rc == WH_ERROR_OK) {
-        WH_TEST_ASSERT_RETURN(memcmp(buf, NVM_ISOLATION_PAYLOAD_A,
-                                     sizeof(NVM_ISOLATION_PAYLOAD_A)) != 0);
-    }
+    /* B has no object 5 yet, so the read must miss and return no bytes */
+    WH_TEST_ASSERT_RETURN(out_rc == WH_ERROR_NOTFOUND);
+    WH_TEST_ASSERT_RETURN(out_len == 0);
+    WH_TEST_ASSERT_RETURN(memcmp(buf, NVM_ISOLATION_PAYLOAD_A,
+                                 sizeof(NVM_ISOLATION_PAYLOAD_A)) != 0);
 
     /* Client B adds its own object at the same client-facing id=5 */
     out_rc = 0;
@@ -1609,11 +1633,11 @@ static int _testNvmUnboundClientRejected(whClientContext* client1,
     saved_id                 = server1->comm->client_id;
     server1->comm->client_id = WH_KEYUSER_GLOBAL;
 
-    /* A verb counts as refused when the response parse fails (an early reject
-     * sends a SimpleResponse whose size won't match a read/list/metadata
-     * response) or when out_rc is an error. Accumulate a "leaked" flag across
-     * all verbs, then restore client_id before asserting so a failure can't
-     * corrupt later tests sharing this server. */
+    /* Every verb must be refused with a properly shaped reply carrying
+     * WH_ERROR_ACCESS; a parse failure would be a malformed reply, not a
+     * refusal. Accumulate a "leaked" flag across all verbs, then restore
+     * client_id before asserting so a failure can't corrupt later tests
+     * sharing this server. */
 
     /* Read: refused, and never returns the planted bytes. */
     prc = wh_Client_NvmReadRequest(client1, planted_id, 0, sizeof(buf));
@@ -1623,7 +1647,7 @@ static int _testNvmUnboundClientRejected(whClientContext* client1,
     if (prc == WH_ERROR_OK) {
         prc = wh_Client_NvmReadResponse(client1, &out_rc, &out_len, buf);
     }
-    if ((prc == WH_ERROR_OK) && (out_rc == WH_ERROR_OK)) {
+    if ((prc != WH_ERROR_OK) || (out_rc != WH_ERROR_ACCESS)) {
         leaked = 1;
     }
     if (memcmp(buf, NVM_ISOLATION_PAYLOAD_B, sizeof(NVM_ISOLATION_PAYLOAD_B)) ==
@@ -1645,7 +1669,7 @@ static int _testNvmUnboundClientRejected(whClientContext* client1,
         prc = wh_Client_NvmGetMetadataResponse(client1, &out_rc, &got_id,
                                                &access, &flags, &len, 0, NULL);
     }
-    if ((prc == WH_ERROR_OK) && (out_rc == WH_ERROR_OK)) {
+    if ((prc != WH_ERROR_OK) || (out_rc != WH_ERROR_ACCESS)) {
         leaked = 1;
     }
 
@@ -1659,7 +1683,7 @@ static int _testNvmUnboundClientRejected(whClientContext* client1,
     if (prc == WH_ERROR_OK) {
         prc = wh_Client_NvmListResponse(client1, &out_rc, &count, &list_id);
     }
-    if ((prc == WH_ERROR_OK) && (out_rc == WH_ERROR_OK)) {
+    if ((prc != WH_ERROR_OK) || (out_rc != WH_ERROR_ACCESS)) {
         leaked = 1;
     }
 
@@ -1675,7 +1699,7 @@ static int _testNvmUnboundClientRejected(whClientContext* client1,
     if (prc == WH_ERROR_OK) {
         prc = wh_Client_NvmDestroyObjectsResponse(client1, &out_rc);
     }
-    if ((prc == WH_ERROR_OK) && (out_rc == WH_ERROR_OK)) {
+    if ((prc != WH_ERROR_OK) || (out_rc != WH_ERROR_ACCESS)) {
         leaked = 1;
     }
 
@@ -1690,7 +1714,7 @@ static int _testNvmUnboundClientRejected(whClientContext* client1,
     if (prc == WH_ERROR_OK) {
         prc = wh_Client_NvmAddObjectResponse(client1, &out_rc);
     }
-    if ((prc == WH_ERROR_OK) && (out_rc == WH_ERROR_OK)) {
+    if ((prc != WH_ERROR_OK) || (out_rc != WH_ERROR_ACCESS)) {
         leaked = 1;
     }
 
@@ -1712,7 +1736,7 @@ static int _testNvmUnboundClientRejected(whClientContext* client1,
         if (prc == WH_ERROR_OK) {
             prc = wh_Client_NvmAddObjectDmaResponse(client1, &out_rc);
         }
-        if ((prc == WH_ERROR_OK) && (out_rc == WH_ERROR_OK)) {
+        if ((prc != WH_ERROR_OK) || (out_rc != WH_ERROR_ACCESS)) {
             leaked = 1;
         }
     }
@@ -1728,7 +1752,7 @@ static int _testNvmUnboundClientRejected(whClientContext* client1,
     if (prc == WH_ERROR_OK) {
         prc = wh_Client_NvmReadDmaResponse(client1, &out_rc);
     }
-    if ((prc == WH_ERROR_OK) && (out_rc == WH_ERROR_OK)) {
+    if ((prc != WH_ERROR_OK) || (out_rc != WH_ERROR_ACCESS)) {
         leaked = 1;
     }
     if (memcmp(buf, NVM_ISOLATION_PAYLOAD_B, sizeof(NVM_ISOLATION_PAYLOAD_B)) ==
@@ -1741,6 +1765,15 @@ static int _testNvmUnboundClientRejected(whClientContext* client1,
     server1->comm->client_id = saved_id;
 
     WH_TEST_ASSERT_RETURN(leaked == 0);
+
+    /* The refused adds must not have created USER=0 object 5 either. */
+    {
+        whNvmId       added_id =
+            WH_MAKE_KEYID(WH_KEYTYPE_NVM, WH_KEYUSER_GLOBAL, 5);
+        whNvmMetadata check = {0};
+        WH_TEST_ASSERT_RETURN(wh_Nvm_GetMetadata(server1->nvm, added_id,
+                                                 &check) == WH_ERROR_NOTFOUND);
+    }
 
     /* The planted USER=0 object must still exist, unchanged. */
     memset(buf, 0, sizeof(buf));
@@ -1814,7 +1847,6 @@ static int _testNvmGlobalNamespaceList(whClientContext* client1,
         }
         /* Must not carry the GLOBAL flag */
         WH_TEST_ASSERT_RETURN((cur & WH_KEYID_CLIENT_GLOBAL_FLAG) == 0);
-        WH_TEST_ASSERT_RETURN((cur & WH_KEYID_MASK) <= WH_KEYID_IDMAX);
         seen_own[cur & WH_KEYID_MASK] = 1;
         if (count == 1) {
             break;

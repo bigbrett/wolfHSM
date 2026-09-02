@@ -1582,7 +1582,17 @@ int wh_Client_DataUnwrapResponse(whClientContext*   ctx,
                                  enum wc_CipherType cipherType, void* dataOut,
                                  uint32_t* dataSz);
 
-/* Counter functions */
+/* Counter functions
+ *
+ * A counter id uses the client-facing key id encoding: bits 0-7 hold the
+ * counter number 1..255 (0 is invalid) and bit 8
+ * (`WH_KEYID_CLIENT_GLOBAL_FLAG`, or `WH_CLIENT_KEYID_MAKE_GLOBAL()`) selects
+ * the shared global namespace when WOLFHSM_CFG_GLOBAL_KEYS is defined. A plain
+ * id is private to the calling client. Ids with any other bit set, or with
+ * the GLOBAL flag when global keys are disabled, are rejected with
+ * WH_ERROR_BADARGS. A global counter has no owner: any client that names it
+ * may initialize (rewind), increment, read, or destroy it, just as any client
+ * may use or erase a global key. */
 int wh_Client_CounterInitRequest(whClientContext* c, whNvmId counterId,
     uint32_t counter);
 int wh_Client_CounterInitResponse(whClientContext* c, uint32_t* counter);
@@ -1678,19 +1688,26 @@ int wh_Client_CounterDestroy(whClientContext* c, whNvmId counterId);
  *                                           WOLFHSM_CFG_GLOBAL_KEYS; without
  *                                           it AddObject rejects the flag and
  *                                           the other verbs ignore it.
- *   - Bit  9     (`WH_KEYID_CLIENT_WRAPPED_FLAG`): reserved; NVM AddObject
+ *   - Bit  9     (`WH_KEYID_CLIENT_WRAPPED_FLAG`): reserved; every NVM verb
  *                                           rejects ids with this flag set.
- *   - Bit 10     (`WH_KEYID_CLIENT_HW_FLAG`): reserved; NVM AddObject
+ *   - Bit 10     (`WH_KEYID_CLIENT_HW_FLAG`): reserved; every NVM verb
  *                                           rejects ids with this flag set.
+ *   - Bits 11-15: must be zero; every NVM verb rejects ids with any of them
+ *                                           set, since they cannot be
+ *                                           translated.
  *
- * The server translates each request id into a TYPE/USER/ID server-internal
- * encoding via `wh_KeyId_TranslateFromClient(WH_KEYTYPE_NVM, client_id, id)`
- * before reaching the underlying NVM layer. This gives every client a private
- * 1..255 namespace (plus a shared 1..255 global namespace when
- * WOLFHSM_CFG_GLOBAL_KEYS is defined) and prevents the client NVM API from
- * being used to reach keys, counters, SHE objects, or other clients' data.
- * Without WOLFHSM_CFG_GLOBAL_KEYS, USER=0 objects such as factory-provisioned
- * ones are unreachable through this API.
+ * The server translates each request id into its TYPE/USER/ID internal
+ * encoding before it reaches the underlying NVM layer. This gives every
+ * client a private 1..255 namespace (plus a shared 1..255 global namespace
+ * when WOLFHSM_CFG_GLOBAL_KEYS is defined) and prevents the client NVM API
+ * from being used to reach keys, counters, SHE objects, or other clients'
+ * data. Without WOLFHSM_CFG_GLOBAL_KEYS, USER=0 objects such as
+ * factory-provisioned ones are unreachable through this API.
+ *
+ * The USER field is the client id bound by wh_Client_CommInit(), so the
+ * server refuses every request other than the COMM group until COMM INIT has
+ * completed; the refusal carries WH_ERROR_ACCESS in the refused action's own
+ * response layout.
  *
  * With WOLFHSM_CFG_GLOBAL_KEYS, `wh_Client_NvmList` honors the GLOBAL flag on
  * `startId` as a namespace selector: pass 0 to iterate the calling client's
@@ -1699,8 +1716,10 @@ int wh_Client_CounterDestroy(whClientContext* c, whNvmId counterId);
  * calls. Without it, the flag is ignored and List walks the caller's own
  * namespace.
  *
- * Define `WOLFHSM_CFG_LEGACY_CLIENT_NVM` to disable translation entirely and
- * fall back to the legacy global-flat 16-bit id space.
+ * Define `WOLFHSM_CFG_LEGACY_CLIENT_NVM` to disable translation for the NVM
+ * verbs only and fall back to the legacy global-flat 16-bit id space for
+ * them. Key, counter and certificate ids are translated regardless, and COMM
+ * INIT remains a prerequisite for every request.
  */
 
 /** NVM functions */
@@ -2743,7 +2762,20 @@ int wh_Client_AuthUserSetCredentials(
     whClientContext* c, whUserId user_id, whAuthMethod method,
     const void* current_credentials, uint16_t current_credentials_len,
     const void* new_credentials, uint16_t new_credentials_len, int32_t* out_rc);
-/* Certificate functions */
+/* Certificate functions
+ *
+ * Every certificate id below (the trusted-root id of the add, erase and read
+ * verbs and the root ids passed to the verify verbs) uses the client-facing
+ * key id encoding: bits 0-7 name a root 1..255 in the calling client's own
+ * trust store, and bit 8 (`WH_KEYID_CLIENT_GLOBAL_FLAG`, or
+ * `WH_CLIENT_KEYID_MAKE_GLOBAL()`) selects the shared global trust store when
+ * WOLFHSM_CFG_GLOBAL_KEYS is defined. The server stores roots as NVM objects
+ * of TYPE WH_KEYTYPE_CERT in that namespace, so a client cannot name a key,
+ * counter, or other object through these verbs. Ids with any other bit set
+ * are rejected with WH_ERROR_BADARGS, as is adding a root at id 0. Roots
+ * provisioned at build time or shared with server-internal users (such as the
+ * image manager) must be stored with that internal encoding; see the
+ * Trusted Root Storage section of the manual. */
 
 /**
  * @brief Sends a request to initialize the certificate manager on the server.

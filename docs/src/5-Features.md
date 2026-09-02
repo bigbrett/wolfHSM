@@ -225,11 +225,13 @@ The access field is used to express coarser-grained permissions (owner / other /
 
 Everything above describes the server's view of the object store. Clients reach it remotely through the `wh_Client_Nvm*` request API — `wh_Client_NvmAddObject`, `wh_Client_NvmRead`, `wh_Client_NvmList`, `wh_Client_NvmGetMetadata`, `wh_Client_NvmDestroyObjects`, `wh_Client_NvmGetAvailable`, and the [DMA variants](#dma-support) of add and read — which the server executes against the same `wh_Nvm_*` interface. The id a client supplies, however, is not the raw internal `whNvmId`: exactly as with [key ids](#key-cache-key-ids-and-nvm-backing-store), the server translates every client-supplied NVM id at the request boundary, giving each client a private namespace of objects.
 
+Every such translation depends on the client id that COMM INIT binds to the connection, so the server refuses every request outside the COMM group until that handshake has completed: `wh_Client_CommInit()` must precede any NVM, key, counter, certificate, or SHE request. The refusal carries `WH_ERROR_ACCESS` in the response layout of the refused action.
+
 A client-facing NVM id uses the same encoding as a client-facing `whKeyId`:
 
 - **Bits 0–7**: the numeric object id, `1` through `255`. Zero is reserved as the erased sentinel and is rejected by `wh_Client_NvmAddObject` — unlike a key cache request, an NVM add never auto-assigns an id.
 - **Bit 8** (`WH_KEYID_CLIENT_GLOBAL_FLAG`): selects the **shared global namespace** instead of the calling client's private one. This is the same flag-and-translation mechanism used by [global keys](#global-keys), and like global keys it is honored when `WOLFHSM_CFG_GLOBAL_KEYS` is defined. Without that define there is no global namespace: `wh_Client_NvmAddObject` rejects ids carrying the flag, and the remaining verbs (including `wh_Client_NvmList`) ignore it and operate on the caller's own namespace.
-- **Bits 9–10** (the wrapped and hardware-only key flags): not meaningful for NVM objects; `wh_Client_NvmAddObject` rejects ids carrying either flag.
+- **Bits 9–10** (the wrapped and hardware-only key flags): not meaningful for NVM objects; every NVM API rejects ids carrying either flag. Bits above bit 10 are rejected as well, since translation would otherwise drop them and silently address a different object.
 
 On each request the server expands the client's id into the full internal form with TYPE = `WH_KEYTYPE_NVM` and USER = the connection's client id (or `0` for the global namespace), and collapses it back in responses. The isolation consequences mirror the keystore's:
 
@@ -241,7 +243,7 @@ When `WOLFHSM_CFG_GLOBAL_KEYS` is defined, `wh_Client_NvmList` treats the GLOBAL
 
 Access- and flags-based filtering and the policy-checked NVM variants apply unchanged after translation, and server-local code with direct access to the `wh_Nvm_*` API is unaffected — it continues to address objects by full internal id.
 
-For integrations that depend on the historical behavior, defining `WOLFHSM_CFG_LEGACY_CLIENT_NVM` disables the translation entirely and restores the flat 16-bit id space shared by all clients — along with the cross-client reachability that comes with it. See [Configuration](9-Configuration.md#nvm-storage).
+For integrations that depend on the historical behavior, defining `WOLFHSM_CFG_LEGACY_CLIENT_NVM` disables the translation for the NVM message group only, restoring the flat 16-bit id space shared by all clients for the `wh_Client_Nvm*` requests — along with the cross-client reachability that comes with it. Key, counter, and certificate ids are translated regardless of the define, and COMM INIT remains a prerequisite for every request. See [Configuration](9-Configuration.md#nvm-storage).
 
 ### NVM Backends
 
@@ -502,7 +504,11 @@ Under the hood, chain verification is delegated to wolfSSL's `WOLFSSL_CERT_MANAG
 
 ### Trusted Root Storage
 
-Trusted root certificates are stored as ordinary NVM objects (see [Non-Volatile Memory](#non-volatile-memory-nvm)). Each root is a DER-encoded X.509 certificate written into NVM under a caller-chosen `whNvmId` with full `whNvmMetadata` — access bits, flags, and label — so that the same access-control machinery that applies to keys also applies to roots.
+Trusted root certificates are stored as NVM objects (see [Non-Volatile Memory](#non-volatile-memory-nvm)) of TYPE = `WH_KEYTYPE_CERT`. Each root is a DER-encoded X.509 certificate written into NVM with full `whNvmMetadata` — access bits, flags, and label — so that the same access-control machinery that applies to keys also applies to roots.
+
+The id a client supplies follows the same per-client scheme as [keys](#key-cache-key-ids-and-nvm-backing-store), [NVM objects](#client-nvm-access-and-per-client-namespaces), and counters: a plain id `1`–`255` names a root in the calling client's own trust store, and `WH_KEYID_CLIENT_GLOBAL_FLAG` selects the shared global trust store when `WOLFHSM_CFG_GLOBAL_KEYS` is defined. The server expands the id to TYPE = `WH_KEYTYPE_CERT`, USER = the connection's client id (or `0` for the global store), and ID = the supplied value, on every certificate API including the verify root ids. Ids with bits outside those fields, or carrying the wrapped or hardware key flags, are rejected with `WH_ERROR_BADARGS`, and adding a root at id `0` is rejected as well. `WOLFHSM_CFG_LEGACY_CLIENT_NVM` does not affect certificate ids.
+
+Server-internal callers, such as the [image manager](#image-manager)'s `sigNvmId`, address roots by full internal id, so a root shared between a client and the image manager must be referenced internally as `WH_MAKE_KEYID(WH_KEYTYPE_CERT, user, id)`. A root provisioned at build time must likewise be written into the image with that internal id; see the [NVM provisioning tool](6-Utilities.md#nvm-provisioning-tool).
 
 The lifecycle operations exposed to clients are:
 
@@ -843,7 +849,9 @@ Every mutating operation is committed by the NVM layer before the response is re
 
 ### Counter Identifiers and Storage
 
-A counter is referenced by a 16-bit `whNvmId` supplied by the caller, with `WH_KEYID_ERASED` (0) reserved as invalid. Internally the server encodes it as a `whKeyId` with TYPE = `WH_KEYTYPE_COUNTER`, USER = the connection's client id, and ID = the supplied value. This means counters inherit the keystore's [per-client isolation](#key-cache-key-ids-and-nvm-backing-store) — each client has its own counter namespace — and that counter id 5 and key id 5 are distinct objects in the same NVM store.
+A counter is referenced by a client-facing id supplied by the caller: bits 0–7 hold the counter number `1`–`255` (`WH_KEYID_ERASED`, 0, is invalid), and bit 8 (`WH_KEYID_CLIENT_GLOBAL_FLAG`) selects the shared global namespace when `WOLFHSM_CFG_GLOBAL_KEYS` is defined. Internally the server encodes it as a `whKeyId` with TYPE = `WH_KEYTYPE_COUNTER`, USER = the connection's client id (or `0` for a global counter), and ID = the supplied value. This means counters inherit the keystore's [per-client isolation](#key-cache-key-ids-and-nvm-backing-store) — each client has its own counter namespace, plus the shared global one — and that counter id 5 and key id 5 are distinct objects in the same NVM store. Ids with bits outside the id and flag fields, or carrying the wrapped or hardware key flags, are rejected with `WH_ERROR_BADARGS`; without `WOLFHSM_CFG_GLOBAL_KEYS` an init with the GLOBAL flag is rejected too.
+
+A global counter has no owner: any client that names it can initialize it (which rewinds it), increment, read, or destroy it, exactly as any client can use or erase a global key. Hand out global counter ids only to clients that are trusted with the counter's monotonicity.
 
 The 32-bit value is stored in the **`label` field of the object's `whNvmMetadata`** with a zero-length payload. A counter therefore lives entirely in the metadata that the NVM layer already reads on every directory operation, so an increment is a single metadata write and a read is satisfied by `wh_Nvm_GetMetadata` alone. The remainder of the label and the access/flags fields are unused by the counter subsystem. Counters share the `WOLFHSM_CFG_NVM_OBJECT_COUNT` object budget with keys and other NVM objects.
 

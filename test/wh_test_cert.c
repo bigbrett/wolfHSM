@@ -349,14 +349,14 @@ static int whTest_CertServerTrustedRespectsNvmPolicy(whServerConfig* serverCfg)
     return rc;
 }
 
-/* Keys and certs share the NVM id space, so a client that passes a trusted
- * KEK's id to a cert read handler must be refused. The trusted flag alone (no
- * NONEXPORTABLE) must be enough: the dispatcher is the only gate, since
- * wh_Server_CertReadTrusted() does an unchecked NVM read. Provision a
- * KEK-flagged object without NONEXPORTABLE and confirm both READTRUSTED and
- * READTRUSTED_DMA return WH_ERROR_ACCESS and leak no bytes. Driven through
- * wh_Server_HandleCertRequest() because the check lives in the dispatcher,
- * not in the server cert API. */
+/* A client that passes a trusted KEK's id to a cert read handler must never
+ * get the KEK bytes. The handler checks and translates every client id into
+ * the cert namespace (TYPE=CERT), so the KEK's full internal id is rejected
+ * outright and its bare 8-bit id names a different (nonexistent) cert object.
+ * Within the cert namespace, a SERVER_ONLY object is refused by the flag
+ * check, which is the only gate there since wh_Server_CertReadTrusted() does
+ * an unchecked NVM read. Driven through wh_Server_HandleCertRequest() because
+ * the checks live in the handler, not in the server cert API. */
 static int
 whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
 {
@@ -379,11 +379,13 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
     WH_TEST_PRINT("Cert ReadTrusted cannot reach a server-only KEK...\n");
 
     /* Provision a trusted KEK at a CRYPTO-typed id the way whnvmtool would.
-     * The cert read path translates every client id into the cert namespace
-     * (TYPE=CERT), so this crypto-typed KEK is not nameable through it at all:
-     * the lookup lands on a different (nonexistent) cert object and returns
-     * NOTFOUND, never the KEK. This is stronger than the old flag-gated
-     * behavior, which returned ACCESS after actually finding the KEK. */
+     * The cert read path checks and translates every client id into the cert
+     * namespace (TYPE=CERT), so this crypto-typed KEK is not nameable through
+     * it: its full internal id carries bits outside the client id fields and
+     * is rejected, and its bare 8-bit id lands on a different (nonexistent)
+     * cert object. Either way the KEK bytes never leave. This is stronger
+     * than the old flag-gated behavior, which returned ACCESS after actually
+     * finding the KEK. */
     meta.id     = WH_MAKE_KEYID(WH_KEYTYPE_CRYPTO, 0, 0x5A);
     meta.access = WH_NVM_ACCESS_ANY;
     meta.flags  = WH_NVM_FLAGS_TRUSTED | WH_NVM_FLAGS_USAGE_WRAP;
@@ -391,7 +393,10 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
     WH_TEST_RETURN_ON_FAIL(
         wh_Nvm_AddObject(server->nvm, &meta, sizeof(kek), kek));
 
-    /* READTRUSTED must not reach the KEK id and must return no cert bytes. */
+    /* READTRUSTED with the KEK's full internal id is rejected as malformed,
+     * and with its bare id misses; neither returns cert bytes. The handler
+     * formats resp.rc and also returns it; resp.rc is the client-visible
+     * signal, so assert on that rather than the return. */
     {
         whMessageCert_ReadTrustedRequest  req  = {0};
         whMessageCert_ReadTrustedResponse resp = {0};
@@ -399,23 +404,61 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
         req.id = meta.id;
         wh_MessageCert_TranslateReadTrustedRequest(
             magic, &req, (whMessageCert_ReadTrustedRequest*)req_packet);
-
-        /* The handler formats resp.rc and also returns it; resp.rc is the
-         * client-visible signal, so assert on that rather than the return. */
         (void)wh_Server_HandleCertRequest(
             server, magic, WH_MESSAGE_CERT_ACTION_READTRUSTED, /*seq=*/0,
             sizeof(req), req_packet, &resp_size, resp_packet);
-
         wh_MessageCert_TranslateReadTrustedResponse(
             magic, (whMessageCert_ReadTrustedResponse*)resp_packet, &resp);
+        WH_TEST_ASSERT_RETURN(resp.rc == WH_ERROR_BADARGS);
+        WH_TEST_ASSERT_RETURN(resp.cert_len == 0);
+        WH_TEST_ASSERT_RETURN(resp_size == sizeof(resp));
 
+        memset(&resp, 0, sizeof(resp));
+        req.id = WH_KEYID_ID(meta.id);
+        wh_MessageCert_TranslateReadTrustedRequest(
+            magic, &req, (whMessageCert_ReadTrustedRequest*)req_packet);
+        (void)wh_Server_HandleCertRequest(
+            server, magic, WH_MESSAGE_CERT_ACTION_READTRUSTED, /*seq=*/0,
+            sizeof(req), req_packet, &resp_size, resp_packet);
+        wh_MessageCert_TranslateReadTrustedResponse(
+            magic, (whMessageCert_ReadTrustedResponse*)resp_packet, &resp);
         WH_TEST_ASSERT_RETURN(resp.rc == WH_ERROR_NOTFOUND);
         WH_TEST_ASSERT_RETURN(resp.cert_len == 0);
         WH_TEST_ASSERT_RETURN(resp_size == sizeof(resp));
     }
 
+    /* A SERVER_ONLY object inside the cert namespace is nameable but must
+     * be refused by the flag check. */
+    {
+        whMessageCert_ReadTrustedRequest  req  = {0};
+        whMessageCert_ReadTrustedResponse resp = {0};
+        whNvmMetadata                     srv  = {0};
+
+        srv.id = WH_MAKE_KEYID(WH_KEYTYPE_CERT, server->comm->client_id, 0x5B);
+        srv.access = WH_NVM_ACCESS_ANY;
+        srv.flags  = WH_NVM_FLAGS_SERVER_ONLY;
+        srv.len    = sizeof(kek);
+        WH_TEST_RETURN_ON_FAIL(
+            wh_Nvm_AddObject(server->nvm, &srv, sizeof(kek), kek));
+
+        req.id = 0x5B;
+        wh_MessageCert_TranslateReadTrustedRequest(
+            magic, &req, (whMessageCert_ReadTrustedRequest*)req_packet);
+        (void)wh_Server_HandleCertRequest(
+            server, magic, WH_MESSAGE_CERT_ACTION_READTRUSTED, /*seq=*/0,
+            sizeof(req), req_packet, &resp_size, resp_packet);
+        wh_MessageCert_TranslateReadTrustedResponse(
+            magic, (whMessageCert_ReadTrustedResponse*)resp_packet, &resp);
+        WH_TEST_ASSERT_RETURN(resp.rc == WH_ERROR_ACCESS);
+        WH_TEST_ASSERT_RETURN(resp.cert_len == 0);
+        WH_TEST_ASSERT_RETURN(resp_size == sizeof(resp));
+
+        WH_TEST_RETURN_ON_FAIL(wh_Nvm_DestroyObjects(server->nvm, 1, &srv.id));
+    }
+
 #ifdef WOLFHSM_CFG_DMA
-    /* READTRUSTED_DMA must refuse it too and write nothing to the buffer. */
+    /* READTRUSTED_DMA with the bare id must miss too and write nothing to
+     * the buffer. */
     {
         whMessageCert_ReadTrustedDmaRequest req  = {0};
         whMessageCert_SimpleResponse        resp = {0};
@@ -423,7 +466,7 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
         size_t                              i;
 
         memset(out_buf, 0, sizeof(out_buf));
-        req.id        = meta.id;
+        req.id        = WH_KEYID_ID(meta.id);
         req.cert_addr = (uint64_t)(uintptr_t)out_buf;
         req.cert_len  = sizeof(out_buf);
         wh_MessageCert_TranslateReadTrustedDmaRequest(
@@ -452,12 +495,11 @@ whTest_CertServerReadTrustedRejectsServerOnly(whServerConfig* serverCfg)
 }
 
 /* A client must not be able to destroy a non-certificate object through the
- * cert erase path. Before cert ids were confined to their own type,
- * EraseTrusted took a raw NVM id and refused only objects flagged SERVER_ONLY
- * or NONDESTROYABLE, so a client could erase the auth user database (which
- * carries neither, only NONMODIFIABLE). Now the client id is translated into
- * the cert namespace, so a non-cert id lands on a different cert object and
- * the real object is untouched. */
+ * cert erase path. EraseTrusted used to take a raw NVM id and refuse only
+ * objects flagged SERVER_ONLY or NONDESTROYABLE, so a client could erase the
+ * auth user database (which carries neither, only NONMODIFIABLE). Now the
+ * client id is checked and translated into the cert namespace: an id with
+ * TYPE bits set is rejected as malformed, and the real object is untouched. */
 static int whTest_CertEraseCannotReachNonCertObject(whServerConfig* serverCfg)
 {
     int             rc        = WH_ERROR_OK;
@@ -487,10 +529,11 @@ static int whTest_CertEraseCannotReachNonCertObject(whServerConfig* serverCfg)
     WH_TEST_RETURN_ON_FAIL(
         wh_Nvm_AddObject(server->nvm, &meta, sizeof(secret), secret));
 
-    /* Client erase naming the protected id must not destroy it: the id is
-     * confined to the cert namespace and lands elsewhere. */
+    /* Client erase naming the protected id must be rejected: its TYPE bits
+     * lie outside the client id fields, so it cannot be translated. */
     {
-        whMessageCert_EraseTrustedRequest req = {0};
+        whMessageCert_EraseTrustedRequest req  = {0};
+        whMessageCert_SimpleResponse      resp = {0};
 
         req.id = protectedId;
         wh_MessageCert_TranslateEraseTrustedRequest(
@@ -499,6 +542,11 @@ static int whTest_CertEraseCannotReachNonCertObject(whServerConfig* serverCfg)
         (void)wh_Server_HandleCertRequest(
             server, magic, WH_MESSAGE_CERT_ACTION_ERASETRUSTED, /*seq=*/0,
             sizeof(req), req_packet, &resp_size, resp_packet);
+
+        wh_MessageCert_TranslateSimpleResponse(
+            magic, (whMessageCert_SimpleResponse*)resp_packet, &resp);
+        WH_TEST_ASSERT_RETURN(resp.rc == WH_ERROR_BADARGS);
+        WH_TEST_ASSERT_RETURN(resp_size == sizeof(resp));
     }
 
     /* The protected object must still be present and intact. */

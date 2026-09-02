@@ -63,15 +63,13 @@
  *      Default: Not defined
  *
  *  WOLFHSM_CFG_LEGACY_CLIENT_NVM - If defined, the client-facing NVM message
- *  handlers in wh_server_nvm.c pass IDs to the underlying NVM layer verbatim
- *  (legacy raw, globally-flat ID space).  When NOT defined (the default),
- *  every client-supplied NVM id is translated via
- *  wh_KeyId_TranslateFromClient(WH_KEYTYPE_NVM, client_id, id) so each client
- *  has its own private 1..255 id namespace. When WOLFHSM_CFG_GLOBAL_KEYS is
- *  also defined, a shared 1..255 global namespace can be selected with
- *  WH_KEYID_CLIENT_GLOBAL_FLAG.  Without it the flag is rejected on add and
- *  ignored elsewhere.  This closes the loophole where a client could reach
- *  another client's keys / objects via the raw NVM API.
+ *  handlers pass ids to the NVM layer verbatim (the legacy flat id space
+ *  shared by all clients). Applies to the NVM message group only: key,
+ *  counter and certificate ids are always translated, and COMM INIT is
+ *  always required first. When NOT defined (the default), every
+ *  client-supplied NVM id is translated to the TYPE/USER/ID encoding so each
+ *  client has its own private 1..255 namespace (plus a shared global one
+ *  with WOLFHSM_CFG_GLOBAL_KEYS).
  *      Default: Not defined
  *
  *  WOLFHSM_CFG_KEYWRAP_MAX_KEY_SIZE - The maximum size (in bytes) of a key that

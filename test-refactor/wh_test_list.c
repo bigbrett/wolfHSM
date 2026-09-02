@@ -90,6 +90,7 @@ WH_TEST_DECL(whTest_SheKeywrapInterop);
 WH_TEST_DECL(whTest_SheMasterEcuKeyFallback);
 WH_TEST_DECL(whTest_SheNoNvm);
 WH_TEST_DECL(whTest_SheReqSizeChecking);
+WH_TEST_DECL(whTest_SheLoadKeyOversizedSlot);
 WH_TEST_DECL(whTest_SheStateGate);
 WH_TEST_DECL(whTest_SheUidClient);
 WH_TEST_DECL(whTest_SheUidCb);
@@ -137,6 +138,7 @@ const whTestCase whTestsServer[] = {
     {"whTest_NvmPolicyChecked", whTest_NvmPolicyChecked},
     {"whTest_SheMasterEcuKeyFallback", whTest_SheMasterEcuKeyFallback},
     {"whTest_SheReqSizeChecking", whTest_SheReqSizeChecking},
+    {"whTest_SheLoadKeyOversizedSlot", whTest_SheLoadKeyOversizedSlot},
     {"whTest_HwKeystoreServer", whTest_HwKeystoreServer},
     {"whTest_SheStateGate", whTest_SheStateGate},
 };

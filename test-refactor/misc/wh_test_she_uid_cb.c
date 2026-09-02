@@ -190,8 +190,9 @@ static int _SetupServer(TestCtx* t, int useConfig, int readOnly)
     WH_TEST_RETURN_ON_FAIL(wc_InitRng_ex(t->crypto->rng, NULL, INVALID_DEVID));
     WH_TEST_RETURN_ON_FAIL(wh_Server_Init(t->server, t->s_conf));
 
-    /* Bind a client id the way COMM INIT would; GET_ID's key lookup is
-     * per-client and the server refuses it for an unbound connection. */
+    /* Bind a client id the way COMM INIT would; GET_ID's key lookup embeds
+     * it. (The dispatcher refuses requests from an unbound connection, but
+     * these tests call the handler directly.) */
     t->server->comm->client_id = 1;
 
     return WH_ERROR_OK;

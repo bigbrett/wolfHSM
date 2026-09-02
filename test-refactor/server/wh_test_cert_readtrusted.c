@@ -65,11 +65,12 @@ static int _whTest_CertReadTrustedOversized(whServerContext* server)
     /* Static filler: an automatic copy would double this stack frame on the
      * embedded targets these suites also run on */
     static uint8_t oversized_cert[WH_TEST_CERT_STAGED_LEN + 1];
-    /* The READTRUSTED handler translates the client id into the CERT namespace,
-     * so plant the cert there. Translation is idempotent for an already-CERT
-     * id, so this same value also serves as the handler req->id. */
+    /* The READTRUSTED handler translates the client id into the CERT
+     * namespace of the bound client, so plant the cert there with the full
+     * internal id and address it through the handler with the bare id. */
+    const whNvmId reqId  = 20;
     const whNvmId certId =
-        WH_MAKE_KEYID(WH_KEYTYPE_CERT, WH_KEYUSER_GLOBAL, 20);
+        WH_MAKE_KEYID(WH_KEYTYPE_CERT, server->comm->client_id, reqId);
     const uint32_t oversized_len = (uint32_t)WH_TEST_CERT_STAGED_LEN + 1;
     uint16_t       resp_size     = 0;
     int            handler_rc;
@@ -83,7 +84,7 @@ static int _whTest_CertReadTrustedOversized(whServerContext* server)
 
     /* Poison makes bytes the handler never staged detectable */
     memset(respPkt.bytes, 0xA5, sizeof(respPkt.bytes));
-    req->id = certId;
+    req->id = reqId;
 
     /* The server transmits regardless of this return, so out_resp_size is
      * what actually reaches the client */
@@ -109,7 +110,7 @@ static int _whTest_CertReadTrustedOversized(whServerContext* server)
         oversized_cert, oversized_len - 1));
 
     memset(respPkt.bytes, 0xA5, sizeof(respPkt.bytes));
-    req->id = certId;
+    req->id = reqId;
 
     WH_TEST_RETURN_ON_FAIL(wh_Server_HandleCertRequest(
         server, WH_COMM_MAGIC_NATIVE, WH_MESSAGE_CERT_ACTION_READTRUSTED, 0,
@@ -135,10 +136,10 @@ static int _whTest_CertReadTrustedDenied(whServerContext* server)
         whMessageCert_ReadTrustedResponse resp;
         uint8_t                           bytes[WOLFHSM_CFG_COMM_DATA_LEN];
     } respPkt;
-    /* Cert namespace, as in the oversized case: the handler translates the
-     * client id into TYPE=CERT, so plant and address the cert there. */
+    /* Cert namespace of the bound client, as in the oversized case */
+    const whNvmId reqId  = 21;
     const whNvmId certId =
-        WH_MAKE_KEYID(WH_KEYTYPE_CERT, WH_KEYUSER_GLOBAL, 21);
+        WH_MAKE_KEYID(WH_KEYTYPE_CERT, server->comm->client_id, reqId);
     uint16_t resp_size = 0;
     int      handler_rc;
 
@@ -147,7 +148,7 @@ static int _whTest_CertReadTrustedDenied(whServerContext* server)
         ROOT_A_CERT, ROOT_A_CERT_len));
 
     memset(respPkt.bytes, 0xA5, sizeof(respPkt.bytes));
-    req->id = certId;
+    req->id = reqId;
 
     handler_rc = wh_Server_HandleCertRequest(
         server, WH_COMM_MAGIC_NATIVE, WH_MESSAGE_CERT_ACTION_READTRUSTED, 0,
@@ -165,12 +166,21 @@ static int _whTest_CertReadTrustedDenied(whServerContext* server)
 int whTest_CertReadTrusted(whServerContext* ctx)
 {
     whServerContext* server = (whServerContext*)ctx;
+    int              rc;
 
     WH_TEST_RETURN_ON_FAIL(wh_Server_CertInit(server));
-    WH_TEST_RETURN_ON_FAIL(_whTest_CertReadTrustedOversized(server));
-    WH_TEST_RETURN_ON_FAIL(_whTest_CertReadTrustedDenied(server));
 
-    return 0;
+    /* Bind a client id the way COMM INIT would; the handler stamps it into
+     * every cert id. Restore the unbound id after, as the server context is
+     * shared across server-group tests. */
+    server->comm->client_id = 1;
+    rc = _whTest_CertReadTrustedOversized(server);
+    if (rc == WH_ERROR_OK) {
+        rc = _whTest_CertReadTrustedDenied(server);
+    }
+    server->comm->client_id = 0;
+
+    return rc;
 }
 
 

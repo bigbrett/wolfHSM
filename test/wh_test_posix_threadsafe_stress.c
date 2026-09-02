@@ -1478,23 +1478,10 @@ static int doPhaseSetup(ClientServerPair* pair, ContentionPhase phase,
     int              globalSide = isGlobalSide(pair, variant);
     whKeyId          keyId   = selectKeyIdForPhase(phase, variant, globalSide);
     whNvmId          hotId   = nvmIdFor(pair, variant, HOT_NVM_ID);
+    whNvmId          counterId = nvmIdFor(pair, variant, HOT_COUNTER_ID);
     uint8_t          pattern = nvmPatternFor(pair, variant);
     int              provision;
     int              rc;
-
-    /* Counters are per-client in every variant (the counter message path
-     * has no global-namespace support), so every client provisions its own
-     * counter regardless of the provisioning rule below. */
-    if (phase == PHASE_COUNTER_CONCURRENT_INCREMENT ||
-        phase == PHASE_COUNTER_INCREMENT_VS_READ) {
-        /* Destroy any existing counter first */
-        (void)doCounterDestroy(client, HOT_COUNTER_ID);
-        /* Initialize counter with value 0 */
-        rc = doCounterInit(client, HOT_COUNTER_ID, 0);
-        if (rc == WH_ERROR_NOSPACE)
-            rc = WH_ERROR_OK;
-        return rc;
-    }
 
     /* Exactly one client provisions each shared (global-side) resource;
      * every client provisions its own private resources. */
@@ -1515,6 +1502,17 @@ static int doPhaseSetup(ClientServerPair* pair, ContentionPhase phase,
     }
 
     switch (phase) {
+        /* Counter phases: the owner creates the counter at 0. Global-side
+         * clients share one counter (GLOBAL flag), so their increments
+         * contend on the same object; private counters are per client. */
+        case PHASE_COUNTER_CONCURRENT_INCREMENT:
+        case PHASE_COUNTER_INCREMENT_VS_READ:
+            (void)doCounterDestroy(client, counterId);
+            rc = doCounterInit(client, counterId, 0);
+            if (rc == WH_ERROR_NOSPACE)
+                rc = WH_ERROR_OK;
+            return rc;
+
         /* Keystore phases that need clean state (evict first) */
         case PHASE_KS_CONCURRENT_CACHE:
             rc = doKeyEvict(client, keyId);
@@ -1755,10 +1753,13 @@ static void doPhaseCleanup(ClientServerPair* pair, ContentionPhase phase,
     }
 
     switch (phase) {
-        /* Counters are per-client in every variant */
+        /* The owner destroys the counter it provisioned */
         case PHASE_COUNTER_CONCURRENT_INCREMENT:
         case PHASE_COUNTER_INCREMENT_VS_READ:
-            (void)doCounterDestroy(client, HOT_COUNTER_ID);
+            if (owner) {
+                (void)doCounterDestroy(
+                    client, nvmIdFor(pair, variant, HOT_COUNTER_ID));
+            }
             return;
 
         /* Every client destroys the ids it added while streaming; the
@@ -1874,6 +1875,7 @@ static int executePhaseOperation(ClientServerPair* pair, ContentionPhase phase,
     whClientContext* client     = &pair->client;
     int              globalSide = isGlobalSide(pair, variant);
     whNvmId          hotId      = nvmIdFor(pair, variant, HOT_NVM_ID);
+    whNvmId          counterId  = nvmIdFor(pair, variant, HOT_COUNTER_ID);
     uint8_t          pattern    = nvmPatternFor(pair, variant);
     int              readExpect = nvmReadExpectFor(pair, variant);
 
@@ -2060,16 +2062,16 @@ static int executePhaseOperation(ClientServerPair* pair, ContentionPhase phase,
         /* Counter Concurrent Increment */
         case PHASE_COUNTER_CONCURRENT_INCREMENT: {
             uint32_t counter = 0;
-            return doCounterIncrement(client, HOT_COUNTER_ID, &counter);
+            return doCounterIncrement(client, counterId, &counter);
         }
 
         /* Counter Increment vs Read */
         case PHASE_COUNTER_INCREMENT_VS_READ: {
             uint32_t counter = 0;
             if (role == ROLE_OP_A)
-                return doCounterIncrement(client, HOT_COUNTER_ID, &counter);
+                return doCounterIncrement(client, counterId, &counter);
             else
-                return doCounterRead(client, HOT_COUNTER_ID, &counter);
+                return doCounterRead(client, counterId, &counter);
         }
 
         /* NVM Read vs Resize - alternating object sizes */
@@ -2300,9 +2302,9 @@ static int isAcceptableResult(ContentionPhase phase, ClientRole role,
         }
     }
 
-    /* Counters are per-client in every variant: after per-client setup the
-     * counter always exists, so only NOSPACE (shared capacity) is tolerated
-     * for increments and reads must succeed. */
+    /* After setup the counter always exists (the owner created it), so only
+     * NOSPACE (shared capacity) is tolerated for increments and reads must
+     * succeed. */
     switch (phase) {
         case PHASE_COUNTER_CONCURRENT_INCREMENT:
             return (rc == WH_ERROR_NOSPACE);
@@ -2533,16 +2535,26 @@ static int validatePhaseResult(StressTestContext* ctx, ContentionPhase phase)
     switch (phase) {
         case PHASE_COUNTER_CONCURRENT_INCREMENT:
         case PHASE_COUNTER_INCREMENT_VS_READ: {
-            /* Counters are always per-client (the counter message path has
-             * no global-namespace support), so each incrementing client's
-             * counter must exactly match its successful increments: less
-             * means a lost update, more means a phantom increment. */
-            int failed = 0;
-            int i;
+            /* Global-side clients share one counter, so its value must equal
+             * the sum of their successful increments: less means a lost
+             * update (a missing NVM lock), more means a phantom increment.
+             * A private counter must exactly match its owner's count. */
+            NamespaceVariant variant  = ctx->currentVariant;
+            int              failed   = 0;
+            int              expected = 0;
+            int              sharedTotal = 0;
+            int              i;
+
+            for (i = 0; i < NUM_CLIENTS; i++) {
+                if (isGlobalSide(&ctx->pairs[i], variant) &&
+                    (phase == PHASE_COUNTER_CONCURRENT_INCREMENT ||
+                     ctx->clientRoles[i] == ROLE_OP_A)) {
+                    sharedTotal += ATOMIC_LOAD_INT(&ctx->pairs[i].successCount);
+                }
+            }
 
             for (i = 0; i < NUM_CLIENTS; i++) {
                 uint32_t counter = 0;
-                int      expected;
                 int      rc;
 
                 /* Reader roles never increment their counter */
@@ -2551,9 +2563,13 @@ static int validatePhaseResult(StressTestContext* ctx, ContentionPhase phase)
                     continue;
                 }
 
-                rc       = doCounterRead(&ctx->pairs[i].client, HOT_COUNTER_ID,
-                                         &counter);
-                expected = ATOMIC_LOAD_INT(&ctx->pairs[i].successCount);
+                rc = doCounterRead(&ctx->pairs[i].client,
+                                   nvmIdFor(&ctx->pairs[i], variant,
+                                            HOT_COUNTER_ID),
+                                   &counter);
+                expected = isGlobalSide(&ctx->pairs[i], variant)
+                               ? sharedTotal
+                               : ATOMIC_LOAD_INT(&ctx->pairs[i].successCount);
 
                 if (rc != WH_ERROR_OK || counter != (uint32_t)expected) {
                     WH_ERROR_PRINT("    VALIDATION FAILED: client %d counter "
