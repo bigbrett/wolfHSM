@@ -2306,6 +2306,141 @@ static int _runNvmIdTranslationTests(whClientContext* client1,
 
 #endif /* !WOLFHSM_CFG_LEGACY_CLIENT_NVM */
 
+#ifndef WOLFHSM_CFG_NO_CRYPTO
+/*
+ * The keystore group shares the pre-COMM-INIT gate, and its DMA replies carry
+ * rc behind a DMA address status rather than first. Force the unbound state
+ * and confirm every keystore verb surfaces WH_ERROR_ACCESS through a properly
+ * shaped reply, so a refused DMA cache or export is never reported as success.
+ */
+static int _testKeystoreUnboundClientRejected(whClientContext* client1,
+                                              whServerContext* server1,
+                                              whClientContext* client2,
+                                              whServerContext* server2)
+{
+    /* Id no other test caches, so the absence checks below are meaningful */
+    const whKeyId keyId = 0x3A;
+    const whKeyId globalId =
+        WH_MAKE_KEYID(WH_KEYTYPE_CRYPTO, WH_KEYUSER_GLOBAL, keyId);
+    uint8_t  keyData[32]             = "UnboundKeystoreRejectKey12!";
+    uint8_t  outBuf[32]              = {0};
+    uint8_t  label[WH_NVM_LABEL_LEN] = {0};
+    uint32_t readSz                  = sizeof(outBuf);
+    uint16_t outSz                   = 0;
+    uint16_t gotId                   = 0;
+    uint8_t  saved_id;
+    int      prc;
+    int      leaked = 0;
+
+    (void)client2;
+    (void)server2;
+
+    WH_TEST_PRINT(
+        "Testing keystore reject of unbound (client_id 0) connection...\n");
+
+    /* Precondition: no USER=0 key under this id yet. */
+    WH_TEST_ASSERT_RETURN(
+        wh_Server_KeystoreReadKey(server1, globalId, NULL, outBuf, &readSz) ==
+        WH_ERROR_NOTFOUND);
+
+    /* Force the server connection into the unbound (pre-COMM-INIT) state. */
+    saved_id                 = server1->comm->client_id;
+    server1->comm->client_id = WH_KEYUSER_GLOBAL;
+
+    /* Each verb must return WH_ERROR_ACCESS from a shaped reply: OK would be
+     * a false success, ABORTED a malformed reply. Accumulate a "leaked" flag,
+     * then restore client_id before asserting so a failure can't corrupt
+     * later tests sharing this server. */
+
+    /* Cache: refused. */
+    prc = wh_Client_KeyCacheRequest_ex(client1, 0, (uint8_t*)"Unbound",
+                                       sizeof("Unbound"), keyData,
+                                       sizeof(keyData), keyId);
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Server_HandleRequestMessage(server1);
+    }
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Client_KeyCacheResponse(client1, &gotId);
+    }
+    if (prc != WH_ERROR_ACCESS) {
+        leaked = 1;
+    }
+
+    /* Export: refused. */
+    outSz = sizeof(outBuf);
+    prc   = wh_Client_KeyExportRequest(client1, keyId);
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Server_HandleRequestMessage(server1);
+    }
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Client_KeyExportResponse(client1, label, sizeof(label), outBuf,
+                                          &outSz);
+    }
+    if (prc != WH_ERROR_ACCESS) {
+        leaked = 1;
+    }
+
+#ifdef WOLFHSM_CFG_DMA
+    /* DMA cache: rc sits behind the DMA address status in the reply. */
+    prc = wh_Client_KeyCacheDmaRequest(client1, 0, (uint8_t*)"Unbound",
+                                       sizeof("Unbound"), keyData,
+                                       sizeof(keyData), keyId);
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Server_HandleRequestMessage(server1);
+    }
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Client_KeyCacheDmaResponse(client1, &gotId);
+    }
+    if (prc != WH_ERROR_ACCESS) {
+        leaked = 1;
+    }
+
+    /* DMA export: refused. */
+    outSz = sizeof(outBuf);
+    prc = wh_Client_KeyExportDmaRequest(client1, keyId, outBuf, sizeof(outBuf));
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Server_HandleRequestMessage(server1);
+    }
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Client_KeyExportDmaResponse(client1, label, sizeof(label),
+                                             &outSz);
+    }
+    if (prc != WH_ERROR_ACCESS) {
+        leaked = 1;
+    }
+
+    /* DMA public export: refused. */
+    outSz = sizeof(outBuf);
+    prc   = wh_Client_KeyExportPublicDmaRequest(client1, keyId, WH_KEY_ALGO_ECC,
+                                                outBuf, sizeof(outBuf));
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Server_HandleRequestMessage(server1);
+    }
+    if (prc == WH_ERROR_OK) {
+        prc = wh_Client_KeyExportPublicDmaResponse(client1, label,
+                                                   sizeof(label), &outSz);
+    }
+    if (prc != WH_ERROR_ACCESS) {
+        leaked = 1;
+    }
+#endif /* WOLFHSM_CFG_DMA */
+
+    /* Restore the bound client id before asserting. */
+    server1->comm->client_id = saved_id;
+
+    WH_TEST_ASSERT_RETURN(leaked == 0);
+
+    /* The refused caches must not have left a USER=0 key behind. */
+    readSz = sizeof(outBuf);
+    WH_TEST_ASSERT_RETURN(
+        wh_Server_KeystoreReadKey(server1, globalId, NULL, outBuf, &readSz) ==
+        WH_ERROR_NOTFOUND);
+
+    WH_TEST_PRINT("  Keystore unbound client rejection: PASS\n");
+    return WH_ERROR_OK;
+}
+#endif /* !WOLFHSM_CFG_NO_CRYPTO */
+
 /* ============================================================================
  * GLOBAL SHE KEYS TEST SUITE
  *
@@ -3089,6 +3224,12 @@ static int whTest_MultiClientSequential(void)
 #ifndef WOLFHSM_CFG_LEGACY_CLIENT_NVM
     WH_TEST_RETURN_ON_FAIL(
         _runNvmIdTranslationTests(client1, server1, client2, server2));
+#endif
+
+#ifndef WOLFHSM_CFG_NO_CRYPTO
+    /* The COMM INIT gate is unconditional, so this runs in every build */
+    WH_TEST_RETURN_ON_FAIL(
+        _testKeystoreUnboundClientRejected(client1, server1, client2, server2));
 #endif
 
     /* Future test suites here */

@@ -404,8 +404,9 @@ static int _wh_Server_HandlePkcs11Request(whServerContext* server,
 }
 
 /* Zero a response of the given size and store the translated error code in
- * its leading rc field. Every response struct starts with a 32-bit rc, so this
- * yields a correctly sized, otherwise empty error response for any action. */
+ * its leading rc field. Only for replies that start with a 32-bit rc; the
+ * keystore DMA replies lead with a DMA address status and must be built
+ * through their structs instead. */
 static uint16_t _FormatRcOnlyResponse(uint16_t magic, int32_t error_code,
                                       uint16_t size, void* resp_packet)
 {
@@ -420,8 +421,9 @@ static uint16_t _FormatRcOnlyResponse(uint16_t magic, int32_t error_code,
 /* Format an error response for a request that is refused before its handler
  * runs (an authorization failure, or a request before COMM INIT). The response
  * is shaped per group/action wherever the client parser checks the size, so
- * the client sees the error code rather than a malformed reply. All response
- * structures have int32_t rc as the first field. Returns the response size. */
+ * the client sees the error code rather than a malformed reply. Nearly all
+ * response structures have int32_t rc as the first field; the exceptions are
+ * shaped through their structs below. Returns the response size. */
 static uint16_t _FormatErrorResponse(uint16_t magic, uint16_t group,
                                      uint16_t action, int32_t error_code,
                                      void* resp_packet)
@@ -432,8 +434,9 @@ static uint16_t _FormatErrorResponse(uint16_t magic, uint16_t group,
         return 0;
     }
 
-    /* Write error code to first int32_t (rc field) - all responses start with
-     * this. Use memcpy since resp_packet may be only byte-aligned. */
+    /* Write error code to the first int32_t (rc field) - most responses start
+     * with this; the cases below overwrite it where they don't. Use memcpy
+     * since resp_packet may be only byte-aligned. */
     {
         int32_t translated_rc =
             (int32_t)wh_Translate32(magic, (uint32_t)error_code);
@@ -584,9 +587,11 @@ static uint16_t _FormatErrorResponse(uint16_t magic, uint16_t group,
 
 #ifndef WOLFHSM_CFG_NO_CRYPTO
         case WH_MESSAGE_GROUP_KEY: {
-            /* Keystore error responses differ only in size, so pick the
-             * struct for the action */
-            uint16_t size;
+            /* Most keystore error responses differ only in size, so pick the
+             * struct for the action. The DMA replies lead with the DMA
+             * address status rather than rc, so those are built through
+             * their structs to put rc where the client reads it. */
+            uint16_t size = 0;
             switch (action) {
                 case WH_KEY_CACHE:
                 case WH_KEY_CACHE_RANDOM:
@@ -611,15 +616,35 @@ static uint16_t _FormatErrorResponse(uint16_t magic, uint16_t group,
                     size = sizeof(whMessageKeystore_ExportPublicResponse);
                     break;
 #ifdef WOLFHSM_CFG_DMA
-                case WH_KEY_CACHE_DMA:
-                    size = sizeof(whMessageKeystore_CacheDmaResponse);
-                    break;
-                case WH_KEY_EXPORT_DMA:
-                    size = sizeof(whMessageKeystore_ExportDmaResponse);
-                    break;
-                case WH_KEY_EXPORT_PUBLIC_DMA:
-                    size = sizeof(whMessageKeystore_ExportPublicDmaResponse);
-                    break;
+                /* badAddr stays zero: the refusal is not a DMA fault */
+                case WH_KEY_CACHE_DMA: {
+                    whMessageKeystore_CacheDmaResponse resp = {0};
+                    resp.rc                                 = error_code;
+                    memset(resp_packet, 0, sizeof(resp));
+                    (void)wh_MessageKeystore_TranslateCacheDmaResponse(
+                        magic, &resp,
+                        (whMessageKeystore_CacheDmaResponse*)resp_packet);
+                    resp_size = sizeof(resp);
+                } break;
+                case WH_KEY_EXPORT_DMA: {
+                    whMessageKeystore_ExportDmaResponse resp = {0};
+                    resp.rc                                  = error_code;
+                    memset(resp_packet, 0, sizeof(resp));
+                    (void)wh_MessageKeystore_TranslateExportDmaResponse(
+                        magic, &resp,
+                        (whMessageKeystore_ExportDmaResponse*)resp_packet);
+                    resp_size = sizeof(resp);
+                } break;
+                case WH_KEY_EXPORT_PUBLIC_DMA: {
+                    whMessageKeystore_ExportPublicDmaResponse resp = {0};
+                    resp.rc                                        = error_code;
+                    memset(resp_packet, 0, sizeof(resp));
+                    (void)wh_MessageKeystore_TranslateExportPublicDmaResponse(
+                        magic, &resp,
+                        (whMessageKeystore_ExportPublicDmaResponse*)
+                            resp_packet);
+                    resp_size = sizeof(resp);
+                } break;
 #endif /* WOLFHSM_CFG_DMA */
 #ifdef WOLFHSM_CFG_KEYWRAP
                 case WH_KEY_KEYWRAP:
@@ -645,8 +670,10 @@ static uint16_t _FormatErrorResponse(uint16_t magic, uint16_t group,
                     size = sizeof(int32_t);
                     break;
             }
-            resp_size =
-                _FormatRcOnlyResponse(magic, error_code, size, resp_packet);
+            if (size != 0) {
+                resp_size =
+                    _FormatRcOnlyResponse(magic, error_code, size, resp_packet);
+            }
         } break;
 #endif /* !WOLFHSM_CFG_NO_CRYPTO */
 

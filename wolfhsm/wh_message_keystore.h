@@ -248,7 +248,9 @@ typedef struct {
 /* DMA address status structure */
 typedef struct {
     /* If packet->rc == WH_ERROR_ACCESS, this field will contain the offending
-     * address/size pair. Invalid otherwise. */
+     * address/size pair. Invalid otherwise. A request refused before any DMA
+     * access (before COMM INIT, or by authorization) also reports
+     * WH_ERROR_ACCESS but leaves this field zero. */
     whMessageKeystore_DmaBuffer badAddr;
 } whMessageKeystore_DmaAddrStatus;
 
