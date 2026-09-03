@@ -111,10 +111,19 @@ all: $(OUT)
 $(OUT): $(SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_EXTRA) $(SRC) -o $(OUT) $(LDFLAGS)
 
-# Generate the test NVM image
+# Generate the test NVM images
 test-gen: $(OUT)
-	rm -f whNvmImage.bin whNvmImage.hex
-	./$(OUT) --test test/nvminit/test.nvminit --invert-erased-byte
+	rm -f whNvmImage.bin whNvmImage.hex whNvmImageFF.bin whNvmImageFF.hex \
+		whNvmImageMerge.bin whNvmImageMerge.hex
+	# test image with record split at 64KB boundary
+	./$(OUT) --test test/nvminit/test.nvminit --invert-erased-byte \
+		--hex --hex-base 0xFFF8
+	# test image with high base address and alignment
+	./$(OUT) --image=whNvmImageFF.bin --hex=whNvmImageFF.hex \
+		--hex-base 0x0800FFF0 --hex-align 16 test/nvminit/test.nvminit
+	# test image with large alignment forcing merge of directory+data
+	./$(OUT) --image=whNvmImageMerge.bin --hex=whNvmImageMerge.hex \
+		--hex-base 0x0800F800 --hex-align 0x800 test/nvminit/test.nvminit
 
 # Run the negative tests, where invalid configs and key files must fail the tool.
 # Order-only prereq on test-gen: every whnvmtool instance binds the same TCP
@@ -145,7 +154,8 @@ scan:
 	            --status-bugs $(MAKE) analyze 2> $(WOLFHSM_DIR)/scan_out/$(SCAN_LOG)
 
 clean: clean-test
-	rm -f whNvmImage.bin whNvmImage.hex
+	rm -f whNvmImage.bin whNvmImage.hex whNvmImageFF.bin whNvmImageFF.hex
+	rm -f whNvmImageMerge.bin whNvmImageMerge.hex
 	rm -f $(OUT)
 
 clean-test:

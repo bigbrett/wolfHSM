@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <getopt.h>
+#include <sys/stat.h>
 
 #include "wolfhsm/wh_common.h"
 #include "wolfhsm/wh_utils.h"
@@ -62,8 +63,12 @@
 
 #define INTERMEDIATE_FILE "nvm_metadata.txt"
 #define DEFAULT_IMAGE_FILE "whNvmImage.bin"
+#define DEFAULT_HEX_FILE "whNvmImage.hex"
 #define DEFAULT_PARTITION_SIZE 0x10000
 #define DEFAULT_ERASED_BYTE 0xFF
+
+/* Data bytes per intel hex record */
+#define HEX_RECORD_DATA_LEN 16
 
 /* Config entry kind, from the line's leading token */
 typedef enum EntryType {
@@ -89,6 +94,34 @@ typedef struct Entry {
 
 /* Head of the linked list for entries */
 Entry* entryHead = NULL;
+
+/* Flash callback wrapper that records which image bytes get programmed. The
+ * hex output must emit only programmed bytes and skip everything still
+ * erased, and the final image contents alone cannot show the difference:
+ * programmed data may legitimately contain the erased value. */
+typedef struct {
+    posixFlashFileContext posixCtx; /* must be first: the untracked posix
+                                     * callbacks receive this context */
+    uint8_t* written; /* one flag per image byte, 1 = programmed. NULL
+                       * disables tracking. Sized to the full image, the
+                       * same bound the posix layer checks offsets against */
+} TrackedFlashContext;
+
+/* clang-format off */
+#define TRACKED_FLASH_CB                                \
+    {                                                   \
+        .Init          = posixFlashFile_Init,           \
+        .Cleanup       = posixFlashFile_Cleanup,        \
+        .PartitionSize = posixFlashFile_PartitionSize,  \
+        .WriteLock     = posixFlashFile_WriteLock,      \
+        .WriteUnlock   = posixFlashFile_WriteUnlock,    \
+        .Read          = posixFlashFile_Read,           \
+        .Program       = trackedFlashProgram,           \
+        .Erase         = trackedFlashErase,             \
+        .Verify        = posixFlashFile_Verify,         \
+        .BlankCheck    = posixFlashFile_BlankCheck,     \
+    }
+/* clang-format on */
 
 /* Flag to indicate if we're in test mode, set by --test command line argument.
  * If set, write the metadata ID/filepath pair to an intermediate file so the
@@ -118,7 +151,19 @@ static void   freeEntries(void);
 static void   stripComment(char* line);
 static void   trimWhitespace(char* str);
 static int  parseInteger(const char* str, uint32_t maxValue, uint32_t* result);
+static int    parseUint32(const char* str, uint32_t* result);
 static void parseConfigFile(const char* filePath);
+static int    trackedFlashProgram(void* c, uint32_t offset, uint32_t size,
+                                  const uint8_t* data);
+static int    trackedFlashErase(void* c, uint32_t offset, uint32_t size);
+static int    writeHexRecord(FILE* file, uint8_t type, uint16_t addr,
+                             const uint8_t* data, uint8_t len);
+static int    writeHexRange(FILE* file, const uint8_t* image, uint32_t baseAddr,
+                            uint32_t start, uint32_t end, uint16_t* upper);
+static int    writeHexFile(const char* hexPath, const char* imagePath,
+                           const uint8_t* written, uint32_t imageSize,
+                           uint32_t baseAddr, uint32_t align);
+static void   printUsage(const char* progName);
 
 
 /* Creates a new entry in the linked list based on the provided parameters */
@@ -360,6 +405,34 @@ int parseInteger(const char* str, uint32_t maxValue, uint32_t* result)
     return 1; /* Success */
 }
 
+/* Parse a full-range 32-bit unsigned integer from a string (handles hex or
+ * decimal). Returns 0 on success, -1 on error */
+int parseUint32(const char* str, uint32_t* result)
+{
+    char*         endPtr = NULL;
+    unsigned long value;
+
+    if (!isdigit((unsigned char)str[0])) {
+        return -1; /* strtoul accepts leading whitespace and signs */
+    }
+
+    errno = 0;
+    if (strstr(str, "0x") == str) {
+        value = strtoul(str, &endPtr, 16);
+    }
+    else {
+        value = strtoul(str, &endPtr, 10);
+    }
+
+    if ((endPtr == str) || (*endPtr != '\0') || (errno != 0) ||
+        (value > 0xFFFFFFFFUL)) {
+        return -1;
+    }
+
+    *result = (uint32_t)value;
+    return 0;
+}
+
 /* Function to parse the configuration file and build the linked list */
 void parseConfigFile(const char* filePath)
 {
@@ -583,6 +656,193 @@ static void writeMetadataToFile(uint32_t metadataId, const char* filePath)
     fclose(file);
 }
 
+/* Program passthrough that marks the programmed bytes in the tracking map */
+static int trackedFlashProgram(void* c, uint32_t offset, uint32_t size,
+                               const uint8_t* data)
+{
+    TrackedFlashContext* ctx = c;
+    int rc = posixFlashFile_Program(&ctx->posixCtx, offset, size, data);
+    /* Success means the posix layer bounds-checked offset and size */
+    if ((rc == 0) && (ctx->written != NULL) && (data != NULL) && (size > 0)) {
+        memset(&ctx->written[offset], 1, size);
+    }
+    return rc;
+}
+
+/* Erase passthrough that clears the erased bytes in the tracking map */
+static int trackedFlashErase(void* c, uint32_t offset, uint32_t size)
+{
+    TrackedFlashContext* ctx = c;
+    int rc = posixFlashFile_Erase(&ctx->posixCtx, offset, size);
+    if ((rc == 0) && (ctx->written != NULL) && (size > 0)) {
+        memset(&ctx->written[offset], 0, size);
+    }
+    return rc;
+}
+
+/* Write a single intel hex record with its checksum */
+static int writeHexRecord(FILE* file, uint8_t type, uint16_t addr,
+                          const uint8_t* data, uint8_t len)
+{
+    uint8_t sum;
+    int     i;
+
+    sum = (uint8_t)(len + (addr >> 8) + (addr & 0xFF) + type);
+    if (fprintf(file, ":%02X%04X%02X", len, addr, type) < 0) {
+        return -1;
+    }
+    for (i = 0; i < len; i++) {
+        if (fprintf(file, "%02X", data[i]) < 0) {
+            return -1;
+        }
+        sum = (uint8_t)(sum + data[i]);
+    }
+    if (fprintf(file, "%02X\n", (uint8_t)(0x100 - sum)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+/* Write data records for image bytes [start, end), inserting extended linear
+ * address records whenever the upper 16 address bits change. *upper holds the
+ * current upper bits between calls and starts at 0, the intel hex default */
+static int writeHexRange(FILE* file, const uint8_t* image, uint32_t baseAddr,
+                         uint32_t start, uint32_t end, uint16_t* upper)
+{
+    while (start < end) {
+        uint32_t addr     = baseAddr + start;
+        uint16_t addrHigh = (uint16_t)(addr >> 16);
+        uint32_t chunk    = HEX_RECORD_DATA_LEN;
+
+        if (chunk > (end - start)) {
+            chunk = end - start;
+        }
+        /* Records must not cross a 64KB address boundary */
+        if (chunk > (0x10000UL - (addr & 0xFFFFUL))) {
+            chunk = 0x10000UL - (addr & 0xFFFFUL);
+        }
+
+        if (addrHigh != *upper) {
+            uint8_t upperData[2];
+            upperData[0] = (uint8_t)(addrHigh >> 8);
+            upperData[1] = (uint8_t)(addrHigh & 0xFF);
+            if (writeHexRecord(file, 4, 0, upperData, 2) != 0) {
+                return -1;
+            }
+            *upper = addrHigh;
+        }
+
+        if (writeHexRecord(file, 0, (uint16_t)(addr & 0xFFFF), &image[start],
+                           (uint8_t)chunk) != 0) {
+            return -1;
+        }
+        start += chunk;
+    }
+    return 0;
+}
+
+/* Write an intel hex file covering only the programmed bytes of the image.
+ * Runs of programmed bytes are expanded to align-byte boundaries (padded
+ * with surrounding image bytes) and merged before being written out */
+static int writeHexFile(const char* hexPath, const char* imagePath,
+                        const uint8_t* written, uint32_t imageSize,
+                        uint32_t baseAddr, uint32_t align)
+{
+    FILE*    hexFile   = NULL;
+    FILE*    imageFile = NULL;
+    uint8_t* image     = NULL;
+    uint32_t pos       = 0;
+    uint32_t pendStart = 0;
+    uint32_t pendEnd   = 0;
+    int      havePend  = 0;
+    uint16_t upper     = 0;
+    int      rc        = 0;
+
+    imageFile = fopen(imagePath, "rb");
+    if (imageFile == NULL) {
+        fprintf(stderr, "Error: Unable to open image file %s\n", imagePath);
+        return -1;
+    }
+    image = malloc(imageSize);
+    if (image == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed\n");
+        fclose(imageFile);
+        return -1;
+    }
+    if (fread(image, 1, imageSize, imageFile) != imageSize) {
+        fprintf(stderr, "Error: Failed to read image file %s\n", imagePath);
+        fclose(imageFile);
+        free(image);
+        return -1;
+    }
+    fclose(imageFile);
+
+    hexFile = fopen(hexPath, "w");
+    if (hexFile == NULL) {
+        fprintf(stderr, "Error: Unable to open hex file %s\n", hexPath);
+        free(image);
+        return -1;
+    }
+
+    while ((rc == 0) && (pos < imageSize)) {
+        uint32_t start;
+        uint32_t end;
+        uint64_t alignedEnd;
+
+        /* Find the next run of programmed bytes */
+        while ((pos < imageSize) && (written[pos] == 0)) {
+            pos++;
+        }
+        if (pos == imageSize) {
+            break;
+        }
+        start = pos;
+        while ((pos < imageSize) && (written[pos] != 0)) {
+            pos++;
+        }
+        end = pos;
+
+        /* Expand the run to align-byte boundaries */
+        start -= start % align;
+        alignedEnd = (((uint64_t)end + align - 1) / align) * align;
+        if (alignedEnd > imageSize) {
+            alignedEnd = imageSize;
+        }
+        end = (uint32_t)alignedEnd;
+
+        /* Merge with the pending run if the expansion made them touch */
+        if (havePend && (start <= pendEnd)) {
+            if (end > pendEnd) {
+                pendEnd = end;
+            }
+        }
+        else {
+            if (havePend) {
+                rc = writeHexRange(hexFile, image, baseAddr, pendStart, pendEnd,
+                                   &upper);
+            }
+            pendStart = start;
+            pendEnd   = end;
+            havePend  = 1;
+        }
+    }
+    if ((rc == 0) && havePend) {
+        rc =
+            writeHexRange(hexFile, image, baseAddr, pendStart, pendEnd, &upper);
+    }
+    if (rc == 0) {
+        /* End-of-file record */
+        rc = writeHexRecord(hexFile, 1, 0, NULL, 0);
+    }
+
+    free(image);
+    if ((fclose(hexFile) != 0) || (rc != 0)) {
+        fprintf(stderr, "Error: Failed to write hex file %s\n", hexPath);
+        return -1;
+    }
+    return 0;
+}
+
 /* Initialize the NVM and server */
 static int initializeServer(whServerContext*      serverContext,
                             whNvmContext*         nvmContext,
@@ -609,6 +869,15 @@ static void cleanupServer(whServerContext* serverContext)
     wh_Server_Cleanup(serverContext);
 }
 
+static void printUsage(const char* progName)
+{
+    fprintf(stderr,
+            "Usage: %s [--test] [--image[=<file>]] [--size <size>] "
+            "[--invert-erased-byte] [--hex[=<file>]] [--hex-base <addr>] "
+            "[--hex-align <n>] <config-file>\n",
+            progName);
+}
+
 int main(int argc, char* argv[])
 {
     int                  rc = 0;
@@ -618,15 +887,24 @@ int main(int argc, char* argv[])
     uint32_t             partition_size     = DEFAULT_PARTITION_SIZE;
     uint8_t              erased_byte        = DEFAULT_ERASED_BYTE;
     int                  invert_erased_byte = 0;
+    char*                hex_file           = NULL; /* non-NULL enables hex */
+    uint32_t             hex_base           = 0;
+    uint32_t             hex_align          = 1;
+    int                  hex_opts_given     = 0;
+    uint8_t*             written            = NULL;
+    uint32_t             image_size         = 0;
     static struct option long_options[]     = {
-            {"test", no_argument, 0, 't'},
-            {"image", optional_argument, 0, 'i'},
-            {"size", required_argument, 0, 's'},
-            {"invert-erased-byte", no_argument, 0, 'e'},
-            {0, 0, 0, 0}};
+        {"test", no_argument, 0, 't'},
+        {"image", optional_argument, 0, 'i'},
+        {"size", required_argument, 0, 's'},
+        {"invert-erased-byte", no_argument, 0, 'e'},
+        {"hex", optional_argument, 0, 'x'},
+        {"hex-base", required_argument, 0, 'b'},
+        {"hex-align", required_argument, 0, 'a'},
+        {0, 0, 0, 0}};
 
-    while ((opt = getopt_long(argc, argv, "ti::s:e", long_options, NULL)) !=
-           -1) {
+    while ((opt = getopt_long(argc, argv, "ti::s:ex::b:a:", long_options,
+                              NULL)) != -1) {
         switch (opt) {
             case 't':
                 gTestMode = 1;
@@ -651,21 +929,33 @@ int main(int argc, char* argv[])
             case 'e':
                 invert_erased_byte = 1;
                 break;
+            case 'x':
+                hex_file = (optarg != NULL) ? optarg : DEFAULT_HEX_FILE;
+                break;
+            case 'b':
+                if (parseUint32(optarg, &hex_base) != 0) {
+                    fprintf(stderr, "Error: Invalid hex base address\n");
+                    return EXIT_FAILURE;
+                }
+                hex_opts_given = 1;
+                break;
+            case 'a':
+                if ((parseUint32(optarg, &hex_align) != 0) ||
+                    (hex_align == 0)) {
+                    fprintf(stderr, "Error: Invalid hex alignment\n");
+                    return EXIT_FAILURE;
+                }
+                hex_opts_given = 1;
+                break;
             default:
-                fprintf(stderr,
-                        "Usage: %s [--test] [--image[=<file>]] [--size <size>] "
-                        "[--invert-erased-byte] <config-file>\n",
-                        argv[0]);
+                printUsage(argv[0]);
                 return EXIT_FAILURE;
         }
     }
 
     if (optind >= argc) {
         fprintf(stderr, "Error: Config file is mandatory\n");
-        fprintf(stderr,
-                "Usage: %s [--test] [--image[=<file>]] [--size <size>] "
-                "[--invert-erased-byte] <config-file>\n",
-                argv[0]);
+        printUsage(argv[0]);
         return EXIT_FAILURE;
     }
 
@@ -673,6 +963,59 @@ int main(int argc, char* argv[])
 
     if (invert_erased_byte) {
         erased_byte = 0x00;
+    }
+
+    if ((hex_file == NULL) && hex_opts_given) {
+        fprintf(stderr, "Error: --hex-base and --hex-align require --hex\n");
+        return EXIT_FAILURE;
+    }
+
+    if (hex_file != NULL) {
+        uint64_t    total_size = (uint64_t)partition_size * 2;
+        struct stat st;
+
+        if (total_size > UINT32_MAX) {
+            fprintf(stderr, "Error: Partition size too large\n");
+            return EXIT_FAILURE;
+        }
+        image_size = (uint32_t)total_size;
+
+        if (((uint64_t)hex_base + image_size) > 0x100000000ULL) {
+            fprintf(stderr, "Error: hex base address plus image size exceeds "
+                            "the 32-bit address space\n");
+            return EXIT_FAILURE;
+        }
+
+        /* Alignment is applied to image offsets, so it only holds in the
+         * device address space if the base is aligned too */
+        if ((hex_base % hex_align) != 0) {
+            fprintf(stderr, "Error: hex base address must be a multiple of "
+                            "the hex alignment\n");
+            return EXIT_FAILURE;
+        }
+
+        /* The hex file is built from the image file after it is written */
+        if (strcmp(hex_file, image_file) == 0) {
+            fprintf(stderr, "Error: hex file and image file must be "
+                            "different\n");
+            return EXIT_FAILURE;
+        }
+
+        /* Only bytes programmed during this run are tracked, so building on
+         * top of an existing image would produce an incomplete hex file */
+        if ((stat(image_file, &st) == 0) && (st.st_size != 0)) {
+            fprintf(stderr,
+                    "Error: image file %s already exists; delete it before "
+                    "generating a hex file\n",
+                    image_file);
+            return EXIT_FAILURE;
+        }
+
+        written = calloc(image_size, 1);
+        if (written == NULL) {
+            fprintf(stderr, "Error: Memory allocation failed\n");
+            return EXIT_FAILURE;
+        }
     }
 
     /* Server configuration/context */
@@ -697,13 +1040,13 @@ int main(int argc, char* argv[])
         .erased_byte    = erased_byte,
     };
 
-    /* POSIX flash file context */
-    posixFlashFileContext gPosixFlashContext = {0};
+    /* POSIX flash file context, wrapped with programmed-byte tracking */
+    TrackedFlashContext gTrackedFlashContext = {.written = written};
 
-    /* NVM Flash configuration using POSIX flash file */
-    const whFlashCb  gFlashCb[1]     = {POSIX_FLASH_FILE_CB};
+    /* NVM Flash configuration using the tracked POSIX flash file */
+    const whFlashCb  gFlashCb[1]     = {TRACKED_FLASH_CB};
     whNvmFlashConfig gNvmFlashConfig = {.cb      = gFlashCb,
-                                        .context = &gPosixFlashContext,
+                                        .context = &gTrackedFlashContext,
                                         .config  = &gPosixFlashConfig};
 
     whNvmFlashContext gNvmFlashContext = {0};
@@ -737,6 +1080,7 @@ int main(int argc, char* argv[])
                           &gNvmConfig);
     if (rc != 0) {
         fprintf(stderr, "Error: Failed to initialize server, ret = %d\n", rc);
+        free(written);
         return EXIT_FAILURE;
     }
 
@@ -766,8 +1110,19 @@ int main(int argc, char* argv[])
     if (rc != 0) {
         fprintf(stderr, "Error: entry processing failed, NVM image is "
                         "incomplete\n");
+        free(written);
         return EXIT_FAILURE;
     }
+
+    if (hex_file != NULL) {
+        rc = writeHexFile(hex_file, image_file, written, image_size, hex_base,
+                          hex_align);
+        if (rc != 0) {
+            free(written);
+            return EXIT_FAILURE;
+        }
+    }
+    free(written);
 
     return EXIT_SUCCESS;
 }
