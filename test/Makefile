@@ -299,6 +299,11 @@ SRC_C +=  $(wildcard $(WOLFHSM_PORT_DIR)/*.c)
 SRC_C +=  $(wildcard $(PROJECT_DIR)/*.c)
 
 
+# Only analyze wolfHSM sources
+ifeq ($(SCAN),1)
+SRC_C := $(filter-out $(WOLFSSL_DIR)/%,$(SRC_C))
+endif
+
 ## Automated processing below
 
 FILENAMES_C = $(notdir $(SRC_C))
@@ -329,9 +334,7 @@ analyze:$(OBJS_ASM) $(OBJS_C)
 scan:$(BUILD_DIR)
 	@echo "Running scan-build static analysis"
 	@mkdir -p $(WOLFHSM_DIR)/scan_out/
-	@scan-build --exclude $(WOLFSSL_DIR)/wolfcrypt \
-	            --exclude $(WOLFSSL_DIR)/src \
-	            --status-bugs $(MAKE) analyze 2> $(WOLFHSM_DIR)/scan_out/$(SCAN_LOG)
+	@scan-build --status-bugs $(MAKE) analyze 2> $(WOLFHSM_DIR)/scan_out/$(SCAN_LOG)
 
 $(BUILD_DIR):
 	$(CMD_ECHO) mkdir -p $(BUILD_DIR)
