@@ -121,10 +121,10 @@ SRC_C += $(wildcard $(WOLFSSL_DIR)/wolfcrypt/src/*.c)
 SRC_C += $(wildcard $(WOLFSSL_DIR)/src/*.c)
 endif
 
-# wolfCrypt test/benchmark source files (compiled even with WOLFSSL_LIB=1
-# since these are not part of libwolfssl)
-SRC_C += $(wildcard $(WOLFSSL_DIR)/wolfcrypt/test/*.c)
-SRC_C += $(wildcard $(WOLFSSL_DIR)/wolfcrypt/benchmark/*.c)
+# wolfCrypt test/benchmark source files (skipped via wildcard when WOLFSSL_DIR
+# is undefined (e.g. WOLFSSL_LIB=1 pointing at installed headers)
+SRC_C += $(wildcard $(WOLFSSL_DIR)/wolfcrypt/test/test.c)
+SRC_C += $(wildcard $(WOLFSSL_DIR)/wolfcrypt/benchmark/benchmark.c)
 
 # Set the default device ID for wolfCrypt tests
 ifeq ($(DMA),1)

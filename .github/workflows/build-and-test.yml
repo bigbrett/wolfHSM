@@ -58,10 +58,7 @@ jobs:
 
     # pull and build wolfssl
     - name: Checkout wolfssl
-      uses: actions/checkout@v4
-      with:
-        repository: wolfssl/wolfssl
-        path: wolfssl
+      uses: ./.github/actions/checkout-wolfssl
 
     # Compiler cache; PR runs restore without saving
     - name: Set up ccache

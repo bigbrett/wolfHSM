@@ -281,8 +281,8 @@ ifeq ($(TESTWOLFCRYPT),1)
     # defaults to WH_DEV_ID; TESTWOLFCRYPT_DMA uses WH_DEV_ID_DMA).
     DEF += -DWC_USE_DEVID=$(TESTWOLFCRYPT_DEVID)
 
-	# wolfCrypt test source files
-    SRC_C += $(wildcard $(WOLFSSL_DIR)/wolfcrypt/test/*.c)
+    # wolfCrypt test source file
+    SRC_C += $(WOLFSSL_DIR)/wolfcrypt/test/test.c
 endif
 
 # End of NOCRYPTO
@@ -298,6 +298,11 @@ SRC_C +=  $(wildcard $(WOLFHSM_PORT_DIR)/*.c)
 # Test source files
 SRC_C +=  $(wildcard $(PROJECT_DIR)/*.c)
 
+
+# Only analyze wolfHSM sources
+ifeq ($(SCAN),1)
+SRC_C := $(filter-out $(WOLFSSL_DIR)/%,$(SRC_C))
+endif
 
 ## Automated processing below
 
@@ -329,9 +334,7 @@ analyze:$(OBJS_ASM) $(OBJS_C)
 scan:$(BUILD_DIR)
 	@echo "Running scan-build static analysis"
 	@mkdir -p $(WOLFHSM_DIR)/scan_out/
-	@scan-build --exclude $(WOLFSSL_DIR)/wolfcrypt \
-	            --exclude $(WOLFSSL_DIR)/src \
-	            --status-bugs $(MAKE) analyze 2> $(WOLFHSM_DIR)/scan_out/$(SCAN_LOG)
+	@scan-build --status-bugs $(MAKE) analyze 2> $(WOLFHSM_DIR)/scan_out/$(SCAN_LOG)
 
 $(BUILD_DIR):
 	$(CMD_ECHO) mkdir -p $(BUILD_DIR)

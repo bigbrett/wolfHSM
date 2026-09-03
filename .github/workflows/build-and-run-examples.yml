@@ -28,10 +28,7 @@ jobs:
 
     # pull and build wolfssl
     - name: Checkout wolfssl
-      uses: actions/checkout@v4
-      with:
-        repository: wolfssl/wolfssl
-        path: wolfssl
+      uses: ./.github/actions/checkout-wolfssl
 
     # One job per transport; the flag combos run as a loop because a
     # matrix job per combo spends about half its time on runner setup.
