@@ -204,8 +204,8 @@ ifeq ($(TESTWOLFCRYPT),1)
     # TESTWOLFCRYPT_DMA uses WH_DEV_ID_DMA).
     DEF += -DWC_USE_DEVID=$(TESTWOLFCRYPT_DEVID)
 
-    # wolfCrypt test source files
-    SRC_C += $(wildcard $(WOLFSSL_DIR)/wolfcrypt/test/*.c)
+    # wolfCrypt test source file
+    SRC_C += $(WOLFSSL_DIR)/wolfcrypt/test/test.c
 endif
 endif
 

@@ -281,8 +281,8 @@ ifeq ($(TESTWOLFCRYPT),1)
     # defaults to WH_DEV_ID; TESTWOLFCRYPT_DMA uses WH_DEV_ID_DMA).
     DEF += -DWC_USE_DEVID=$(TESTWOLFCRYPT_DEVID)
 
-	# wolfCrypt test source files
-    SRC_C += $(wildcard $(WOLFSSL_DIR)/wolfcrypt/test/*.c)
+    # wolfCrypt test source file
+    SRC_C += $(WOLFSSL_DIR)/wolfcrypt/test/test.c
 endif
 
 # End of NOCRYPTO
