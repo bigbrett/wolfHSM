@@ -111,19 +111,17 @@ all: $(OUT)
 $(OUT): $(SRC)
 	$(CC) $(CFLAGS) $(CFLAGS_EXTRA) $(SRC) -o $(OUT) $(LDFLAGS)
 
-# Generate the test NVM images: the main test image (erased byte 0x00) with
-# a hex file whose base address forces a record split at a 64KB boundary,
-# a default-erased-byte image whose hex file uses a high base address and
-# alignment, and a merge image whose alignment is large enough that the
-# expanded directory and data ranges overlap and must be merged into one.
-# The hex parameters must match the expectations in test/test_whnvmtool.c
+# Generate the test NVM images
 test-gen: $(OUT)
 	rm -f whNvmImage.bin whNvmImage.hex whNvmImageFF.bin whNvmImageFF.hex \
 		whNvmImageMerge.bin whNvmImageMerge.hex
+	# test image with record split at 64KB boundary
 	./$(OUT) --test test/nvminit/test.nvminit --invert-erased-byte \
 		--hex --hex-base 0xFFF8
+	# test image with high base address and alignment
 	./$(OUT) --image=whNvmImageFF.bin --hex=whNvmImageFF.hex \
 		--hex-base 0x0800FFF0 --hex-align 16 test/nvminit/test.nvminit
+	# test image with large alignment forcing merge of directory+data
 	./$(OUT) --image=whNvmImageMerge.bin --hex=whNvmImageMerge.hex \
 		--hex-base 0x0800F800 --hex-align 0x800 test/nvminit/test.nvminit
 
