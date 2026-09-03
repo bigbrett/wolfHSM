@@ -623,4 +623,124 @@ int whTest_SheStateGate(whServerContext* server)
     return 0;
 }
 
+/* Read the persisted PRNG_SEED, check it moved on from prevSeed, then check
+ * the keystore hands back that same value rather than a stale cached copy.
+ * Leaves the persisted seed in prevSeed for the next step. */
+static int _SheCheckSeedAdvanced(whServerContext* server, whKeyId seedId,
+                                 uint8_t* prevSeed)
+{
+    whNvmMetadata meta[1] = {{0}};
+    uint8_t       nvmSeed[WH_SHE_KEY_SZ];
+    uint8_t       readSeed[WH_SHE_KEY_SZ];
+    uint32_t      readSz = sizeof(readSeed);
+
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_Read(server->nvm, seedId, 0, WH_SHE_KEY_SZ, nvmSeed));
+    WH_TEST_ASSERT_RETURN(memcmp(nvmSeed, prevSeed, WH_SHE_KEY_SZ) != 0);
+
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Server_KeystoreReadKey(server, seedId, meta, readSeed, &readSz));
+    WH_TEST_ASSERT_RETURN(readSz == WH_SHE_KEY_SZ);
+    WH_TEST_ASSERT_RETURN(memcmp(readSeed, nvmSeed, WH_SHE_KEY_SZ) == 0);
+
+    memcpy(prevSeed, nvmSeed, WH_SHE_KEY_SZ);
+    return 0;
+}
+
+/* Drive INIT_RND and two EXTEND_SEEDs on a server whose NVM holds SECRET_KEY
+ * and PRNG_SEED for seedId. Each command persists a new seed, and each must
+ * drop the cached copy of the old one: otherwise EXTEND_SEED keeps deriving
+ * from the pre-INIT seed and two extends with the same entropy persist the
+ * same value. Leaves the server with rndInited set. */
+static int _ShePrngSeedFlow(whServerContext* server, whKeyId seedId,
+                            const uint8_t* initialSeed)
+{
+    int32_t       rc;
+    uint32_t      i;
+    uint8_t       prevSeed[WH_SHE_KEY_SZ];
+    uint8_t       req_packet[WOLFHSM_CFG_COMM_DATA_LEN];
+    uint8_t       resp_packet[WOLFHSM_CFG_COMM_DATA_LEN];
+    const uint8_t entropy[WH_SHE_KEY_SZ] = {0xae, 0x2d, 0x8a, 0x57, 0x1e, 0x03,
+                                            0xac, 0x9c, 0x9e, 0xb7, 0x6f, 0xac,
+                                            0x45, 0xaf, 0x8e, 0x51};
+    whMessageShe_ExtendSeedRequest* extendReq =
+        (whMessageShe_ExtendSeedRequest*)req_packet;
+
+    /* Pass the state gate without a full secure boot. */
+    server->she->uidSet  = 1;
+    server->she->sbState = TEST_SHE_SB_STATE_SUCCESS;
+
+    /* INIT_RND replaces the provisioned seed. */
+    memcpy(prevSeed, initialSeed, WH_SHE_KEY_SZ);
+    memset(req_packet, 0, sizeof(req_packet));
+    rc =
+        wh_She_SheActionRc(server, WH_SHE_INIT_RND, req_packet, 0, resp_packet);
+    WH_TEST_ASSERT_RETURN(rc == WH_SHE_ERC_NO_ERROR);
+    WH_TEST_RETURN_ON_FAIL(_SheCheckSeedAdvanced(server, seedId, prevSeed));
+
+    /* EXTEND_SEED must build on the seed INIT_RND just persisted, and the
+     * second one on the first. */
+    for (i = 0; i < 2; i++) {
+        memcpy(extendReq->entropy, entropy, sizeof(entropy));
+        rc = wh_She_SheActionRc(server, WH_SHE_EXTEND_SEED, req_packet,
+                                sizeof(*extendReq), resp_packet);
+        WH_TEST_ASSERT_RETURN(rc == WH_SHE_ERC_NO_ERROR);
+        WH_TEST_RETURN_ON_FAIL(_SheCheckSeedAdvanced(server, seedId, prevSeed));
+    }
+
+    return 0;
+}
+
+/* Server-direct check that INIT_RND and EXTEND_SEED persist the PRNG seed
+ * coherently with the key cache. See _ShePrngSeedFlow. Provisions and then
+ * removes SECRET_KEY and PRNG_SEED so nothing leaks into later groups. */
+int whTest_ShePrngSeedPersistence(whServerContext* server)
+{
+    int           ret;
+    whNvmMetadata meta[1] = {{0}};
+    whKeyId       ids[2];
+
+    /* SECRET_KEY and PRNG_SEED from the SHE test vectors */
+    uint8_t secretKey[WH_SHE_KEY_SZ] = {0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae,
+                                        0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88,
+                                        0x09, 0xcf, 0x4f, 0x3c};
+    uint8_t prngSeed[WH_SHE_KEY_SZ]  = {0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40,
+                                        0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11,
+                                        0x73, 0x93, 0x17, 0x2a};
+
+    if (server == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    if (server->nvm == NULL) {
+        return WH_TEST_SKIPPED;
+    }
+
+    ids[0] = WH_SHE_MAKE_KEYID(server->comm->client_id, WH_SHE_SECRET_KEY_ID);
+    ids[1] = WH_SHE_MAKE_KEYID(server->comm->client_id, WH_SHE_PRNG_SEED_ID);
+
+    /* Provision the two keys INIT_RND reads straight into NVM. */
+    meta->len    = WH_SHE_KEY_SZ;
+    meta->access = WH_NVM_ACCESS_ANY;
+    meta->id     = ids[0];
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, meta, WH_SHE_KEY_SZ, secretKey));
+    meta->id = ids[1];
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(server->nvm, meta, WH_SHE_KEY_SZ, prngSeed));
+
+    ret = _ShePrngSeedFlow(server, ids[1], prngSeed);
+
+    /* Remove the provisioned keys from cache and NVM, and restore a clean SHE
+     * context so the poked state doesn't leak into the live request loop. */
+    (void)wh_Server_KeystoreEvictKey(server, ids[0]);
+    (void)wh_Server_KeystoreEvictKey(server, ids[1]);
+    WH_TEST_RETURN_ON_FAIL(wh_Nvm_DestroyObjects(server->nvm, 2, ids));
+    memset(server->she, 0, sizeof(*server->she));
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHE PRNG seed persistence test SUCCESS\n");
+    }
+    return ret;
+}
+
 #endif /* WOLFHSM_CFG_SHE_EXTENSION && !WOLFHSM_CFG_NO_CRYPTO */

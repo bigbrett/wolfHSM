@@ -575,6 +575,82 @@ int whTest_She(whClientContext* client)
                            ret);
             goto exit;
         }
+        /* Application keys other than BOOT_MAC_KEY may not update the boot
+         * slots. */
+        if ((ret = wh_She_GenerateLoadableKey(
+                 WH_SHE_BOOT_MAC, SHE_TEST_VECTOR_KEY_ID, 2, 0, sheUid,
+                 bootMacDigest, vectorRawKey, messageOne, messageTwo,
+                 messageThree, messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate app-key-authorized BOOT_MAC "
+                           "M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        ret = wh_Client_SheLoadKey(client, messageOne, messageTwo, messageThree,
+                                   outMessageFour, outMessageFive);
+        if (ret != WH_SHE_ERC_KEY_INVALID) {
+            WH_ERROR_PRINT("SHE LOAD KEY app-key-authorized BOOT_MAC update: "
+                           "expected KEY_INVALID, got %d\n",
+                           ret);
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
+
+        /* An application key may load RAM_KEY (Table 4.5). M4/M5 come back
+         * derived from the new key, which proves the load landed. The RAM key
+         * is reloaded in plaintext before it is used again below. */
+        memset(ramKey, 0xA5, sizeof(ramKey));
+        if ((ret = wh_She_GenerateLoadableKey(
+                 WH_SHE_RAM_KEY_ID, SHE_TEST_VECTOR_KEY_ID, 1, 0, sheUid,
+                 ramKey, vectorRawKey, messageOne, messageTwo, messageThree,
+                 messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate app-key-authorized RAM_KEY "
+                           "M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        if ((ret = wh_Client_SheLoadKey(client, messageOne, messageTwo,
+                                        messageThree, outMessageFour,
+                                        outMessageFive)) != 0) {
+            WH_ERROR_PRINT("SHE LOAD KEY app-key-authorized RAM_KEY update: "
+                           "expected success, got %d\n",
+                           ret);
+            goto exit;
+        }
+        if (memcmp(outMessageFour, messageFour, sizeof(messageFour)) != 0 ||
+            memcmp(outMessageFive, messageFive, sizeof(messageFive)) != 0) {
+            WH_ERROR_PRINT("SHE LOAD KEY app-key-authorized RAM_KEY update: "
+                           "M4/M5 mismatch\n");
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
+
+        /* An application key may be rotated with itself as the authorizing
+         * key (Table 4.5). Reload the same material with a higher counter so
+         * only the slot's counter changes. */
+        if ((ret = wh_She_GenerateLoadableKey(
+                 SHE_TEST_VECTOR_KEY_ID, SHE_TEST_VECTOR_KEY_ID, 2, 0, sheUid,
+                 vectorRawKey, vectorRawKey, messageOne, messageTwo,
+                 messageThree, messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate self-authorized M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        if ((ret = wh_Client_SheLoadKey(client, messageOne, messageTwo,
+                                        messageThree, outMessageFour,
+                                        outMessageFive)) != 0) {
+            WH_ERROR_PRINT("SHE LOAD KEY self-authorized rotation: "
+                           "expected success, got %d\n",
+                           ret);
+            goto exit;
+        }
+        if (memcmp(outMessageFour, messageFour, sizeof(messageFour)) != 0 ||
+            memcmp(outMessageFive, messageFive, sizeof(messageFive)) != 0) {
+            WH_ERROR_PRINT("SHE LOAD KEY self-authorized rotation: "
+                           "M4/M5 mismatch\n");
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
         WH_TEST_PRINT("SHE LOAD KEY authorization matrix SUCCESS\n");
     }
 

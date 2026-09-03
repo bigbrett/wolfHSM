@@ -577,6 +577,82 @@ int whTest_SheClientConfig(whClientConfig* config)
                            ret);
             goto exit;
         }
+        /* Application keys other than BOOT_MAC_KEY may not update the boot
+         * slots. */
+        if ((ret = wh_She_GenerateLoadableKey(
+                 WH_SHE_BOOT_MAC, SHE_TEST_VECTOR_KEY_ID, 2, 0, sheUid,
+                 bootMacDigest, vectorRawKey, messageOne, messageTwo,
+                 messageThree, messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate app-key-authorized BOOT_MAC "
+                           "M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        ret = wh_Client_SheLoadKey(client, messageOne, messageTwo, messageThree,
+                                   outMessageFour, outMessageFive);
+        if (ret != WH_SHE_ERC_KEY_INVALID) {
+            WH_ERROR_PRINT("SHE LOAD KEY app-key-authorized BOOT_MAC update: "
+                           "expected KEY_INVALID, got %d\n",
+                           ret);
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
+
+        /* An application key may load RAM_KEY (Table 4.5). M4/M5 come back
+         * derived from the new key, which proves the load landed. The RAM key
+         * is reloaded in plaintext before it is used again below. */
+        memset(ramKey, 0xA5, sizeof(ramKey));
+        if ((ret = wh_She_GenerateLoadableKey(
+                 WH_SHE_RAM_KEY_ID, SHE_TEST_VECTOR_KEY_ID, 1, 0, sheUid,
+                 ramKey, vectorRawKey, messageOne, messageTwo, messageThree,
+                 messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate app-key-authorized RAM_KEY "
+                           "M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        if ((ret = wh_Client_SheLoadKey(client, messageOne, messageTwo,
+                                        messageThree, outMessageFour,
+                                        outMessageFive)) != 0) {
+            WH_ERROR_PRINT("SHE LOAD KEY app-key-authorized RAM_KEY update: "
+                           "expected success, got %d\n",
+                           ret);
+            goto exit;
+        }
+        if (memcmp(outMessageFour, messageFour, sizeof(messageFour)) != 0 ||
+            memcmp(outMessageFive, messageFive, sizeof(messageFive)) != 0) {
+            WH_ERROR_PRINT("SHE LOAD KEY app-key-authorized RAM_KEY update: "
+                           "M4/M5 mismatch\n");
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
+
+        /* An application key may be rotated with itself as the authorizing
+         * key (Table 4.5). Reload the same material with a higher counter so
+         * only the slot's counter changes. */
+        if ((ret = wh_She_GenerateLoadableKey(
+                 SHE_TEST_VECTOR_KEY_ID, SHE_TEST_VECTOR_KEY_ID, 2, 0, sheUid,
+                 vectorRawKey, vectorRawKey, messageOne, messageTwo,
+                 messageThree, messageFour, messageFive)) != 0) {
+            WH_ERROR_PRINT("Failed to generate self-authorized M1/M2/M3 %d\n",
+                           ret);
+            goto exit;
+        }
+        if ((ret = wh_Client_SheLoadKey(client, messageOne, messageTwo,
+                                        messageThree, outMessageFour,
+                                        outMessageFive)) != 0) {
+            WH_ERROR_PRINT("SHE LOAD KEY self-authorized rotation: "
+                           "expected success, got %d\n",
+                           ret);
+            goto exit;
+        }
+        if (memcmp(outMessageFour, messageFour, sizeof(messageFour)) != 0 ||
+            memcmp(outMessageFive, messageFive, sizeof(messageFive)) != 0) {
+            WH_ERROR_PRINT("SHE LOAD KEY self-authorized rotation: "
+                           "M4/M5 mismatch\n");
+            ret = WH_ERROR_ABORTED;
+            goto exit;
+        }
         WH_TEST_PRINT("SHE LOAD KEY authorization matrix SUCCESS\n");
     }
 
@@ -2582,6 +2658,184 @@ static int wh_She_TestGetId(void)
 
     return 0;
 }
+
+/* Read the persisted PRNG_SEED, check it moved on from prevSeed, then check
+ * the keystore hands back that same value rather than a stale cached copy.
+ * Leaves the persisted seed in prevSeed for the next step. */
+static int _SheCheckSeedAdvanced(whServerContext* server, whKeyId seedId,
+                                 uint8_t* prevSeed)
+{
+    whNvmMetadata meta[1] = {{0}};
+    uint8_t       nvmSeed[WH_SHE_KEY_SZ];
+    uint8_t       readSeed[WH_SHE_KEY_SZ];
+    uint32_t      readSz = sizeof(readSeed);
+
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_Read(server->nvm, seedId, 0, WH_SHE_KEY_SZ, nvmSeed));
+    WH_TEST_ASSERT_RETURN(memcmp(nvmSeed, prevSeed, WH_SHE_KEY_SZ) != 0);
+
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Server_KeystoreReadKey(server, seedId, meta, readSeed, &readSz));
+    WH_TEST_ASSERT_RETURN(readSz == WH_SHE_KEY_SZ);
+    WH_TEST_ASSERT_RETURN(memcmp(readSeed, nvmSeed, WH_SHE_KEY_SZ) == 0);
+
+    memcpy(prevSeed, nvmSeed, WH_SHE_KEY_SZ);
+    return 0;
+}
+
+/* Drive INIT_RND and two EXTEND_SEEDs on a server whose NVM holds SECRET_KEY
+ * and PRNG_SEED for seedId. Each command persists a new seed, and each must
+ * drop the cached copy of the old one: otherwise EXTEND_SEED keeps deriving
+ * from the pre-INIT seed and two extends with the same entropy persist the
+ * same value. Leaves the server with rndInited set. */
+static int _ShePrngSeedFlow(whServerContext* server, whKeyId seedId,
+                            const uint8_t* initialSeed)
+{
+    int32_t       rc;
+    uint32_t      i;
+    uint8_t       prevSeed[WH_SHE_KEY_SZ];
+    uint8_t       req_packet[WOLFHSM_CFG_COMM_DATA_LEN];
+    uint8_t       resp_packet[WOLFHSM_CFG_COMM_DATA_LEN];
+    const uint8_t entropy[WH_SHE_KEY_SZ] = {0xae, 0x2d, 0x8a, 0x57, 0x1e, 0x03,
+                                            0xac, 0x9c, 0x9e, 0xb7, 0x6f, 0xac,
+                                            0x45, 0xaf, 0x8e, 0x51};
+    whMessageShe_ExtendSeedRequest* extendReq =
+        (whMessageShe_ExtendSeedRequest*)req_packet;
+
+    /* Pass the state gate without a full secure boot. */
+    server->she->uidSet  = 1;
+    server->she->sbState = TEST_SHE_SB_STATE_SUCCESS;
+
+    /* INIT_RND replaces the provisioned seed. */
+    memcpy(prevSeed, initialSeed, WH_SHE_KEY_SZ);
+    memset(req_packet, 0, sizeof(req_packet));
+    rc =
+        wh_She_SheActionRc(server, WH_SHE_INIT_RND, req_packet, 0, resp_packet);
+    WH_TEST_ASSERT_RETURN(rc == WH_SHE_ERC_NO_ERROR);
+    WH_TEST_RETURN_ON_FAIL(_SheCheckSeedAdvanced(server, seedId, prevSeed));
+
+    /* EXTEND_SEED must build on the seed INIT_RND just persisted, and the
+     * second one on the first. */
+    for (i = 0; i < 2; i++) {
+        memcpy(extendReq->entropy, entropy, sizeof(entropy));
+        rc = wh_She_SheActionRc(server, WH_SHE_EXTEND_SEED, req_packet,
+                                sizeof(*extendReq), resp_packet);
+        WH_TEST_ASSERT_RETURN(rc == WH_SHE_ERC_NO_ERROR);
+        WH_TEST_RETURN_ON_FAIL(_SheCheckSeedAdvanced(server, seedId, prevSeed));
+    }
+
+    return 0;
+}
+
+/* Server-direct check that INIT_RND and EXTEND_SEED persist the PRNG seed
+ * coherently with the key cache. See _ShePrngSeedFlow. */
+static int wh_She_TestPrngSeedPersistence(void)
+{
+    int             ret       = 0;
+    whServerContext server[1] = {0};
+    whNvmMetadata   meta[1]   = {{0}};
+    whKeyId         seedId;
+
+    /* SECRET_KEY and PRNG_SEED from the SHE test vectors */
+    uint8_t secretKey[WH_SHE_KEY_SZ] = {0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae,
+                                        0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88,
+                                        0x09, 0xcf, 0x4f, 0x3c};
+    uint8_t prngSeed[WH_SHE_KEY_SZ]  = {0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40,
+                                        0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11,
+                                        0x73, 0x93, 0x17, 0x2a};
+
+    /* Transport (not used, but required for server init) */
+    uint8_t                     reqBuf[BUFFER_SIZE]  = {0};
+    uint8_t                     respBuf[BUFFER_SIZE] = {0};
+    whTransportMemConfig        tmcf[1]              = {{
+                            .req       = (whTransportMemCsr*)reqBuf,
+                            .req_size  = sizeof(reqBuf),
+                            .resp      = (whTransportMemCsr*)respBuf,
+                            .resp_size = sizeof(respBuf),
+    }};
+    whTransportServerCb         tscb[1]    = {WH_TRANSPORT_MEM_SERVER_CB};
+    whTransportMemServerContext tmsc[1]    = {0};
+    whCommServerConfig          cs_conf[1] = {{
+                 .transport_cb      = tscb,
+                 .transport_context = (void*)tmsc,
+                 .transport_config  = (void*)tmcf,
+                 .server_id         = 125,
+    }};
+
+    /* RamSim Flash state and configuration.
+     * memory[] is static to avoid 1MB stack allocation. */
+    static uint8_t   memory[FLASH_RAM_SIZE];
+    whFlashRamsimCtx fc[1]      = {0};
+    whFlashRamsimCfg fc_conf[1] = {{0}};
+    const whFlashCb  fcb[1]     = {WH_FLASH_RAMSIM_CB};
+
+    /* NVM */
+    whNvmFlashConfig  nf_conf[1] = {{
+         .cb      = fcb,
+         .context = fc,
+         .config  = fc_conf,
+    }};
+    whNvmFlashContext nfc[1]     = {0};
+    whNvmCb           nfcb[1]    = {WH_NVM_FLASH_CB};
+    whNvmConfig       n_conf[1]  = {{
+               .cb      = nfcb,
+               .context = nfc,
+               .config  = nf_conf,
+    }};
+    whNvmContext      nvm[1]     = {{0}};
+
+    /* Crypto context */
+    whServerCryptoContext crypto[1] = {0};
+
+    whServerSheContext she[1];
+
+    whServerConfig s_conf[1] = {{
+        .comm_config = cs_conf,
+        .nvm         = nvm,
+        .crypto      = crypto,
+        .she         = she,
+        .devId       = INVALID_DEVID,
+    }};
+
+    memset(she, 0, sizeof(she));
+    memset(memory, 0, sizeof(memory));
+
+    fc_conf->size       = FLASH_RAM_SIZE;
+    fc_conf->sectorSize = FLASH_SECTOR_SIZE;
+    fc_conf->pageSize   = FLASH_PAGE_SIZE;
+    fc_conf->erasedByte = ~(uint8_t)0;
+    fc_conf->memory     = memory;
+
+    WH_TEST_RETURN_ON_FAIL(wh_Nvm_Init(nvm, n_conf));
+    WH_TEST_RETURN_ON_FAIL(wolfCrypt_Init());
+    WH_TEST_RETURN_ON_FAIL(wc_InitRng_ex(crypto->rng, NULL, s_conf->devId));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_Init(server, s_conf));
+    WH_TEST_RETURN_ON_FAIL(wh_Server_SetConnected(server, WH_COMM_CONNECTED));
+
+    /* Provision the two keys INIT_RND reads straight into NVM. */
+    meta->len    = WH_SHE_KEY_SZ;
+    meta->access = WH_NVM_ACCESS_ANY;
+    meta->id = WH_SHE_MAKE_KEYID(server->comm->client_id, WH_SHE_SECRET_KEY_ID);
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(nvm, meta, WH_SHE_KEY_SZ, secretKey));
+    seedId   = WH_SHE_MAKE_KEYID(server->comm->client_id, WH_SHE_PRNG_SEED_ID);
+    meta->id = seedId;
+    WH_TEST_RETURN_ON_FAIL(
+        wh_Nvm_AddObject(nvm, meta, WH_SHE_KEY_SZ, prngSeed));
+
+    ret = _ShePrngSeedFlow(server, seedId, prngSeed);
+
+    wh_Server_Cleanup(server);
+    wh_Nvm_Cleanup(nvm);
+    wc_FreeRng(crypto->rng);
+    wolfCrypt_Cleanup();
+
+    if (ret == 0) {
+        WH_TEST_PRINT("SHE PRNG seed persistence test SUCCESS\n");
+    }
+    return ret;
+}
+
 #endif /* WOLFHSM_CFG_ENABLE_SERVER */
 
 #if defined(WOLFHSM_CFG_TEST_POSIX) && defined(WOLFHSM_CFG_ENABLE_CLIENT) && \
@@ -2861,6 +3115,8 @@ int whTest_She(void)
     WH_TEST_RETURN_ON_FAIL(wh_She_TestStateGate());
     WH_TEST_PRINT("Testing SHE: GET_ID empty-key / pre-secure-boot...\n");
     WH_TEST_RETURN_ON_FAIL(wh_She_TestGetId());
+    WH_TEST_PRINT("Testing SHE: PRNG seed persistence...\n");
+    WH_TEST_RETURN_ON_FAIL(wh_She_TestPrngSeedPersistence());
     WH_TEST_PRINT("Testing SHE: (pthread) mem core flow...\n");
     WH_TEST_RETURN_ON_FAIL(
         wh_ClientServer_MemThreadTest(whTest_SheClientConfig));

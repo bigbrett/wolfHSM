@@ -89,6 +89,7 @@ WH_TEST_DECL(whTest_SheMasterEcuKeyFallback);
 WH_TEST_DECL(whTest_SheNoNvm);
 WH_TEST_DECL(whTest_SheReqSizeChecking);
 WH_TEST_DECL(whTest_SheStateGate);
+WH_TEST_DECL(whTest_ShePrngSeedPersistence);
 WH_TEST_DECL(whTest_SheUidClient);
 WH_TEST_DECL(whTest_SheUidCb);
 WH_TEST_DECL(whTest_Echo);
@@ -124,17 +125,18 @@ const whTestCase whTestsMisc[] = {
 const size_t whTestsMiscCount = ARRAY_SIZE(whTestsMisc);
 
 const whTestCase whTestsServer[] = {
-    { "whTest_CertVerify", whTest_CertVerify },
-    { "whTest_CertNvmPolicy", whTest_CertNvmPolicy },
-    { "whTest_CertReadRejectsServerOnly", whTest_CertReadRejectsServerOnly },
-    { "whTest_ServerImgMgr", whTest_ServerImgMgr },
-    { "whTest_CertReadTrusted", whTest_CertReadTrusted },
-    { "whTest_NvmOptional", whTest_NvmOptional },
-    { "whTest_NvmPolicyChecked", whTest_NvmPolicyChecked },
-    { "whTest_SheMasterEcuKeyFallback", whTest_SheMasterEcuKeyFallback },
-    { "whTest_SheReqSizeChecking", whTest_SheReqSizeChecking },
-    { "whTest_HwKeystoreServer", whTest_HwKeystoreServer },
-    { "whTest_SheStateGate", whTest_SheStateGate },
+    {"whTest_CertVerify", whTest_CertVerify},
+    {"whTest_CertNvmPolicy", whTest_CertNvmPolicy},
+    {"whTest_CertReadRejectsServerOnly", whTest_CertReadRejectsServerOnly},
+    {"whTest_ServerImgMgr", whTest_ServerImgMgr},
+    {"whTest_CertReadTrusted", whTest_CertReadTrusted},
+    {"whTest_NvmOptional", whTest_NvmOptional},
+    {"whTest_NvmPolicyChecked", whTest_NvmPolicyChecked},
+    {"whTest_SheMasterEcuKeyFallback", whTest_SheMasterEcuKeyFallback},
+    {"whTest_SheReqSizeChecking", whTest_SheReqSizeChecking},
+    {"whTest_HwKeystoreServer", whTest_HwKeystoreServer},
+    {"whTest_SheStateGate", whTest_SheStateGate},
+    {"whTest_ShePrngSeedPersistence", whTest_ShePrngSeedPersistence},
 };
 const size_t whTestsServerCount = ARRAY_SIZE(whTestsServer);
 
