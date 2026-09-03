@@ -46,10 +46,7 @@ jobs:
         run: pipx install 'gcovr==8.6'
 
       - name: Checkout wolfssl
-        uses: actions/checkout@v4
-        with:
-          repository: wolfssl/wolfssl
-          path: wolfssl
+        uses: ./.github/actions/checkout-wolfssl
 
       - name: Build, run, and emit tracefile (${{ matrix.tree }} ${{ matrix.config.name }})
         # legacy and refactor trees differ only in the test dir and the

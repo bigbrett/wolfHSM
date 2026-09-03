@@ -58,10 +58,7 @@ jobs:
 
     # pull and build wolfssl
     - name: Checkout wolfssl
-      uses: actions/checkout@v4
-      with:
-        repository: wolfssl/wolfssl
-        path: wolfssl
+      uses: ./.github/actions/checkout-wolfssl
 
     # Compiler cache; PR runs restore without saving
     - name: Set up ccache
@@ -223,10 +220,7 @@ jobs:
 
     # pull and build wolfssl
     - name: Checkout wolfssl
-      uses: actions/checkout@v4
-      with:
-        repository: wolfssl/wolfssl
-        path: wolfssl
+      uses: ./.github/actions/checkout-wolfssl
 
     # Compiler cache; PR runs restore without saving. Own config-hash so the
     # -m32 objects get a separate cache namespace from the 64-bit build job
