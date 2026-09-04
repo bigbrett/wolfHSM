@@ -1101,8 +1101,12 @@ static int _wolfBootImgVerifySigEcc256(const uint8_t* sig, uint16_t sigSz,
 
     (void)wc_ecc_free(&eccKey);
 
-    /* Pass wolfCrypt errors through. NOTVERIFIED means the signature check
-     * ran and failed. */
+    /* An R or S of zero or at least the curve order is an invalid signature.
+     * wolfCrypt reports that as an error instead of a failed check. */
+    if (ret == MP_ZERO_E || ret == MP_VAL) {
+        return WH_ERROR_NOTVERIFIED;
+    }
+    /* Pass other wolfCrypt errors through. */
     if (ret != 0) {
         return ret;
     }
