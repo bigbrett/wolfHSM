@@ -41,6 +41,7 @@
 
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/wolfcrypt/types.h"
+#include "wolfssl/wolfcrypt/error-crypt.h"
 #include "wolfssl/wolfcrypt/ecc.h"
 #include "wolfssl/wolfcrypt/sha256.h"
 #include "wolfssl/wolfcrypt/asn.h"
@@ -465,6 +466,43 @@ static int _wolfBootVerifyCorruptSig(whServerImgMgrContext*   imgMgr,
     WH_TEST_ASSERT_RETURN(result.verifyMethodResult == WH_ERROR_NOTVERIFIED);
     return WH_TEST_SUCCESS;
 }
+
+#ifdef HAVE_ECC
+/* Verify copies of img whose raw R||S header signature has R zeroed, then S
+ * set above the curve order. wolfCrypt rejects both before the signature
+ * check runs, and the verify method passes that error code through. hdrCopy
+ * must hold img->hdrSize bytes. */
+static int _wolfBootVerifyOutOfRangeSig(whServerImgMgrContext*   imgMgr,
+                                        const whServerImgMgrImg* img,
+                                        uint8_t*                 hdrCopy)
+{
+    whServerImgMgrVerifyResult result;
+    whServerImgMgrImg          badImage = *img;
+    const uint8_t*             hdr      = (const uint8_t*)img->hdrAddr;
+    size_t                     sigLen   = 0;
+    size_t                     sigOff;
+    int                        rc;
+
+    sigOff = _wolfBootSigOffset(hdr, img->hdrSize, &sigLen);
+    WH_TEST_ASSERT_RETURN(sigOff != 0 && sigLen == 64);
+    badImage.hdrAddr = (uintptr_t)hdrCopy;
+
+    /* R = 0 */
+    memcpy(hdrCopy, hdr, img->hdrSize);
+    memset(hdrCopy + sigOff, 0x00, 32);
+    rc = wh_Server_ImgMgrVerifyImg(imgMgr, &badImage, &result);
+    WH_TEST_ASSERT_RETURN(rc == MP_ZERO_E);
+    WH_TEST_ASSERT_RETURN(result.verifyMethodResult == MP_ZERO_E);
+
+    /* S above the curve order */
+    memcpy(hdrCopy, hdr, img->hdrSize);
+    memset(hdrCopy + sigOff + 32, 0xFF, 32);
+    rc = wh_Server_ImgMgrVerifyImg(imgMgr, &badImage, &result);
+    WH_TEST_ASSERT_RETURN(rc == MP_VAL);
+    WH_TEST_ASSERT_RETURN(result.verifyMethodResult == MP_VAL);
+    return WH_TEST_SUCCESS;
+}
+#endif /* HAVE_ECC */
 #endif /* !NO_RSA || HAVE_ECC */
 
 #ifndef NO_RSA
@@ -783,6 +821,10 @@ static int _whTest_ServerImgMgrWolfBootEcc256(whServerContext* server)
     /* Negative: corrupt the signature so only the ECC check can reject */
     WH_TEST_RETURN_ON_FAIL(
         _wolfBootVerifyCorruptSig(&imgMgr, &testImage, corrupt_hdr));
+
+    /* Negative: out-of-range R and S surface the wolfCrypt error */
+    WH_TEST_RETURN_ON_FAIL(
+        _wolfBootVerifyOutOfRangeSig(&imgMgr, &testImage, corrupt_hdr));
 
     /* Leave the key cache clean for the next suite */
     WH_TEST_RETURN_ON_FAIL(wh_Server_KeystoreEraseKey(server, derKeyId));

@@ -1087,10 +1087,13 @@ static int _wolfBootImgVerifySigEcc256(const uint8_t* sig, uint16_t sigSz,
 
     ret = wc_ecc_import_unsigned(&eccKey, pubkey, pubkey + 32, NULL,
                                  ECC_SECP256R1);
-    if (ret == 0) {
-        /* wc_ecc_verify_hash takes a DER signature. */
-        ret = wc_ecc_rs_raw_to_sig(sig, 32, sig + 32, 32, derSig, &derSigSz);
+    if (ret != 0) {
+        (void)wc_ecc_free(&eccKey);
+        return WH_ERROR_ABORTED;
     }
+
+    /* wc_ecc_verify_hash takes a DER signature. */
+    ret = wc_ecc_rs_raw_to_sig(sig, 32, sig + 32, 32, derSig, &derSigSz);
     if (ret == 0) {
         ret = wc_ecc_verify_hash(derSig, derSigSz, hash, hashSz, &verifyResult,
                                  &eccKey);
@@ -1098,8 +1101,10 @@ static int _wolfBootImgVerifySigEcc256(const uint8_t* sig, uint16_t sigSz,
 
     (void)wc_ecc_free(&eccKey);
 
+    /* Pass wolfCrypt errors through. NOTVERIFIED means the signature check
+     * ran and failed. */
     if (ret != 0) {
-        return WH_ERROR_ABORTED;
+        return ret;
     }
     if (verifyResult != 1) {
         return WH_ERROR_NOTVERIFIED;

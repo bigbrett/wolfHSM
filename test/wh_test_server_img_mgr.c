@@ -43,6 +43,7 @@
 #ifndef WOLFHSM_CFG_NO_CRYPTO
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/wolfcrypt/types.h"
+#include "wolfssl/wolfcrypt/error-crypt.h"
 #include "wolfssl/wolfcrypt/ecc.h"
 #include "wolfssl/wolfcrypt/sha256.h"
 #include "wolfssl/wolfcrypt/asn.h"
@@ -1401,6 +1402,52 @@ static int _wolfBootVerifyCorruptSig(whServerImgMgrContext*   imgMgr,
     }
     return WH_ERROR_OK;
 }
+
+#ifdef HAVE_ECC
+/* Verify copies of img whose raw R||S header signature has R zeroed, then S
+ * set above the curve order. wolfCrypt rejects both before the signature
+ * check runs, and the verify method passes that error code through. hdrCopy
+ * must hold img->hdrSize bytes. */
+static int _wolfBootVerifyOutOfRangeSig(whServerImgMgrContext*   imgMgr,
+                                        const whServerImgMgrImg* img,
+                                        uint8_t* hdrCopy, const char* what)
+{
+    whServerImgMgrVerifyResult result;
+    whServerImgMgrImg          badImage = *img;
+    const uint8_t*             hdr      = (const uint8_t*)img->hdrAddr;
+    size_t                     sigLen   = 0;
+    size_t                     sigOff;
+    int                        ret;
+
+    sigOff = _wolfBootSigOffset(hdr, img->hdrSize, &sigLen);
+    if (sigOff == 0 || sigLen != 64) {
+        WH_ERROR_PRINT("%s header has no raw R||S signature TLV\n", what);
+        return WH_ERROR_ABORTED;
+    }
+    badImage.hdrAddr = (uintptr_t)hdrCopy;
+
+    /* R = 0 */
+    memcpy(hdrCopy, hdr, img->hdrSize);
+    memset(hdrCopy + sigOff, 0x00, 32);
+    ret = wh_Server_ImgMgrVerifyImg(imgMgr, &badImage, &result);
+    if (ret != MP_ZERO_E || result.verifyMethodResult != MP_ZERO_E) {
+        WH_ERROR_PRINT("%s R=0 verify returned %d, method %d, expected %d\n",
+                       what, ret, result.verifyMethodResult, MP_ZERO_E);
+        return WH_ERROR_ABORTED;
+    }
+
+    /* S above the curve order */
+    memcpy(hdrCopy, hdr, img->hdrSize);
+    memset(hdrCopy + sigOff + 32, 0xFF, 32);
+    ret = wh_Server_ImgMgrVerifyImg(imgMgr, &badImage, &result);
+    if (ret != MP_VAL || result.verifyMethodResult != MP_VAL) {
+        WH_ERROR_PRINT("%s S>n verify returned %d, method %d, expected %d\n",
+                       what, ret, result.verifyMethodResult, MP_VAL);
+        return WH_ERROR_ABORTED;
+    }
+    return WH_ERROR_OK;
+}
+#endif /* HAVE_ECC */
 #endif /* !NO_RSA || HAVE_ECC */
 
 #ifndef NO_RSA
@@ -1844,6 +1891,14 @@ static int whTest_ServerImgMgrServerCfgWolfBootEcc256(whServerConfig* serverCfg)
         XALIGNED(4) uint8_t corrupt_hdr[sizeof(wolfboot_test_ecc256_header)];
         ret = _wolfBootVerifyCorruptSig(&imgMgr, &testImage, corrupt_hdr,
                                         "wolfBoot ECC256");
+        if (ret != WH_ERROR_OK) {
+            wh_Server_Cleanup(server);
+            return ret;
+        }
+
+        /* Negative test: out-of-range R and S surface the wolfCrypt error */
+        ret = _wolfBootVerifyOutOfRangeSig(&imgMgr, &testImage, corrupt_hdr,
+                                           "wolfBoot ECC256");
         if (ret != WH_ERROR_OK) {
             wh_Server_Cleanup(server);
             return ret;
